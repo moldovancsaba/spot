@@ -1,0 +1,68 @@
+{
+  "ssot_version": "0.2",
+  "taxonomy": {
+    "version": "taxonomy-v0.1",
+    "categories": [
+      "Anti-Israel",
+      "Anti-Judaism",
+      "Classical Antisemitism",
+      "Structural Antisemitism",
+      "Conspiracy Theories",
+      "Not Antisemitic"
+    ],
+    "fallback_category": "Not Antisemitic"
+  },
+  "policy": {
+    "prompt_version": "prompt-v0.2",
+    "model_version": "mlx:mlx-community/Apertus-8B-Instruct-2509-4bit",
+    "expected_columns": [
+      "Item number",
+      "Post text",
+      "Category"
+    ],
+    "supported_languages": [
+      "hu",
+      "de",
+      "ru",
+      "other"
+    ],
+    "review_modes": [
+      "full",
+      "partial",
+      "none"
+    ],
+    "low_confidence_threshold": 0.65
+  },
+  "runtime": {
+    "classifier": {
+      "backend": "mlx",
+      "model": "mlx-community/Apertus-8B-Instruct-2509-4bit",
+      "fallback_backend": "ollama",
+      "fallback_model": "qwen2.5:7b"
+    },
+    "drafter": {
+      "backend": "ollama",
+      "model": "gemma3:1b",
+      "fallback_backend": "ollama",
+      "fallback_model": "llama3.2:1b"
+    },
+    "judge": {
+      "backend": "ollama",
+      "model": "llama3.2:3b",
+      "fallback_backend": "ollama",
+      "fallback_model": "gemma2:2b"
+    },
+    "evaluation": {
+      "single_model": "mlx://mlx-community/Apertus-8B-Instruct-2509-4bit",
+      "ensemble_models": [
+        "ollama://qwen2.5:7b",
+        "ollama://gemma2:9b",
+        "ollama://llama3.1:8b"
+      ]
+    },
+    "security": {
+      "ollama_url": "http://127.0.0.1:11434/api/generate",
+      "allow_remote_ollama": false
+    }
+  }
+}

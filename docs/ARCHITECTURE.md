@@ -1,0 +1,73 @@
+# {spot} Architecture
+
+`{spot}` stands for `Smart Platform for Observing Threats`.
+
+Current workspace implementation: `0.3.1`
+Pipeline version: `mvp-0.3.1`
+SSOT version: `0.2`
+
+## System Boundary
+
+{spot} is a local, deterministic `.xlsx` classification system.
+It processes text already present in Excel rows and produces governed Excel outputs plus audit artifacts.
+
+## Main Components
+
+- CLI entrypoint: [`src/cli.py`](/Users/moldovancsaba/Projects/spot/src/cli.py)
+- Classification pipeline: [`src/pipeline.py`](/Users/moldovancsaba/Projects/spot/src/pipeline.py)
+- Classifier + runtime adapters: [`src/classifier.py`](/Users/moldovancsaba/Projects/spot/src/classifier.py)
+- Lane defaults and model-spec parsing: [`src/lanes.py`](/Users/moldovancsaba/Projects/spot/src/lanes.py)
+- SSOT loader and validation: [`src/ssot_loader.py`](/Users/moldovancsaba/Projects/spot/src/ssot_loader.py)
+- Excel ingestion/output: [`src/excel_io.py`](/Users/moldovancsaba/Projects/spot/src/excel_io.py)
+- Evaluation runner: [`src/evaluation/evaluate.py`](/Users/moldovancsaba/Projects/spot/src/evaluation/evaluate.py)
+- Monitoring backend: [`backend/main.py`](/Users/moldovancsaba/Projects/spot/backend/main.py)
+
+## Data Flow
+
+1. Validate SSOT
+2. Validate workbook schema
+3. Read input rows
+4. Normalize text with drafter lane
+5. Classify with classifier lane
+6. Enforce taxonomy and fallback rules
+7. Apply review policy
+8. Write output workbook
+9. Persist integrity, policy, progress, and logs
+
+## Agent Topology
+
+- `drafter`: normalization only
+- `classifier`: category authority
+- `judge`: disagreement scoring only
+
+No writer lane exists in {spot}.
+
+## Runtime Routing
+
+Primary runtime:
+- `mlx://mlx-community/Apertus-8B-Instruct-2509-4bit`
+
+Fallback / support runtimes:
+- `ollama://qwen2.5:7b`
+- `ollama://gemma3:1b`
+- `ollama://llama3.2:1b`
+- `ollama://llama3.2:3b`
+- `ollama://gemma2:2b`
+
+## Security Controls
+
+- Ollama loopback-only by default
+- remote Ollama requires explicit override
+- API/UI loopback bind
+- deterministic settings pinned in code
+- no training loop on processed client data
+
+## Audit Controls
+
+Each run records:
+- resolved lane config
+- resolved model versions
+- prompt / taxonomy / SSOT / pipeline versions
+- run language and review mode
+- category and flag distributions
+- integrity validation result
