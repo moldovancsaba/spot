@@ -5,3 +5,8 @@ __pycache__/
 .pytest_cache/
 logs/
 runs/
+samples/*_out*.xlsx
+samples/*_proof.xlsx
+samples/*_smoke*.xlsx
+samples/*_probe*.xlsx
+samples/progress_test.xlsx
