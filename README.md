@@ -6,7 +6,7 @@ AI-assisted antisemitism classification system with SSOT-governed, auditable loc
 Current workspace implementation: `0.3.1`
 Pipeline version: `mvp-0.3.1`
 Authoritative SSOT version: `0.2`
-Latest shipped release notes in repo: [`docs/RELEASE_NOTES_0.3.0.md`](/Users/moldovancsaba/Projects/spot/docs/RELEASE_NOTES_0.3.0.md)
+Latest historical shipped release notes in repo: [`docs/RELEASE_NOTES_0.3.0.md`](/Users/moldovancsaba/Projects/spot/docs/RELEASE_NOTES_0.3.0.md)
 
 {spot} is a deterministic, auditable classification platform for large Excel batches of social media posts.
 It enforces a strict closed-set taxonomy, produces explainable metadata, and writes governed outputs to Excel.

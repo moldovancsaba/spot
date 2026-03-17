@@ -71,7 +71,7 @@ Standard feature — 3 credits
 Large module — 5 credits
 Strategic component — 8 credits
 
-One Value Credit = $200
+One Value Credit = $100
 
 ⸻
 
@@ -112,7 +112,7 @@ This represents approximately 20 Value Credits of prior development work.
 
 Equivalent value:
 
-20 credits × $200 = $4,000
+20 credits × $100 = $2,000
 
 This work has already been invested and is not charged separately, allowing the project to move directly into implementation.
 
@@ -126,7 +126,7 @@ Total estimated delivery effort:
 
 47 Value Credits
 
-47 credits × $200 = $9,400
+47 credits × $100 = $4,700
 
 ⸻
 

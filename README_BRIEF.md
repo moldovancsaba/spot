@@ -5,7 +5,7 @@
 Current workspace implementation baseline: `0.3.1`
 Pipeline baseline: `mvp-0.3.1`
 SSOT baseline: `0.2`
-Date: `2026-03-12`
+Date: `2026-03-17`
 
 ## 1. What {spot} Is
 
@@ -93,6 +93,7 @@ Required first columns:
 
 {spot} writes a new `.xlsx` file and appends governed metadata, including:
 - `Assigned Category`
+- `Fallback Events`
 - `Confidence Score`
 - `Explanation / Reasoning`
 - `Flags`

@@ -387,7 +387,7 @@ def agent_eval_page():
 <html>
 <head>
   <meta charset='utf-8'/>
-  <title>Agent Eval</title>
+  <title>{spot} Eval Monitor</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; margin: 24px; }
     .row { margin-bottom: 12px; }
@@ -398,7 +398,7 @@ def agent_eval_page():
   </style>
 </head>
 <body>
-  <h2>Agent Eval</h2>
+  <h2>{spot} Eval Monitor</h2>
   <div class='row'>
     <label>Run ID: <input id='runId' value='__DEFAULT_RUN_ID__' /></label>
     <button onclick='startRun()'>Start / Restart</button>
@@ -447,7 +447,7 @@ def classify_monitor_page():
 <html>
 <head>
   <meta charset='utf-8'/>
-  <title>Classify Monitor</title>
+  <title>{spot} Classify Monitor</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; margin: 24px; }
     .row { margin-bottom: 12px; }
@@ -459,7 +459,7 @@ def classify_monitor_page():
   </style>
 </head>
 <body>
-  <h2>Classify Monitor</h2>
+  <h2>{spot} Classify Monitor</h2>
   <div class='row'>
     <label>Run ID: <input id='runId' value='__DEFAULT_RUN_ID__' /></label>
   </div>
