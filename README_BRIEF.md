@@ -246,9 +246,11 @@ This makes the system operable beyond simple CLI-only use.
 Each run stores evidence such as:
 - `progress.json`
 - `integrity_report.json`
+- `artifact_manifest.json`
 - `policy.json`
 - `output.xlsx`
 - `logs.txt`
+- `disagreement_report.json` for disagreement paths
 - `control.json` for monitor-started runs
 
 These artefacts are important because they preserve:

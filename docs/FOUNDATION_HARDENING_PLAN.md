@@ -163,7 +163,6 @@ Exit gate:
 
 ## Explicit Non-Goals For This Hardening Pass
 
-- removing temporary TEV compatibility aliases before downstream consumers are migrated
 - broad internal symbol refactors without delivery impact
 - changing the taxonomy or product scope
 - adding cloud dependencies
