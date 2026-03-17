@@ -62,7 +62,7 @@ Each run must preserve:
 ## Security Baseline
 
 - Local API/UI bind on `127.0.0.1`
-- Local Ollama endpoint only unless `TEV_ALLOW_REMOTE_OLLAMA=1`
+- Local Ollama endpoint only unless `SPOT_ALLOW_REMOTE_OLLAMA=1`
 - No secrets or personal data are written into code or documentation
 - No client-data training is part of the product baseline
 

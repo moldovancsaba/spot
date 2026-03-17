@@ -62,6 +62,8 @@ Outputs:
 - validated MLX classifier route
 - validated fallback route
 - clean policy/integrity reporting
+- artifact manifest with file hashes
+- disagreement report for ensemble disagreement paths
 
 ### 2. Data Contract Hardening
 
@@ -157,12 +159,14 @@ Production is not ready until all are true:
 - MLX primary route completes a real classification run
 - output workbook contains current model/prompt/SSOT/pipeline metadata
 - fallback behavior is deterministic and flagged
+- artifact manifest is produced for completed runs
 - client acceptance dataset reviewed
 
 ## Deliverables To Client
 
 - {spot} runtime package
 - SSOT package
+- local appliance runbook
 - operator guide
 - monitoring guide
 - acceptance evidence pack

@@ -150,6 +150,8 @@ Purpose:
 - not the category authority
 
 Important:
+- the standard single-model runtime path does not call the judge for every row
+- the standard row path is `drafter -> classifier`
 - there is no writer lane in {spot}
 - the judge does not override the classifier as the final category authority
 

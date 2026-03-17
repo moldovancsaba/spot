@@ -8,7 +8,7 @@
 - Added explicit `backend://model` model-spec support for evaluation and mixed-backend runs.
 - Fixed audit reporting so MLX/Apertus runs record the resolved classifier route instead of being mislabeled as Qwen.
 - Updated output workbook metadata so `Model Version` reflects the resolved runtime route used for each row.
-- Added loopback-only Ollama security guard with explicit opt-out via `TEV_ALLOW_REMOTE_OLLAMA=1`.
+- Added loopback-only Ollama security guard with explicit opt-out via `SPOT_ALLOW_REMOTE_OLLAMA=1`.
 - Rewrote architecture/foundation/runtime docs to match the real implementation baseline.
 
 ## 0.3.0 - 2026-02-28
@@ -30,7 +30,7 @@
 
 ## 0.2.0 - 2026-02-27
 
-- Replaced `HATORI_*` routing keys with `TEV_*`.
+- Replaced `HATORI_*` routing keys with `{spot}` runtime routing keys, with legacy compatibility aliases retained during migration.
 - Removed writer lane from {spot} architecture.
 - Added explicit {spot} lane model: `classifier`, `drafter`, `judge`.
 - Added optional MLX backend support for classifier and judge lanes.

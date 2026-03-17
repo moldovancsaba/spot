@@ -4,9 +4,9 @@
 
 Introduction
 
-The {spot} system is designed to help organisations identify and analyse problematic content within large datasets of social media posts.
+The {spot} system is designed to help organisations classify and analyse antisemitism-related content within large datasets of social media posts.
 
-{spot} processes structured datasets (such as Excel files) and classifies each entry according to a defined taxonomy of harmful or antisemitic content. The system provides confidence scoring, explanations for each classification, and highlights uncertain cases that require human review.
+{spot} processes structured datasets (such as Excel files) and classifies each entry according to a defined closed taxonomy of antisemitic content. The system provides confidence scoring, explanations for each classification, and highlights uncertain cases that require human review.
 
 The goal is to create a reliable, transparent and auditable analysis tool that allows large volumes of content to be processed while maintaining traceability and defensible classification logic.
 
@@ -35,10 +35,13 @@ Data ingestion and validation
 Processing Excel files containing social media posts and validating input datasets.
 
 Classification engine
-Taxonomy-based classification of content.
+Taxonomy-based classification of antisemitism-related content.
 
 Explanation and confidence scoring
 Every classification includes reasoning and confidence indicators.
+
+Three-agent quality architecture
+The platform uses a governed internal architecture with `drafter`, `classifier`, and `judge` roles. The standard path is `drafter -> classifier`, while the `judge` supports disagreement and quality-control paths rather than acting as the final category authority.
 
 Human review support
 Uncertain classifications are flagged for manual verification.
@@ -165,7 +168,7 @@ Expected Outcome
 
 At the end of the implementation, you will have a fully operational {spot} system capable of:
 	•	analysing large volumes of social media content
-	•	identifying problematic or harmful content
+	•	identifying antisemitic content within the agreed taxonomy
 	•	providing explainable classification results
 	•	flagging uncertain cases for human review
 	•	maintaining a full audit trail

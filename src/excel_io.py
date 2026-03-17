@@ -13,12 +13,18 @@ class InputFileError(RuntimeError):
     pass
 
 
+MAX_INPUT_FILE_BYTES = 25 * 1024 * 1024
+MAX_INPUT_ROWS = 50000
+MAX_POST_TEXT_LENGTH = 10000
+
+
 ADDED_COLUMNS = [
     "Raw Category",
     "Assigned Category",
     "Consensus Tier",
     "Minority Report",
     "Model Votes",
+    "Fallback Events",
     "Judge Score",
     "Judge Verdict",
     "Confidence Score",
@@ -40,6 +46,10 @@ ADDED_COLUMNS = [
 def read_input_rows(path: Path, ssot: SSOT) -> List[InputRow]:
     if path.suffix.lower() != ".xlsx":
         raise InputFileError("Input must be .xlsx")
+    if path.stat().st_size > MAX_INPUT_FILE_BYTES:
+        raise InputFileError(
+            f"Input workbook is too large. Maximum supported size is {MAX_INPUT_FILE_BYTES // (1024 * 1024)} MiB."
+        )
 
     try:
         wb = load_workbook(path, read_only=True, data_only=True)
@@ -73,7 +83,15 @@ def read_input_rows(path: Path, ssot: SSOT) -> List[InputRow]:
         category = "" if len(row) < 3 or row[2] is None else str(row[2]).strip()
         if item_number == "" and post_text == "" and category == "":
             continue
+        if len(post_text) > MAX_POST_TEXT_LENGTH:
+            raise InputFileError(
+                f"Input row {idx} exceeds the maximum supported post text length of {MAX_POST_TEXT_LENGTH} characters."
+            )
+        if "\x00" in post_text:
+            raise InputFileError(f"Input row {idx} contains invalid null-byte content.")
         rows.append(InputRow(row_index=idx, item_number=item_number, post_text=post_text))
+        if len(rows) > MAX_INPUT_ROWS:
+            raise InputFileError(f"Input workbook exceeds the maximum supported row count of {MAX_INPUT_ROWS}.")
 
     if not rows:
         raise InputFileError("Input worksheet has no data rows.")
@@ -110,6 +128,7 @@ def write_output(
             result.consensus_tier,
             result.minority_label,
             "" if not result.model_votes else ";".join(f"{k}:{v}" for k, v in sorted(result.model_votes.items())),
+            "" if not result.fallback_events else ";".join(sorted(set(result.fallback_events))),
             result.judge_score,
             result.judge_verdict,
             round(result.confidence, 4),

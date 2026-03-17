@@ -60,12 +60,15 @@ Relevant values:
 - `DEFAULT_MAX_WORKERS`
 - `DEFAULT_LIMIT`
 - `DEFAULT_PROGRESS_EVERY`
+- `DEFAULT_PRODUCTION_MODE`
+- `DEFAULT_LOCKED_SSOT_PATH`
 
 ## Security Notes
 
 - Backend binds to `127.0.0.1`
 - Default Ollama endpoint is loopback-only
-- Remote Ollama use requires `TEV_ALLOW_REMOTE_OLLAMA=1`
+- Remote Ollama use requires `SPOT_ALLOW_REMOTE_OLLAMA=1`
+- Evaluation start should be disabled when `SPOT_PRODUCTION_MODE=1`
 
 ## Artifact Paths
 

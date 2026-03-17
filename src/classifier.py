@@ -52,6 +52,23 @@ def strip_reasoning_artifacts(text: str) -> str:
     return cleaned.strip()
 
 
+def sanitize_explanation(text: str) -> str:
+    cleaned = strip_reasoning_artifacts(text)
+    leakage_markers = [
+        "Return exactly one JSON object",
+        "Allowed categories:",
+        "Required keys:",
+        "Post text:",
+        "You are a strict single-label classifier",
+        "You are an internal drafter",
+        "You are a strict quality judge",
+    ]
+    if any(marker.lower() in cleaned.lower() for marker in leakage_markers):
+        return "Explanation redacted by SPOT policy because model output included internal prompt or control text."
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned[:700]
+
+
 def _build_prompt(text: str, categories: List[str], fallback: str) -> str:
     cats = json.dumps(categories, ensure_ascii=False)
     return (
@@ -91,7 +108,7 @@ def _assert_local_ollama_url() -> None:
     hostname = (parsed.hostname or "").strip().lower()
     if hostname not in {"127.0.0.1", "localhost", "::1"}:
         raise RuntimeError(
-            "Remote Ollama URL is blocked by default. Use a local loopback URL or set TEV_ALLOW_REMOTE_OLLAMA=1."
+            "Remote Ollama URL is blocked by default. Use a local loopback URL or set SPOT_ALLOW_REMOTE_OLLAMA=1."
         )
 
 
@@ -320,7 +337,7 @@ def _classify_with_backend(text: str, ssot: SSOT, backend: str, model_name: str)
             explanation = "Model returned unstructured output; category was derived via deterministic normalization and taxonomy enforcement."
         else:
             explanation = "No explanation returned by model."
-    explanation = explanation[:700]
+    explanation = sanitize_explanation(explanation)
 
     return ClassificationResult(
         row_index=-1,
@@ -371,6 +388,7 @@ def _apply_review_mode(result: ClassificationResult, ssot: SSOT, review_mode: st
         drafted_text=result.drafted_text,
         judge_score=result.judge_score,
         judge_verdict=result.judge_verdict,
+        fallback_events=result.fallback_events,
     )
 
 
@@ -388,10 +406,16 @@ def classify_row(row: InputRow, ssot: SSOT, review_mode: str, model_name: str = 
             flags=["EMPTY_TEXT", "SKIPPED"],
             resolved_model_version=primary_route.version,
             drafted_text="",
+            fallback_events=["EMPTY_TEXT_FALLBACK"],
         )
         return _apply_review_mode(result, ssot, review_mode)
 
     drafted_text, drafter_flags = run_drafter(text)
+    fallback_events: List[str] = []
+    if "DRAFTER_FALLBACK" in drafter_flags:
+        fallback_events.append("DRAFTER_ROUTE_FALLBACK")
+    if "DRAFTER_UNAVAILABLE" in drafter_flags:
+        fallback_events.append("DRAFTER_UNAVAILABLE")
     try:
         result = _classify_with_backend(
             drafted_text,
@@ -413,6 +437,7 @@ def classify_row(row: InputRow, ssot: SSOT, review_mode: str, model_name: str = 
                 model_name=fallback_route.model_name,
             )
             result.flags = sorted(set(result.flags + ["CLASSIFIER_FALLBACK"]))
+            fallback_events.append("CLASSIFIER_ROUTE_FALLBACK")
         except Exception:
             result = ClassificationResult(
                 row_index=-1,
@@ -422,6 +447,7 @@ def classify_row(row: InputRow, ssot: SSOT, review_mode: str, model_name: str = 
                 explanation="Model request failed or timed out; fallback category applied.",
                 flags=["MODEL_REQUEST_FAILED", "CLASSIFIER_FALLBACK_FAILED"],
                 resolved_model_version=primary_route.version,
+                fallback_events=["CLASSIFIER_FALLBACK_FAILED"],
             )
     result.row_index = row.row_index
     result.raw_category = result.raw_category or ""
@@ -433,6 +459,7 @@ def classify_row(row: InputRow, ssot: SSOT, review_mode: str, model_name: str = 
     if not result.category:
         result.category = "Not Antisemitic"
         result.flags.append("EMPTY_CATEGORY_RECOVERED")
+    result.fallback_events = sorted(set((result.fallback_events or []) + fallback_events))
     return _apply_review_mode(result, ssot, review_mode)
 
 

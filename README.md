@@ -83,7 +83,7 @@ Evaluation defaults remain explicit and deterministic:
 
 - API binds to `127.0.0.1`
 - Ollama default endpoint is `http://127.0.0.1:11434/api/generate`
-- Remote Ollama endpoints are blocked unless `TEV_ALLOW_REMOTE_OLLAMA=1`
+- Remote Ollama endpoints are blocked unless `SPOT_ALLOW_REMOTE_OLLAMA=1`
 - MLX is intended for locally available Apertus weights
 - No training on client data is part of {spot}
 
@@ -108,6 +108,27 @@ Run deterministic classification:
   --ssot ssot/ssot.json \
   --runs-dir runs \
   --max-workers 1
+```
+
+Run local appliance preflight:
+
+```bash
+.venv/bin/python -m src.cli preflight \
+  --ssot ssot/ssot.json \
+  --runs-dir runs \
+  --port 8765
+```
+
+Bootstrap local appliance setup:
+
+```bash
+python3 -m src.cli bootstrap \
+  --project-root . \
+  --venv-path .venv \
+  --requirements requirements.txt \
+  --ssot ssot/ssot.json \
+  --runs-dir runs \
+  --logs-dir logs
 ```
 
 Run single-vs-ensemble evaluation:
@@ -145,32 +166,35 @@ Start monitoring API/UI on port `8765`:
 Supported overrides:
 
 ```bash
-export TEV_ROUTE_CLASSIFIER_BACKEND=mlx
-export TEV_ROUTE_CLASSIFIER_MODEL=mlx-community/Apertus-8B-Instruct-2509-4bit
-export TEV_ROUTE_CLASSIFIER_FALLBACK_BACKEND=ollama
-export TEV_ROUTE_CLASSIFIER_FALLBACK_MODEL=qwen2.5:7b
+export SPOT_ROUTE_CLASSIFIER_BACKEND=mlx
+export SPOT_ROUTE_CLASSIFIER_MODEL=mlx-community/Apertus-8B-Instruct-2509-4bit
+export SPOT_ROUTE_CLASSIFIER_FALLBACK_BACKEND=ollama
+export SPOT_ROUTE_CLASSIFIER_FALLBACK_MODEL=qwen2.5:7b
 
-export TEV_ROUTE_DRAFTER_BACKEND=ollama
-export TEV_ROUTE_DRAFTER_MODEL=gemma3:1b
-export TEV_ROUTE_DRAFTER_FALLBACK_BACKEND=ollama
-export TEV_ROUTE_DRAFTER_FALLBACK_MODEL=llama3.2:1b
+export SPOT_ROUTE_DRAFTER_BACKEND=ollama
+export SPOT_ROUTE_DRAFTER_MODEL=gemma3:1b
+export SPOT_ROUTE_DRAFTER_FALLBACK_BACKEND=ollama
+export SPOT_ROUTE_DRAFTER_FALLBACK_MODEL=llama3.2:1b
 
-export TEV_ROUTE_JUDGE_BACKEND=ollama
-export TEV_ROUTE_JUDGE_MODEL=llama3.2:3b
-export TEV_ROUTE_JUDGE_FALLBACK_BACKEND=ollama
-export TEV_ROUTE_JUDGE_FALLBACK_MODEL=gemma2:2b
+export SPOT_ROUTE_JUDGE_BACKEND=ollama
+export SPOT_ROUTE_JUDGE_MODEL=llama3.2:3b
+export SPOT_ROUTE_JUDGE_FALLBACK_BACKEND=ollama
+export SPOT_ROUTE_JUDGE_FALLBACK_MODEL=gemma2:2b
 ```
 
 Security override for exceptional environments only:
 
 ```bash
-export TEV_ALLOW_REMOTE_OLLAMA=1
+export SPOT_ALLOW_REMOTE_OLLAMA=1
+export SPOT_PRODUCTION_MODE=1
+export SPOT_LOCKED_SSOT_PATH=ssot/ssot.json
 ```
 
 ## Output Metadata Columns
 
 {spot} appends governed metadata columns including:
 - `Assigned Category`
+- `Fallback Events`
 - `Confidence Score`
 - `Explanation / Reasoning`
 - `Flags`
@@ -192,9 +216,11 @@ export TEV_ALLOW_REMOTE_OLLAMA=1
 Each classification run in `runs/<run-id>/` stores:
 - `progress.json`
 - `integrity_report.json`
+- `artifact_manifest.json`
 - `policy.json`
 - `output.xlsx`
 - `logs.txt`
+- `disagreement_report.json` when disagreement paths are used
 - `control.json` when started via monitoring API
 
 Each evaluation run in `runs/<evaluation-run-id>/` stores:
@@ -206,6 +232,8 @@ Each evaluation run in `runs/<evaluation-run-id>/` stores:
 ## Documentation Map
 
 - Project brief: [`README_BRIEF.md`](/Users/moldovancsaba/Projects/spot/README_BRIEF.md)
+- Foundation hardening plan: [`docs/FOUNDATION_HARDENING_PLAN.md`](/Users/moldovancsaba/Projects/spot/docs/FOUNDATION_HARDENING_PLAN.md)
+- Local appliance runbook: [`docs/LOCAL_APPLIANCE_RUNBOOK.md`](/Users/moldovancsaba/Projects/spot/docs/LOCAL_APPLIANCE_RUNBOOK.md)
 - SSOT contract: [`ssot/SSOT.md`](/Users/moldovancsaba/Projects/spot/ssot/SSOT.md)
 - SSOT machine config: [`ssot/ssot.json`](/Users/moldovancsaba/Projects/spot/ssot/ssot.json)
 - Architecture: [`docs/ARCHITECTURE.md`](/Users/moldovancsaba/Projects/spot/docs/ARCHITECTURE.md)

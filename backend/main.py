@@ -14,6 +14,7 @@ from src.defaults import (
     DEFAULT_LANGUAGE,
     DEFAULT_LIMIT,
     DEFAULT_MAX_WORKERS,
+    DEFAULT_PRODUCTION_MODE,
     DEFAULT_PROGRESS_EVERY,
     DEFAULT_REVIEW_MODE,
     DEFAULT_SINGLE_MODEL,
@@ -25,7 +26,7 @@ RUNS_DIR = Path(os.getenv("RUNS_DIR", str(Path(__file__).resolve().parent.parent
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 PYTHON_BIN = PROJECT_ROOT / ".venv" / "bin" / "python"
 DEFAULT_AGENT_EVAL_RUN_ID = os.getenv("DEFAULT_AGENT_EVAL_RUN_ID", "eval-2000")
-DEFAULT_CLASSIFY_RUN_ID = os.getenv("DEFAULT_CLASSIFY_RUN_ID", "sample-final-v020")
+DEFAULT_CLASSIFY_RUN_ID = os.getenv("DEFAULT_CLASSIFY_RUN_ID", "spot-sample-v031")
 
 
 @app.get("/runs/{run_id}")
@@ -114,8 +115,26 @@ def _discover_classify_pid(run_id: str) -> int | None:
     return None
 
 
+def _assert_production_mode_allows_eval() -> None:
+    if DEFAULT_PRODUCTION_MODE:
+        raise HTTPException(status_code=403, detail="Evaluation start is disabled in SPOT production mode")
+
+
+def _assert_allowed_classify_payload(payload: dict) -> None:
+    if not DEFAULT_PRODUCTION_MODE:
+        return
+    allowed_keys = {"input", "output", "language", "review_mode", "limit"}
+    unexpected = sorted(set(payload.keys()) - allowed_keys)
+    if unexpected:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Unsupported classify payload keys in SPOT production mode: {unexpected}",
+        )
+
+
 @app.post("/agent-eval/start/{evaluation_run_id}")
 def start_agent_eval(evaluation_run_id: str, payload: dict | None = Body(default=None)):
+    _assert_production_mode_allows_eval()
     subprocess.run(["pkill", "-f", f"evaluation-run-id {evaluation_run_id}"], check=False)
     single = RUNS_DIR / f"{evaluation_run_id}-single"
     ensemble = RUNS_DIR / f"{evaluation_run_id}-ensemble"
@@ -188,6 +207,7 @@ def classify_start(run_id: str, payload: dict | None = Body(default=None)):
         shutil.rmtree(run_dir, ignore_errors=True)
 
     payload = payload or {}
+    _assert_allowed_classify_payload(payload)
     input_path = str(payload.get("input", DEFAULT_INPUT_PATH))
     output_path = str(payload.get("output", str(PROJECT_ROOT / "samples" / f"{run_id}_output.xlsx")))
     ssot_path = str(payload.get("ssot", DEFAULT_SSOT_PATH))

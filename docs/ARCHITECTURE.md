@@ -34,6 +34,16 @@ It processes text already present in Excel rows and produces governed Excel outp
 8. Write output workbook
 9. Persist integrity, policy, progress, and logs
 
+## Runtime Paths
+
+Standard classification path:
+- `drafter -> classifier`
+
+Disagreement and evaluation path:
+- `drafter -> classifier -> judge`
+
+The `judge` is not invoked on every standard single-model row classification.
+
 ## Agent Topology
 
 - `drafter`: normalization only

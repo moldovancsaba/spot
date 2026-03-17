@@ -36,6 +36,7 @@ class ClassificationResult:
     drafted_text: str | None = None
     judge_score: float | None = None
     judge_verdict: str | None = None
+    fallback_events: List[str] | None = None
 
 
 @dataclass(frozen=True)

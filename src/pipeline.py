@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import subprocess
@@ -10,6 +11,7 @@ from typing import Optional
 
 from . import PIPELINE_VERSION
 from .classifier import classify_batch, get_inference_parameters
+from .defaults import DEFAULT_LOCKED_SSOT_PATH, DEFAULT_PRODUCTION_MODE
 from .ensemble.ensemble_runner import run_ensemble_batch
 from .excel_io import (
     extract_assigned_categories,
@@ -136,6 +138,7 @@ def _write_integrity_report(
         "consensus_distribution": consensus_distribution,
         "consensus_confidence_summary": consensus_tier_summary,
         "disagreement_count": flag_dist.get("DISAGREEMENT", 0),
+        "fallback_event_count": sum(len(r.fallback_events or []) for r in results),
         "minority_report_count": sum(1 for r in results if r.minority_label),
         "taxonomy_violation_count": flag_dist.get("TAXONOMY_VIOLATION", 0),
         "empty_text_count": flag_dist.get("EMPTY_TEXT", 0),
@@ -148,6 +151,122 @@ def _write_integrity_report(
     }
     (run_dir / "integrity_report.json").write_text(
         json.dumps(report, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def _validate_production_model_policy(
+    *,
+    ssot,
+    model_specs: list[str],
+    ensemble_enabled: bool,
+) -> None:
+    if not DEFAULT_PRODUCTION_MODE:
+        return
+
+    allowed_single_specs = {
+        f"{ssot.runtime.classifier.backend}://{ssot.runtime.classifier.model}",
+        f"{ssot.runtime.classifier.fallback_backend}://{ssot.runtime.classifier.fallback_model}",
+    }
+    allowed_ensemble_specs = set(ssot.runtime.evaluation.ensemble_models)
+
+    if ensemble_enabled:
+        if set(model_specs) != allowed_ensemble_specs:
+            raise ConfigError(
+                "Production mode only allows the SSOT-defined ensemble model set for disagreement paths and evaluation."
+            )
+        return
+
+    if len(model_specs) != 1 or model_specs[0] not in allowed_single_specs:
+        raise ConfigError("Production mode only allows the SSOT-defined classifier primary or fallback route.")
+
+
+def _validate_production_lane_policy(*, ssot, lane_config) -> None:
+    if not DEFAULT_PRODUCTION_MODE:
+        return
+    expected = {
+        "classifier_backend": ssot.runtime.classifier.backend,
+        "classifier_model": ssot.runtime.classifier.model,
+        "classifier_fallback_backend": ssot.runtime.classifier.fallback_backend,
+        "classifier_fallback_model": ssot.runtime.classifier.fallback_model,
+        "drafter_backend": ssot.runtime.drafter.backend,
+        "drafter_model": ssot.runtime.drafter.model,
+        "drafter_fallback_backend": ssot.runtime.drafter.fallback_backend,
+        "drafter_fallback_model": ssot.runtime.drafter.fallback_model,
+        "judge_backend": ssot.runtime.judge.backend,
+        "judge_model": ssot.runtime.judge.model,
+        "judge_fallback_backend": ssot.runtime.judge.fallback_backend,
+        "judge_fallback_model": ssot.runtime.judge.fallback_model,
+    }
+    actual = lane_config.__dict__
+    mismatches = sorted(key for key, value in expected.items() if actual.get(key) != value)
+    if mismatches:
+        raise ConfigError(f"Production mode requires SSOT-aligned lane routing. Mismatched keys: {mismatches}")
+
+
+def _validate_production_ssot_path(ssot_path: Path) -> None:
+    if not DEFAULT_PRODUCTION_MODE:
+        return
+    locked_path = Path(DEFAULT_LOCKED_SSOT_PATH).resolve()
+    if ssot_path.resolve() != locked_path:
+        raise ConfigError(f"Production mode requires the locked SSOT path: {locked_path}")
+
+
+def _write_disagreement_report(run_dir: Path, results, row_hashes: list[str]) -> None:
+    disagreements = []
+    for result, row_hash in zip(results, row_hashes, strict=False):
+        if result.consensus_tier not in {"MEDIUM", "LOW"}:
+            continue
+        disagreements.append(
+            {
+                "row_index": result.row_index,
+                "row_hash": row_hash,
+                "final_category": result.category,
+                "consensus_tier": result.consensus_tier,
+                "minority_label": result.minority_label,
+                "model_votes": result.model_votes or {},
+                "judge_score": result.judge_score,
+                "judge_verdict": result.judge_verdict,
+                "fallback_events": sorted(set(result.fallback_events or [])),
+                "flags": sorted(set(result.flags)),
+            }
+        )
+
+    if disagreements:
+        (run_dir / "disagreement_report.json").write_text(
+            json.dumps({"rows": disagreements}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        while True:
+            chunk = handle.read(1024 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _write_artifact_manifest(run_dir: Path) -> None:
+    files = [
+        "progress.json",
+        "policy.json",
+        "integrity_report.json",
+        "output.xlsx",
+        "logs.txt",
+        "disagreement_report.json",
+        "control.json",
+    ]
+    manifest = {}
+    for name in files:
+        path = run_dir / name
+        if path.exists():
+            manifest[name] = {"sha256": _sha256_file(path), "bytes": path.stat().st_size}
+    (run_dir / "artifact_manifest.json").write_text(
+        json.dumps({"artifacts": manifest}, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
 
@@ -175,6 +294,7 @@ def run_classification(
     try:
         _write_progress(run_dir, run_id, "PENDING", started_at=started_at)
         _write_progress(run_dir, run_id, "VALIDATING", started_at=started_at)
+        _validate_production_ssot_path(ssot_path)
         ssot = load_ssot(ssot_path)
 
         if review_mode not in ssot.policy.review_modes:
@@ -215,6 +335,7 @@ def run_classification(
                 processed_rows=done,
             )
         lane_config = load_lane_config()
+        _validate_production_lane_policy(ssot=ssot, lane_config=lane_config)
         requested_model_specs = (
             ensemble_models
             if (ensemble_enabled and ensemble_models)
@@ -226,6 +347,11 @@ def run_classification(
         ]
         model_specs = [route.spec for route in resolved_model_routes]
         model_versions = [route.version for route in resolved_model_routes]
+        _validate_production_model_policy(
+            ssot=ssot,
+            model_specs=model_specs,
+            ensemble_enabled=ensemble_enabled,
+        )
         run_policy = RunPolicy(
             ensemble_enabled=ensemble_enabled,
             ensemble_models=model_specs,
@@ -320,6 +446,7 @@ def run_classification(
             "ensemble_enabled": run_policy.ensemble_enabled,
             "ensemble_models": run_policy.ensemble_models,
             "resolved_model_versions": model_versions,
+            "production_mode": DEFAULT_PRODUCTION_MODE,
             "consensus_strategy": run_policy.consensus_strategy,
             "disagreement_mode": run_policy.disagreement_mode,
             "prompt_version": ssot.policy.prompt_version,
@@ -332,6 +459,7 @@ def run_classification(
         }
         (run_dir / "policy.json").write_text(json.dumps(policy_payload, ensure_ascii=False, indent=2), encoding="utf-8")
         completed_at = _now_iso()
+        _write_disagreement_report(run_dir=run_dir, results=results, row_hashes=row_hashes)
 
         _write_integrity_report(
             run_dir=run_dir,
@@ -353,6 +481,7 @@ def run_classification(
             consensus_distribution=consensus_distribution,
             consensus_tier_summary=consensus_tier_summary,
         )
+        _write_artifact_manifest(run_dir)
         _write_progress(
             run_dir,
             run_id,
@@ -361,6 +490,7 @@ def run_classification(
             completed_at=completed_at,
             total_rows=total_rows,
         )
+        _write_artifact_manifest(run_dir)
     except Exception as exc:
         completed_at = _now_iso()
         _write_progress(

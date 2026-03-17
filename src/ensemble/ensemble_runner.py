@@ -65,12 +65,17 @@ def run_ensemble_batch(
         judge_score = None
         judge_verdict = None
         judge_flags: List[str] = []
+        fallback_events = list(base.fallback_events or [])
         if consensus_tier in {"MEDIUM", "LOW"}:
             judge_score, judge_verdict, judge_flags = run_judge(
                 text=row.post_text,
                 category=final_category,
                 flags=merged_flags,
             )
+            if "JUDGE_FALLBACK" in judge_flags:
+                fallback_events.append("JUDGE_ROUTE_FALLBACK")
+            if "JUDGE_UNAVAILABLE" in judge_flags:
+                fallback_events.append("JUDGE_UNAVAILABLE")
         # Keep earlier flags and append judge flags; never replace existing flags.
         merged_flags = _merge_flags(merged_flags, judge_flags)
         return ClassificationResult(
@@ -86,6 +91,7 @@ def run_ensemble_batch(
             minority_label=minority_label,
             judge_score=judge_score,
             judge_verdict=judge_verdict,
+            fallback_events=sorted(set(fallback_events)),
         )
 
     total = len(rows)

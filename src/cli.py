@@ -4,9 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
-from .defaults import DEFAULT_ENSEMBLE_MODELS, DEFAULT_SINGLE_MODEL
-from .evaluation import evaluate_runs
-from .pipeline import run_classification
+from .defaults import DEFAULT_ENSEMBLE_MODELS, DEFAULT_PRODUCTION_MODE, DEFAULT_SINGLE_MODEL
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -49,6 +47,20 @@ def _parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--max-workers", type=int, default=1)
     evaluate.add_argument("--limit", type=int, default=None)
     evaluate.add_argument("--progress-every", type=int, default=100)
+
+    preflight = sub.add_parser("preflight", help="Validate local appliance prerequisites")
+    preflight.add_argument("--ssot", default=Path("ssot/ssot.json"), type=Path)
+    preflight.add_argument("--runs-dir", default=Path("runs"), type=Path)
+    preflight.add_argument("--port", type=int, default=8765)
+
+    bootstrap = sub.add_parser("bootstrap", help="Prepare local appliance directories and Python environment")
+    bootstrap.add_argument("--project-root", default=Path("."), type=Path)
+    bootstrap.add_argument("--venv-path", default=Path(".venv"), type=Path)
+    bootstrap.add_argument("--requirements", default=Path("requirements.txt"), type=Path)
+    bootstrap.add_argument("--ssot", default=Path("ssot/ssot.json"), type=Path)
+    bootstrap.add_argument("--runs-dir", default=Path("runs"), type=Path)
+    bootstrap.add_argument("--logs-dir", default=Path("logs"), type=Path)
+    bootstrap.add_argument("--skip-install", action="store_true")
     return p
 
 
@@ -57,6 +69,10 @@ def main() -> int:
 
     if args.command == "classify":
         try:
+            if DEFAULT_PRODUCTION_MODE and args.ensemble_enabled:
+                raise RuntimeError("SPOT production mode does not allow ensemble classification from the CLI.")
+            from .pipeline import run_classification
+
             run_classification(
                 input_path=args.input,
                 output_path=args.output,
@@ -87,6 +103,10 @@ def main() -> int:
             return 1
     elif args.command == "evaluate":
         try:
+            if DEFAULT_PRODUCTION_MODE:
+                raise RuntimeError("SPOT production mode does not allow CLI evaluation runs.")
+            from .evaluation import evaluate_runs
+
             report_path = evaluate_runs(
                 input_path=args.input,
                 ssot_path=args.ssot,
@@ -114,6 +134,30 @@ def main() -> int:
                 )
             )
             return 1
+    elif args.command == "preflight":
+        from .preflight import run_preflight
+
+        report = run_preflight(
+            ssot_path=args.ssot,
+            runs_dir=args.runs_dir,
+            port=args.port,
+        )
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 0 if report["status"] == "ok" else 1
+    elif args.command == "bootstrap":
+        from .bootstrap import bootstrap_local_appliance, bootstrap_report_json
+
+        report = bootstrap_local_appliance(
+            project_root=args.project_root.resolve(),
+            venv_path=args.venv_path,
+            requirements_path=args.requirements,
+            ssot_path=args.ssot,
+            runs_dir=args.runs_dir,
+            logs_dir=args.logs_dir,
+            skip_install=bool(args.skip_install),
+        )
+        print(bootstrap_report_json(report))
+        return 0 if report["status"] == "ok" else 1
 
     print(json.dumps({"status": "ok"}))
     return 0
