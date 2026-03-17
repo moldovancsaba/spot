@@ -223,3 +223,18 @@
   - pending post-change compile and preflight verification in this session
 - Known follow-up:
   - complete a successful non-blocking classification smoke run to prove the new fallback and artifact outputs end-to-end
+
+## 2026-03-17 Europe/Budapest - Codex (Client Package And Release Prep)
+
+- Objective: produce a final client-facing package document from the aligned repository state and prepare the current baseline for release tagging.
+- Changes:
+  - added a consolidated client package document
+  - linked the client package from the main README documentation map
+- Files touched:
+  - `docs/CLIENT_PACKAGE.md`
+  - `README.md`
+  - `docs/HANDOVER.md`
+- Validation:
+  - client package content cross-checked against `README_BRIEF.md`, `docs/PRODUCTION_PLAN.md`, `quote.md`, and current runtime/security baseline
+- Known follow-up:
+  - create and push the release tag for the aligned `0.3.1` baseline

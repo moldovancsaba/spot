@@ -232,6 +232,7 @@ Each evaluation run in `runs/<evaluation-run-id>/` stores:
 ## Documentation Map
 
 - Project brief: [`README_BRIEF.md`](/Users/moldovancsaba/Projects/spot/README_BRIEF.md)
+- Client package: [`docs/CLIENT_PACKAGE.md`](/Users/moldovancsaba/Projects/spot/docs/CLIENT_PACKAGE.md)
 - Foundation hardening plan: [`docs/FOUNDATION_HARDENING_PLAN.md`](/Users/moldovancsaba/Projects/spot/docs/FOUNDATION_HARDENING_PLAN.md)
 - Local appliance runbook: [`docs/LOCAL_APPLIANCE_RUNBOOK.md`](/Users/moldovancsaba/Projects/spot/docs/LOCAL_APPLIANCE_RUNBOOK.md)
 - SSOT contract: [`ssot/SSOT.md`](/Users/moldovancsaba/Projects/spot/ssot/SSOT.md)
