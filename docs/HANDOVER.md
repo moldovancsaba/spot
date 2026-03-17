@@ -238,3 +238,16 @@
   - client package content cross-checked against `README_BRIEF.md`, `docs/PRODUCTION_PLAN.md`, `quote.md`, and current runtime/security baseline
 - Known follow-up:
   - create and push the release tag for the aligned `0.3.1` baseline
+
+## 2026-03-17 Europe/Budapest - Codex (Release Draft Package)
+
+- Objective: complete the release-delivery package for the aligned `v0.3.1` baseline.
+- Changes:
+  - added a GitHub-ready release draft document with release title, executive summary, and full release body
+- Files touched:
+  - `docs/GITHUB_RELEASE_v0.3.1.md`
+  - `docs/HANDOVER.md`
+- Validation:
+  - release draft cross-checked against `docs/RELEASE_NOTES_0.3.1.md`, `docs/CLIENT_PACKAGE.md`, and the pushed `v0.3.1` baseline
+- Known follow-up:
+  - publish the GitHub release text through the hosting UI if needed
