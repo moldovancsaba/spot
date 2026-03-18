@@ -21,7 +21,7 @@ from src.defaults import (
     DEFAULT_SSOT_PATH,
 )
 
-app = FastAPI(title="{spot} Classification Backend", version="0.3.1")
+app = FastAPI(title="{spot} Classification Backend", version="0.3.2")
 RUNS_DIR = Path(os.getenv("RUNS_DIR", str(Path(__file__).resolve().parent.parent / "runs")))
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 PYTHON_BIN = PROJECT_ROOT / ".venv" / "bin" / "python"

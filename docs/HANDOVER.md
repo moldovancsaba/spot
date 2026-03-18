@@ -259,6 +259,37 @@
 - Known follow-up:
   - execute the benchmark and UAT checklists on the target Apple Silicon delivery machine and archive the completed acceptance evidence with the client handover
 
+## 2026-03-18 Europe/Budapest - Codex (Developer Readme And Version Surface)
+
+- Objective: align the developer-facing handover file and promote the workspace baseline beyond the shipped `v0.3.1` release.
+- Changes:
+  - rewrote `READMEDEV.md` into a repo-specific developer handover for `{spot}`
+  - promoted the workspace baseline to `0.3.2` and the pipeline baseline to `mvp-0.3.2`
+  - updated active baseline references in the main brief, architecture, production, appliance, benchmark, UAT, acceptance, and client-package documents
+  - added a `0.3.2` changelog entry while keeping `v0.3.1` as the latest shipped release
+- Files touched:
+  - `READMEDEV.md`
+  - `VERSION`
+  - `src/__init__.py`
+  - `backend/main.py`
+  - `README.md`
+  - `README_BRIEF.md`
+  - `CHANGELOG.md`
+  - `docs/ACCEPTANCE_EVIDENCE_TEMPLATE.md`
+  - `docs/ARCHITECTURE.md`
+  - `docs/BENCHMARK_CHECKLIST.md`
+  - `docs/CLIENT_PACKAGE.md`
+  - `docs/FOUNDATION_HARDENING_PLAN.md`
+  - `docs/LOCAL_APPLIANCE_RUNBOOK.md`
+  - `docs/PRODUCTION_PLAN.md`
+  - `docs/UAT_CHECKLIST.md`
+  - `docs/HANDOVER.md`
+- Validation:
+  - `python3 -m py_compile src/*.py src/ensemble/*.py src/evaluation/*.py backend/main.py backend/models/*.py backend/routes/*.py` => passed
+  - direct file checks confirmed `VERSION=0.3.2`, `PIPELINE_VERSION=mvp-0.3.2`, backend app version `0.3.2`, and updated `0.3.2` baseline references in active docs
+- Known follow-up:
+  - execute the benchmark and UAT pack on the target Apple Silicon machine and record the evidence for client acceptance
+
 ## 2026-03-17 Europe/Budapest - Codex (Release Draft Package)
 
 - Objective: complete the release-delivery package for the aligned `v0.3.1` baseline.

@@ -1,7 +1,7 @@
 # {spot} UAT Checklist
 
 Document date: `2026-03-18`
-Baseline: `0.3.1`
+Baseline: `0.3.2`
 SSOT: `0.2`
 
 ## Purpose

@@ -1,8 +1,8 @@
 # {spot} Client Package
 
 Document date: `2026-03-17`
-Workspace baseline: `0.3.1`
-Pipeline baseline: `mvp-0.3.1`
+Workspace baseline: `0.3.2`
+Pipeline baseline: `mvp-0.3.2`
 SSOT baseline: `0.2`
 
 ## Overview

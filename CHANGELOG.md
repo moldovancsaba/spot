@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.2 - 2026-03-18
+
+- Added the local-hardware benchmark checklist.
+- Added the structured UAT checklist.
+- Added the acceptance evidence template for benchmark and client sign-off capture.
+- Added a developer-facing repo handover readme aligned to the current `{spot}` baseline.
+- Promoted the workspace baseline to `0.3.2` while keeping `v0.3.1` as the latest shipped release.
+
 ## 0.3.1 - 2026-03-12
 
 - Promoted SSOT to `0.2` and made runtime routing/security defaults explicit in `ssot/ssot.json`.

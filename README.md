@@ -3,8 +3,8 @@
 
 AI-assisted antisemitism classification system with SSOT-governed, auditable local processing.
 
-Current workspace implementation: `0.3.1`
-Pipeline version: `mvp-0.3.1`
+Current workspace implementation: `0.3.2`
+Pipeline version: `mvp-0.3.2`
 Authoritative SSOT version: `0.2`
 Latest shipped release notes in repo: [`docs/RELEASE_NOTES_0.3.1.md`](/Users/moldovancsaba/Projects/spot/docs/RELEASE_NOTES_0.3.1.md)
 
