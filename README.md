@@ -8,6 +8,18 @@ Pipeline version: `mvp-0.3.1`
 Authoritative SSOT version: `0.2`
 Latest shipped release notes in repo: [`docs/RELEASE_NOTES_0.3.1.md`](/Users/moldovancsaba/Projects/spot/docs/RELEASE_NOTES_0.3.1.md)
 
+Documentation map:
+- [README Brief](/Users/moldovancsaba/Projects/spot/README_BRIEF.md)
+- [Architecture](/Users/moldovancsaba/Projects/spot/docs/ARCHITECTURE.md)
+- [Production Plan](/Users/moldovancsaba/Projects/spot/docs/PRODUCTION_PLAN.md)
+- [Client Package](/Users/moldovancsaba/Projects/spot/docs/CLIENT_PACKAGE.md)
+- [Local Appliance Runbook](/Users/moldovancsaba/Projects/spot/docs/LOCAL_APPLIANCE_RUNBOOK.md)
+- [Benchmark Checklist](/Users/moldovancsaba/Projects/spot/docs/BENCHMARK_CHECKLIST.md)
+- [UAT Checklist](/Users/moldovancsaba/Projects/spot/docs/UAT_CHECKLIST.md)
+- [Acceptance Evidence Template](/Users/moldovancsaba/Projects/spot/docs/ACCEPTANCE_EVIDENCE_TEMPLATE.md)
+- [Release Notes 0.3.1](/Users/moldovancsaba/Projects/spot/docs/RELEASE_NOTES_0.3.1.md)
+- [Release Notes 0.3.0 (Historical)](/Users/moldovancsaba/Projects/spot/docs/RELEASE_NOTES_0.3.0.md)
+
 {spot} is a deterministic, auditable classification platform for large Excel batches of social media posts.
 It enforces a strict closed-set taxonomy, produces explainable metadata, and writes governed outputs to Excel.
 

@@ -175,5 +175,8 @@ Base delivery calculation:
 - Production plan: [`docs/PRODUCTION_PLAN.md`](/Users/moldovancsaba/Projects/spot/docs/PRODUCTION_PLAN.md)
 - Quote: [`quote.md`](/Users/moldovancsaba/Projects/spot/quote.md)
 - Local appliance runbook: [`docs/LOCAL_APPLIANCE_RUNBOOK.md`](/Users/moldovancsaba/Projects/spot/docs/LOCAL_APPLIANCE_RUNBOOK.md)
+- Benchmark checklist: [`docs/BENCHMARK_CHECKLIST.md`](/Users/moldovancsaba/Projects/spot/docs/BENCHMARK_CHECKLIST.md)
+- UAT checklist: [`docs/UAT_CHECKLIST.md`](/Users/moldovancsaba/Projects/spot/docs/UAT_CHECKLIST.md)
+- Acceptance evidence template: [`docs/ACCEPTANCE_EVIDENCE_TEMPLATE.md`](/Users/moldovancsaba/Projects/spot/docs/ACCEPTANCE_EVIDENCE_TEMPLATE.md)
 - Architecture: [`docs/ARCHITECTURE.md`](/Users/moldovancsaba/Projects/spot/docs/ARCHITECTURE.md)
 - SSOT contract: [`ssot/SSOT.md`](/Users/moldovancsaba/Projects/spot/ssot/SSOT.md)

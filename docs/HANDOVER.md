@@ -239,6 +239,26 @@
 - Known follow-up:
   - create and push the release tag for the aligned `0.3.1` baseline
 
+## 2026-03-18 Europe/Budapest - Codex (Benchmark And Acceptance Pack)
+
+- Objective: complete the local-hardware delivery pack with benchmark, UAT, and acceptance-evidence materials.
+- Changes:
+  - added a benchmark checklist for structured performance and audit validation on the target machine
+  - added a UAT checklist for client-side acceptance testing on the local appliance
+  - added an acceptance-evidence template so benchmark and UAT outcomes can be recorded consistently
+  - linked the new benchmark and acceptance documents from the client package and main README
+- Files touched:
+  - `docs/BENCHMARK_CHECKLIST.md`
+  - `docs/UAT_CHECKLIST.md`
+  - `docs/ACCEPTANCE_EVIDENCE_TEMPLATE.md`
+  - `docs/CLIENT_PACKAGE.md`
+  - `README.md`
+  - `docs/HANDOVER.md`
+- Validation:
+  - content cross-checked against the local appliance runbook, client package, current `0.3.1` baseline, and current SSOT `0.2`
+- Known follow-up:
+  - execute the benchmark and UAT checklists on the target Apple Silicon delivery machine and archive the completed acceptance evidence with the client handover
+
 ## 2026-03-17 Europe/Budapest - Codex (Release Draft Package)
 
 - Objective: complete the release-delivery package for the aligned `v0.3.1` baseline.
