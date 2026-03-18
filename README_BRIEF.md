@@ -2,8 +2,8 @@
 
 `{spot}` stands for `Smart Platform for Observing Threats`.
 
-Current workspace implementation baseline: `0.3.2`
-Pipeline baseline: `mvp-0.3.2`
+Current workspace implementation baseline: `0.4.0`
+Pipeline baseline: `mvp-0.4.0`
 SSOT baseline: `0.2`
 Date: `2026-03-18`
 
@@ -169,8 +169,8 @@ Fallback classifier route:
 - `ollama://qwen2.5:7b`
 
 Support lanes:
-- drafter: `ollama://gemma3:1b`
-- drafter fallback: `ollama://llama3.2:1b`
+- drafter: `ollama://granite4:350m`
+- drafter fallbacks: `ollama://gemma3:1b` -> `ollama://llama3.2:1b`
 - judge: `ollama://llama3.2:3b`
 - judge fallback: `ollama://gemma2:2b`
 
@@ -240,6 +240,11 @@ Operational capabilities include:
 - inspect run status and artefacts
 
 This makes the system operable beyond simple CLI-only use.
+
+Current implementation stage:
+- the core runtime and browser operator surface are implemented
+- the browser surface is currently delivered from the FastAPI backend rather than a separate frontend application
+- release cutover and fresh client acceptance evidence on the `0.4.0` baseline remain pending
 
 ## 15. Audit Artefacts
 

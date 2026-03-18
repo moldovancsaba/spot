@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0 - 2026-03-18
+
+- Implemented the local browser operator workflow for upload intake, run status, review, row inspection, artifact retrieval, and sign-off.
+- Added local auth/session gating, run recovery operations, and a supported browser appliance startup path.
+- Added deterministic browser integration smoke coverage and productionization contracts/docs.
+- Normalized the workspace baseline to `0.4.0` and separated historical `0.3.2` acceptance evidence from the live template.
+
 ## 0.3.2 - 2026-03-18
 
 - Added the local-hardware benchmark checklist.

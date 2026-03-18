@@ -1,8 +1,8 @@
 # {spot} Production Plan
 
-Current workspace implementation baseline: `0.3.2`
+Current workspace implementation baseline: `0.4.0`
 SSOT baseline: `0.2`
-Document date: `2026-03-17`
+Document date: `2026-03-18`
 
 ## Objective
 
@@ -31,7 +31,8 @@ Single-node Apple Silicon deployment.
 Functional target:
 - primary classifier: `mlx://mlx-community/Apertus-8B-Instruct-2509-4bit`
 - classifier fallback: `ollama://qwen2.5:7b`
-- drafter: `ollama://gemma3:1b`
+- drafter: `ollama://granite4:350m`
+- drafter fallbacks: `ollama://gemma3:1b`, `ollama://llama3.2:1b`
 - judge: `ollama://llama3.2:3b`
 - local API/UI on loopback
 - local artifact storage in `runs/`
@@ -156,11 +157,17 @@ Exit gate:
 Production is not ready until all are true:
 - SSOT loads without exceptions
 - code compiles cleanly
+- supported browser startup path works on the target machine
+- browser smoke passes as integration verification
 - MLX primary route completes a real classification run
 - output workbook contains current model/prompt/SSOT/pipeline metadata
 - fallback behavior is deterministic and flagged
 - artifact manifest is produced for completed runs
 - client acceptance dataset reviewed
+
+Current status:
+- the runtime and browser operator workflow are implemented
+- the current repo still requires fresh live client-machine acceptance evidence and release cutover before first delivery
 
 ## Deliverables To Client
 

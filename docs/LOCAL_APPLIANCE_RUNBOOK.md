@@ -1,8 +1,8 @@
 # {spot} Local Appliance Runbook
 
-Current workspace implementation baseline: `0.3.2`
+Current workspace implementation baseline: `0.4.0`
 SSOT baseline: `0.2`
-Document date: `2026-03-17`
+Document date: `2026-03-18`
 
 ## Purpose
 
@@ -22,7 +22,8 @@ It is written for a single-node deployment where the system, models, artifacts, 
 
 - classifier primary: `mlx://mlx-community/Apertus-8B-Instruct-2509-4bit`
 - classifier fallback: `ollama://qwen2.5:7b`
-- drafter: `ollama://gemma3:1b`
+- drafter: `ollama://granite4:350m`
+- drafter fallbacks: `ollama://gemma3:1b`, `ollama://llama3.2:1b`
 - judge: `ollama://llama3.2:3b`
 - SSOT: `ssot/ssot.json`
 - backend bind: `127.0.0.1:8765`
@@ -96,14 +97,41 @@ From the project root:
 
 ```bash
 cd /Users/moldovancsaba/Projects/spot
-source .venv/bin/activate
-.venv/bin/uvicorn backend.main:app --host 127.0.0.1 --port 8765
+chmod +x start_browser_appliance.sh
+bash start_browser_appliance.sh
 ```
 
 Expected result:
+- startup preflight runs first unless `SPOT_RUN_PREFLIGHT=0`
 - backend starts locally
-- UI becomes available on loopback
+- browser operator surface becomes available on loopback
 - no remote bind is required for normal operation
+
+Supported appliance entrypoint:
+- `start_browser_appliance.sh`
+- override `SPOT_RUN_PREFLIGHT=0` only for deliberate local dev restarts
+
+Supported browser startup URL:
+
+- dashboard: `http://127.0.0.1:8765/app`
+- root path alias: `http://127.0.0.1:8765/`
+
+Supported browser verification command:
+
+```bash
+cd /Users/moldovancsaba/Projects/spot
+.venv/bin/python backend/browser_operator_smoke.py
+```
+
+Expected verification result:
+- local auth succeeds
+- upload intake succeeds
+- browser operator pages render
+- review/sign-off/recovery seams respond successfully
+
+Verification boundary:
+- this smoke command validates the browser integration seams inside the local app
+- it does not replace live benchmark/UAT execution on the target delivery machine
 
 ## Preflight Command
 
@@ -147,6 +175,7 @@ Expected result:
 ## Monitoring Procedure
 
 Main local URLs:
+- `http://127.0.0.1:8765/app`
 - `http://127.0.0.1:8765/classify-monitor`
 - `http://127.0.0.1:8765/agent-eval`
 

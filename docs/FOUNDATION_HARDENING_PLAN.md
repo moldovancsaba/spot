@@ -1,8 +1,8 @@
 # {spot} Foundation Hardening Plan
 
-Current workspace implementation baseline: `0.3.2`
+Current workspace implementation baseline: `0.4.0`
 SSOT baseline: `0.2`
-Document date: `2026-03-17`
+Document date: `2026-03-18`
 
 ## Objective
 
@@ -180,6 +180,10 @@ Exit gate:
 6. Output workbook metadata is correct and current.
 7. Operator runbook and recovery steps exist.
 8. A fresh acceptance-ready smoke package exists under the current baseline.
+
+Current status note:
+- the core runtime, browser operator baseline, startup path, and synthetic browser smoke are implemented
+- the remaining delivery gate is fresh live acceptance evidence and release cutover on the current browser-enabled baseline
 
 ## Immediate Next Steps
 

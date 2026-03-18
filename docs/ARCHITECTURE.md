@@ -2,14 +2,17 @@
 
 `{spot}` stands for `Smart Platform for Observing Threats`.
 
-Current workspace implementation: `0.3.2`
-Pipeline version: `mvp-0.3.2`
+Current workspace implementation: `0.4.0`
+Pipeline version: `mvp-0.4.0`
 SSOT version: `0.2`
 
 ## System Boundary
 
 {spot} is a local, deterministic `.xlsx` classification system.
 It processes text already present in Excel rows and produces governed Excel outputs plus audit artifacts.
+
+The next product phase adds a browser operator surface over this runtime. That browser surface does not change the system boundary: `{spot}` remains `.xlsx`-only, local-first, and auditable.
+The current browser operator surface is implemented directly in the FastAPI backend as local server-rendered pages. It is an operational layer over the core runtime, not a separate product architecture.
 
 ## Main Components
 
@@ -21,6 +24,9 @@ It processes text already present in Excel rows and produces governed Excel outp
 - Excel ingestion/output: [`src/excel_io.py`](/Users/moldovancsaba/Projects/spot/src/excel_io.py)
 - Evaluation runner: [`src/evaluation/evaluate.py`](/Users/moldovancsaba/Projects/spot/src/evaluation/evaluate.py)
 - Monitoring backend: [`backend/main.py`](/Users/moldovancsaba/Projects/spot/backend/main.py)
+
+Browser operator contract:
+- [`docs/BROWSER_OPERATOR_CONTRACT.md`](/Users/moldovancsaba/Projects/spot/docs/BROWSER_OPERATOR_CONTRACT.md)
 
 ## Data Flow
 
@@ -59,6 +65,7 @@ Primary runtime:
 
 Fallback / support runtimes:
 - `ollama://qwen2.5:7b`
+- `ollama://granite4:350m`
 - `ollama://gemma3:1b`
 - `ollama://llama3.2:1b`
 - `ollama://llama3.2:3b`

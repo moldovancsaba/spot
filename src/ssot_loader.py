@@ -41,7 +41,8 @@ def _build_lane_route(raw: dict, lane_name: str) -> LaneRoute:
         )
     if not route.model:
         raise SSOTError(f"Runtime route '{lane_name}' model cannot be empty")
-    if not route.fallback_model:
+    fallback_models = [model.strip() for model in route.fallback_model.split(",") if model.strip()]
+    if not fallback_models:
         raise SSOTError(f"Runtime route '{lane_name}' fallback_model cannot be empty")
     return route
 

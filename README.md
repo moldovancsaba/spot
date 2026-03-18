@@ -3,14 +3,16 @@
 
 AI-assisted antisemitism classification system with SSOT-governed, auditable local processing.
 
-Current workspace implementation: `0.3.2`
-Pipeline version: `mvp-0.3.2`
+Current workspace implementation: `0.4.0`
+Pipeline version: `mvp-0.4.0`
 Authoritative SSOT version: `0.2`
 Latest shipped release notes in repo: [`docs/RELEASE_NOTES_0.3.1.md`](/Users/moldovancsaba/Projects/spot/docs/RELEASE_NOTES_0.3.1.md)
 
 Documentation map:
 - [README Brief](/Users/moldovancsaba/Projects/spot/README_BRIEF.md)
 - [Architecture](/Users/moldovancsaba/Projects/spot/docs/ARCHITECTURE.md)
+- [Browser Operator Contract](/Users/moldovancsaba/Projects/spot/docs/BROWSER_OPERATOR_CONTRACT.md)
+- [Browser Productionization Contract](/Users/moldovancsaba/Projects/spot/docs/BROWSER_PRODUCTIONIZATION_CONTRACT.md)
 - [Production Plan](/Users/moldovancsaba/Projects/spot/docs/PRODUCTION_PLAN.md)
 - [Client Package](/Users/moldovancsaba/Projects/spot/docs/CLIENT_PACKAGE.md)
 - [Local Appliance Runbook](/Users/moldovancsaba/Projects/spot/docs/LOCAL_APPLIANCE_RUNBOOK.md)
@@ -42,6 +44,16 @@ It enforces a strict closed-set taxonomy, produces explainable metadata, and wri
 - Multi-label classification
 - Taxonomy CRUD or schema CRUD
 
+Current next-phase product contract:
+- browser operator experience remains scoped to local `.xlsx` upload, run monitoring, review, annotation, and artifact retrieval
+- the implementation contract for that phase is [`docs/BROWSER_OPERATOR_CONTRACT.md`](/Users/moldovancsaba/Projects/spot/docs/BROWSER_OPERATOR_CONTRACT.md)
+
+Current implementation stage:
+- core deterministic runtime is implemented
+- local browser operator workflow is implemented
+- productionization verification is in progress
+- live client acceptance on the current browser-enabled baseline is still pending
+
 ## Canonical Taxonomy
 
 - `Anti-Israel`
@@ -56,8 +68,8 @@ It enforces a strict closed-set taxonomy, produces explainable metadata, and wri
 Primary classifier route is SSOT-governed and Apertus-first:
 - `classifier`: `mlx://mlx-community/Apertus-8B-Instruct-2509-4bit`
 - `classifier fallback`: `ollama://qwen2.5:7b`
-- `drafter`: `ollama://gemma3:1b`
-- `drafter fallback`: `ollama://llama3.2:1b`
+- `drafter`: `ollama://granite4:350m`
+- `drafter fallbacks`: `ollama://gemma3:1b` -> `ollama://llama3.2:1b`
 - `judge`: `ollama://llama3.2:3b`
 - `judge fallback`: `ollama://gemma2:2b`
 
@@ -160,14 +172,81 @@ Run single-vs-ensemble evaluation:
   --progress-every 10
 ```
 
-Start monitoring API/UI on port `8765`:
+Start the supported local browser appliance on port `8765`:
 
 ```bash
-.venv/bin/uvicorn backend.main:app --host 127.0.0.1 --port 8765
+chmod +x start_browser_appliance.sh
+bash start_browser_appliance.sh
 ```
+
+Browser-intake foundation endpoints:
+
+- `POST /uploads/intake` with raw `.xlsx` request body and `X-Filename` header
+- `GET /uploads`
+- `GET /uploads/{upload_id}`
+- `POST /classify/start/{run_id}` with `{"upload_id":"..."}` to start from an accepted intake record
+
+Browser-state foundation endpoints:
+
+- `GET /runs/{run_id}/state`
+- `GET /runs/{run_id}/detail`
+- `GET /runs/{run_id}/review-rows`
+- `GET /runs/{run_id}/review-rows/{row_index}`
+- `GET /runs/{run_id}/artifacts`
+- `POST /runs/{run_id}/review-rows/{row_index}`
+- `GET /runs/{run_id}/actions`
+- `POST /runs/{run_id}/signoff`
+- `POST /runs/{run_id}/cancel`
+- `POST /runs/{run_id}/retry`
+- `POST /runs/{run_id}/recover`
+
+Browser run-operation endpoints:
+
+- `POST /classify/pause/{run_id}`
+- `POST /classify/resume/{run_id}`
+- `POST /classify/stop/{run_id}`
+- `GET /classify/status/{run_id}`
+
+Browser auth and permission endpoints:
+
+- `GET /auth/config`
+- `GET /auth/session`
+- `POST /auth/login`
+- `POST /auth/logout`
+
+Local browser auth defaults:
+
+- auth is enabled by default with `SPOT_AUTH_ENABLED=1`
+- local shared access code defaults to `spot-local`
+- rotate the shared local code with `SPOT_LOCAL_ACCESS_CODE`
+- role gates currently distinguish `operator`, `reviewer`, `acceptance_lead`, and `admin`
+- upload, run start, run recovery actions, review updates, sign-off, and artifact downloads are permission-gated
+
+Browser productionization verification command:
+
+```bash
+.venv/bin/python backend/browser_operator_smoke.py
+```
+
+The startup script runs local preflight by default before binding the browser appliance. Set `SPOT_RUN_PREFLIGHT=0` only when you intentionally need a faster dev restart.
+
+Current verification boundary:
+- `backend/browser_operator_smoke.py` is deterministic integration smoke for browser seams
+- it does not replace a live client acceptance run on the target machine
+- the historical `0.3.2` acceptance record is archived in [`docs/ACCEPTANCE_EVIDENCE_2026-03-18.md`](/Users/moldovancsaba/Projects/spot/docs/ACCEPTANCE_EVIDENCE_2026-03-18.md)
+
+Browser app shell:
+
+- operator dashboard: [http://127.0.0.1:8765/app](http://127.0.0.1:8765/app)
+- root path also resolves to the dashboard: [http://127.0.0.1:8765/](http://127.0.0.1:8765/)
+- dedicated run detail page: `http://127.0.0.1:8765/runs/<run_id>/view`
+- dedicated review queue page: `http://127.0.0.1:8765/runs/<run_id>/review`
+- dedicated row inspector page: `http://127.0.0.1:8765/runs/<run_id>/review-rows/<row_index>/view`
+- dedicated artifact center page: `http://127.0.0.1:8765/runs/<run_id>/artifacts/view`
 
 ## Monitoring URLs
 
+- Operator dashboard: [http://127.0.0.1:8765/app](http://127.0.0.1:8765/app)
 - Classify monitor: [http://127.0.0.1:8765/classify-monitor](http://127.0.0.1:8765/classify-monitor)
 - Eval monitor: [http://127.0.0.1:8765/agent-eval](http://127.0.0.1:8765/agent-eval)
 
@@ -184,9 +263,9 @@ export SPOT_ROUTE_CLASSIFIER_FALLBACK_BACKEND=ollama
 export SPOT_ROUTE_CLASSIFIER_FALLBACK_MODEL=qwen2.5:7b
 
 export SPOT_ROUTE_DRAFTER_BACKEND=ollama
-export SPOT_ROUTE_DRAFTER_MODEL=gemma3:1b
+export SPOT_ROUTE_DRAFTER_MODEL=granite4:350m
 export SPOT_ROUTE_DRAFTER_FALLBACK_BACKEND=ollama
-export SPOT_ROUTE_DRAFTER_FALLBACK_MODEL=llama3.2:1b
+export SPOT_ROUTE_DRAFTER_FALLBACK_MODEL=gemma3:1b,llama3.2:1b
 
 export SPOT_ROUTE_JUDGE_BACKEND=ollama
 export SPOT_ROUTE_JUDGE_MODEL=llama3.2:3b

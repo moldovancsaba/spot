@@ -1,5 +1,166 @@
 # {spot} Handover Log
 
+## 2026-03-18 Europe/Budapest - Codex (Pre-Delivery Truth Correction)
+
+- Objective: restore one clear current-state picture before first client delivery by aligning version markers, SSOT-facing docs, and acceptance documentation boundaries.
+- Changes:
+  - corrected the canonical workspace version marker by updating `VERSION` to `0.4.0`
+  - turned `docs/ACCEPTANCE_EVIDENCE_TEMPLATE.md` back into a reusable current-baseline template
+  - preserved the old filled `0.3.2` acceptance session as `docs/ACCEPTANCE_EVIDENCE_2026-03-18.md`
+  - restored `docs/BENCHMARK_CHECKLIST.md` and `docs/UAT_CHECKLIST.md` as current `0.4.0` operational checklists instead of historical session records
+  - updated README, developer handover, architecture, production, and project-management docs to state the real implementation stage: core runtime and browser operator workflow implemented, live current-baseline acceptance still pending
+  - updated SSOT wording so the local browser operator surface is explicitly treated as an operational layer and not a second source of product truth
+  - clarified that `backend/browser_operator_smoke.py` is deterministic browser integration smoke and not a substitute for live client acceptance
+- Files touched:
+  - `VERSION`
+  - `CHANGELOG.md`
+  - `README.md`
+  - `READMEDEV.md`
+  - `README_BRIEF.md`
+  - `docs/ACCEPTANCE_EVIDENCE_TEMPLATE.md`
+  - `docs/ACCEPTANCE_EVIDENCE_2026-03-18.md`
+  - `docs/ARCHITECTURE.md`
+  - `docs/CLIENT_PACKAGE.md`
+  - `docs/LOCAL_APPLIANCE_RUNBOOK.md`
+  - `docs/PROJECT_MANAGEMENT.md`
+  - `docs/BROWSER_PRODUCTIONIZATION_CONTRACT.md`
+  - `docs/BROWSER_PRODUCTIONIZATION_EXECUTION_PLAN.md`
+  - `docs/FOUNDATION_HARDENING_PLAN.md`
+  - `docs/PRODUCTION_PLAN.md`
+  - `ssot/SSOT.md`
+  - `docs/HANDOVER.md`
+- Validation:
+  - `python3 -m py_compile src/*.py src/ensemble/*.py src/evaluation/*.py backend/main.py backend/models/*.py backend/routes/*.py backend/services/*.py backend/browser_operator_smoke.py` => passed
+  - `python3 -m src.cli bootstrap --project-root . --venv-path .venv --requirements requirements.txt --ssot ssot/ssot.json --runs-dir runs --logs-dir logs --skip-install` => passed
+  - `SPOT_PRODUCTION_MODE=1 .venv/bin/python -m src.cli preflight --ssot ssot/ssot.json --runs-dir runs --port 8765` => passed
+  - `.venv/bin/python backend/browser_operator_smoke.py` => passed with `session_role=admin`, accepted upload intake, synthetic completed run, sign-off `accepted_with_conditions`, `retry_status=409`, and browser page render checks
+  - `bash -n start_browser_appliance.sh` => passed
+
+## 2026-03-18 Europe/Budapest - Codex (Version And Documentation Normalization)
+
+- Objective: remove drift between the implemented browser-enabled workspace, active docs, and historical release records.
+- Changes:
+  - promoted the active workspace baseline to `0.4.0`
+  - promoted the active pipeline baseline to `mvp-0.4.0`
+  - aligned active current-state docs to the `0.4.0` workspace baseline
+  - relabeled acceptance benchmark/UAT documents as `0.3.2` acceptance-session evidence rather than current workspace baseline docs
+  - corrected the historical `v0.3.1` release documents so they no longer claim the later Granite drafter route
+- Files touched:
+  - `src/__init__.py`
+  - `backend/main.py`
+  - `README.md`
+  - `README_BRIEF.md`
+  - `docs/ARCHITECTURE.md`
+  - `docs/CLIENT_PACKAGE.md`
+  - `docs/LOCAL_APPLIANCE_RUNBOOK.md`
+  - `docs/PRODUCTION_PLAN.md`
+  - `docs/FOUNDATION_HARDENING_PLAN.md`
+  - `docs/ACCEPTANCE_EVIDENCE_TEMPLATE.md`
+  - `docs/BENCHMARK_CHECKLIST.md`
+  - `docs/UAT_CHECKLIST.md`
+  - `docs/RELEASE_NOTES_0.3.1.md`
+  - `docs/GITHUB_RELEASE_v0.3.1.md`
+  - `docs/HANDOVER.md`
+- Validation:
+  - active runtime version markers now resolve to workspace `0.4.0` and pipeline `mvp-0.4.0`
+  - historical `v0.3.1` docs remain explicitly shipped-release records
+- Known follow-up:
+  - carry the `0.4.0` baseline consistently into future browser-phase release notes once that milestone is ready to ship
+
+## 2026-03-18 Europe/Budapest - Codex (Browser Recovery Flows)
+
+- Objective: implement operator-safe retry, cancel, and recovery flows for the browser run lifecycle.
+- Changes:
+  - added role-gated run management permission for local operator/admin sessions
+  - persisted `start_payload` in run records so browser retries can restart a failed or cancelled run deterministically
+  - added `POST /runs/{run_id}/cancel`, `POST /runs/{run_id}/retry`, and `POST /runs/{run_id}/recover`
+  - exposed pause/resume/cancel/retry/recover controls on the dedicated run-detail browser page
+  - extended shaped run detail with `available_operations` and `recovery` status
+  - aligned README and browser operator contract docs to the new run-operations surface
+- Files touched:
+  - `backend/services/auth_service.py`
+  - `backend/services/run_state_service.py`
+  - `backend/main.py`
+  - `README.md`
+  - `docs/BROWSER_OPERATOR_CONTRACT.md`
+  - `docs/HANDOVER.md`
+- Validation:
+  - `python3 -m py_compile src/*.py src/ensemble/*.py src/evaluation/*.py backend/main.py backend/models/*.py backend/routes/*.py backend/services/*.py` => passed
+  - `.venv/bin/python` TestClient smoke => passed for run detail recovery contract, `recover`, `retry`, and `cancel` on a synthetic failed run record
+- Known follow-up:
+  - add browser-surface handling for rejected upload revalidation and richer failure messaging if product scope still requires that beyond run lifecycle recovery
+
+## 2026-03-18 Europe/Budapest - Codex (Browser UX Polish Baseline)
+
+- Objective: deliver the first coherent visual-system and responsive UX polish pass over the browser operator surfaces.
+- Changes:
+  - improved the dashboard with shared top navigation, stronger run/upload selection states, and more readable status tiles
+  - improved run detail action guidance and recovery summaries without changing backend workflow scope
+  - tightened queue, row-inspector, and artifact messaging so operators see concise summaries before raw JSON-like detail
+  - preserved browser responsiveness across dashboard, run detail, review queue, row inspector, and artifact center
+  - extracted shared operator-page chrome helpers in `backend/main.py` so the secondary browser pages no longer duplicate their navigation treatment by hand
+- Files touched:
+  - `backend/main.py`
+  - `docs/BROWSER_OPERATOR_CONTRACT.md`
+  - `docs/HANDOVER.md`
+- Validation:
+  - `python3 -m py_compile src/*.py src/ensemble/*.py src/evaluation/*.py backend/main.py backend/models/*.py backend/routes/*.py backend/services/*.py` => passed
+  - `.venv/bin/python` TestClient smoke => `/`, `/app`, `/runs/browser-recovery-smoke/view`, `/runs/browser-recovery-smoke/review`, `/runs/browser-recovery-smoke/review-rows/2/view`, and `/runs/browser-recovery-smoke/artifacts/view` all rendered successfully
+- Known follow-up:
+  - if needed, extract the repeated inline page styles into a more maintainable shared browser asset strategy in a later refactor
+
+## 2026-03-18 Europe/Budapest - Codex (Browser Integration Cleanup)
+
+- Objective: review the browser-phase integration seams and remove concrete lifecycle/state regressions before sign-off.
+- Findings fixed:
+  - stale review rows could survive reruns because review-state sync only appended flagged rows and never removed rows that were no longer `Review Required`
+  - cancelled or abandoned runs could drift back to misleading nonterminal states because run refresh trusted `progress.json` over control state
+- Changes:
+  - review-state sync now rebuilds the flagged-row set from `output.xlsx` while preserving reviewer decisions only for still-flagged rows
+  - run refresh now resolves effective lifecycle state from both `progress.json` and `control.json`, including `CANCELLED`, `PAUSED`, and `INTERRUPTED`
+  - retry guidance now treats `INTERRUPTED` runs as recoverable in the same browser run-operations flow
+- Files touched:
+  - `backend/services/run_state_service.py`
+  - `docs/HANDOVER.md`
+- Validation:
+  - `python3 -m py_compile src/*.py src/ensemble/*.py src/evaluation/*.py backend/main.py backend/models/*.py backend/routes/*.py backend/services/*.py` => passed
+  - `.venv/bin/python` smoke => confirmed `INTERRUPTED` state resolution, stale flagged-row removal after output change, and `CANCELLED` state resolution from control metadata
+
+## 2026-03-18 Europe/Budapest - Codex (Browser Productionization Contract And Smoke Baseline)
+
+- Objective: start the next post-browser implementation phase with a release-readiness contract and one executable browser smoke command.
+- Changes:
+  - added the browser productionization contract and execution plan documents for milestone `{spot} v0.4.3 Browser Productionization`
+  - added `backend/browser_operator_smoke.py` as the repo-native smoke verification for auth, upload intake, run detail, review, artifacts, sign-off, recovery, and browser page renders
+  - aligned project-management and README docs to the new productionization contract and verification command
+- Files touched:
+  - `docs/BROWSER_PRODUCTIONIZATION_CONTRACT.md`
+  - `docs/BROWSER_PRODUCTIONIZATION_EXECUTION_PLAN.md`
+  - `docs/PROJECT_MANAGEMENT.md`
+  - `README.md`
+  - `backend/browser_operator_smoke.py`
+  - `docs/HANDOVER.md`
+- Validation:
+  - `python3 -m py_compile src/*.py src/ensemble/*.py src/evaluation/*.py backend/main.py backend/models/*.py backend/routes/*.py backend/services/*.py backend/browser_operator_smoke.py` => passed
+  - `.venv/bin/python backend/browser_operator_smoke.py` => passed with accepted upload intake, synthetic completed run, one review row, sign-off `accepted_with_conditions`, successful recovery endpoint call, and browser page render checks
+
+## 2026-03-18 Europe/Budapest - Codex (Expanded Browser Smoke And Startup Alignment)
+
+- Objective: deepen automated browser verification and align local appliance docs with the supported browser startup surface.
+- Changes:
+  - expanded `backend/browser_operator_smoke.py` to cover unauthenticated upload rejection, session retrieval, upload-record retrieval, run-state retrieval, filtered review queue, action-log growth, and non-retryable completed-run behavior
+  - fixed `run_retry` so retry is only allowed for `FAILED`, `CANCELLED`, or `INTERRUPTED` runs, matching the browser recovery contract
+  - updated local appliance runbook and client package docs so the browser dashboard and smoke command are part of the supported appliance delivery posture
+- Files touched:
+  - `backend/browser_operator_smoke.py`
+  - `backend/main.py`
+  - `docs/LOCAL_APPLIANCE_RUNBOOK.md`
+  - `docs/CLIENT_PACKAGE.md`
+  - `docs/HANDOVER.md`
+- Validation:
+  - `python3 -m py_compile backend/main.py backend/browser_operator_smoke.py backend/services/*.py src/*.py src/ensemble/*.py src/evaluation/*.py` => passed
+  - `.venv/bin/python backend/browser_operator_smoke.py` => passed with `session_role=admin`, accepted upload intake, one review row, `retry_status=409` on a completed synthetic run, and browser page render checks
+
 ## 2026-03-12 Europe/Budapest - Codex
 
 - Objective: align {spot} SSOT, runtime defaults, audit reporting, and public docs around the actual Apertus-first architecture.
@@ -259,6 +420,70 @@
 - Known follow-up:
   - execute the benchmark and UAT checklists on the target Apple Silicon delivery machine and archive the completed acceptance evidence with the client handover
 
+## 2026-03-18 Europe/Budapest - Codex (Operational Acceptance Execution)
+
+- Objective: execute the local operational acceptance phase on the target Apple Silicon machine and record concrete benchmark and UAT evidence.
+- Changes:
+  - executed repo-state, compile, bootstrap, and production preflight validation on the target machine
+  - executed fresh acceptance benchmark, fallback, and evaluation runs under the current `0.3.2` workspace baseline
+  - recorded the session outcome in the acceptance evidence template
+  - tightened the benchmark and UAT checklists to require runtime input-guardrail compliance before execution
+- Files touched:
+  - `docs/BENCHMARK_CHECKLIST.md`
+  - `docs/UAT_CHECKLIST.md`
+  - `docs/ACCEPTANCE_EVIDENCE_TEMPLATE.md`
+  - `docs/HANDOVER.md`
+- Validation:
+  - `git status --short --branch` => clean `main...origin/main`
+  - `python3 -m py_compile src/*.py src/ensemble/*.py src/evaluation/*.py backend/main.py backend/models/*.py backend/routes/*.py` => passed
+  - `python3 -m src.cli bootstrap --project-root . --venv-path .venv --requirements requirements.txt --ssot ssot/ssot.json --runs-dir runs --logs-dir logs --skip-install` => passed
+  - `SPOT_PRODUCTION_MODE=1 .venv/bin/python -m src.cli preflight --ssot ssot/ssot.json --runs-dir runs --port 8765` => passed
+  - `SPOT_PRODUCTION_MODE=1 .venv/bin/python -m src.cli classify --input /tmp/spot_acceptance_primary_input.xlsx --output /tmp/spot_acceptance_primary_limit1.xlsx --run-id acceptance-primary-limit1-20260318 --language de --review-mode partial --ssot ssot/ssot.json --runs-dir runs --max-workers 1 --limit 1` => completed in `55s`; output and artefacts written, but workbook row shows `CLASSIFIER_FALLBACK_FAILED`
+  - `SPOT_PRODUCTION_MODE=1 .venv/bin/python -m src.cli classify --input /tmp/spot_acceptance_empty_input.xlsx --output /tmp/spot_acceptance_fallback.xlsx --run-id acceptance-fallback-20260318 --language de --review-mode partial --ssot ssot/ssot.json --runs-dir runs --max-workers 1` => completed in `3s`; fallback visibility confirmed with `EMPTY_TEXT_FALLBACK`
+  - `.venv/bin/python -m src.cli evaluate --input /tmp/spot_acceptance_primary_input.xlsx --ssot ssot/ssot.json --runs-dir runs --evaluation-run-id acceptance-eval-limit1-20260318 --language de --review-mode partial --single-model mlx://mlx-community/Apertus-8B-Instruct-2509-4bit --ensemble-models ollama://qwen2.5:7b,ollama://gemma2:9b,ollama://llama3.1:8b --max-workers 1 --limit 1 --progress-every 1` => completed in `3m15s`; single and ensemble artefacts written, but `disagreement_count=0`, so no `disagreement_report.json`
+  - direct runtime probes on target machine:
+    - local Ollama `gemma3:1b` JSON probe => success in `10.27s`
+    - direct MLX Apertus probe => success in `18.77s`
+- Evidence:
+  - acceptance record: `docs/ACCEPTANCE_EVIDENCE_TEMPLATE.md`
+  - primary benchmark artefacts: `runs/acceptance-primary-limit1-20260318/`
+  - fallback artefacts: `runs/acceptance-fallback-20260318/`
+  - evaluation artefacts: `runs/acceptance-eval-limit1-20260318/`, `runs/acceptance-eval-limit1-20260318-single/`, `runs/acceptance-eval-limit1-20260318-ensemble/`
+- Operational findings:
+  - `samples/sample_germany.xlsx` is not acceptance-safe under current runtime guardrails because row `257` exceeds the maximum supported `Post text` length of `10000`
+  - the target machine passes bootstrap and preflight, and both Ollama and MLX are locally reachable, but the benchmark row still resolved via `CLASSIFIER_FALLBACK_FAILED`; clean primary-route semantic acceptance remains outstanding
+  - evaluation execution succeeded, but no actual disagreement case was triggered in this session, so judge-path evidence remains incomplete
+- Known follow-up:
+  - rerun benchmark and UAT on an approved client workbook that satisfies the runtime input guardrails
+  - capture at least one clean primary-route benchmark row without classifier fallback
+  - capture at least one genuine disagreement case that emits `disagreement_report.json`
+  - complete client/operator sign-off against the recorded acceptance evidence
+
+## 2026-03-18 Europe/Budapest - Codex (Granite Drafter Routing)
+
+- Objective: move the drafter primary route to IBM Granite Nano and support ordered drafter fallbacks.
+- Changes:
+  - changed the drafter primary runtime route to `ollama://granite4:350m`
+  - changed the drafter fallback chain to `ollama://gemma3:1b` then `ollama://llama3.2:1b`
+  - updated drafter runtime parsing so `fallback_model` can hold an ordered comma-separated fallback list for the drafter lane
+  - updated SSOT defaults and product/runtime docs to reflect the new drafter routing
+- Files touched:
+  - `src/classifier.py`
+  - `src/ssot_loader.py`
+  - `src/defaults.py`
+  - `ssot/ssot.json`
+  - `ssot/ssot.example.json`
+  - `ssot/SSOT.md`
+  - `README.md`
+  - `README_BRIEF.md`
+  - `docs/ARCHITECTURE.md`
+  - `docs/CLIENT_PACKAGE.md`
+  - `docs/LOCAL_APPLIANCE_RUNBOOK.md`
+  - `docs/PRODUCTION_PLAN.md`
+  - `docs/RELEASE_NOTES_0.3.1.md`
+  - `docs/GITHUB_RELEASE_v0.3.1.md`
+  - `docs/HANDOVER.md`
+
 ## 2026-03-18 Europe/Budapest - Codex (Developer Readme And Version Surface)
 
 - Objective: align the developer-facing handover file and promote the workspace baseline beyond the shipped `v0.3.1` release.
@@ -302,3 +527,21 @@
   - release draft cross-checked against `docs/RELEASE_NOTES_0.3.1.md`, `docs/CLIENT_PACKAGE.md`, and the pushed `v0.3.1` baseline
 - Known follow-up:
   - publish the GitHub release text through the hosting UI if needed
+
+## 2026-03-18 Europe/Budapest - Codex (Browser Startup Path And Acceptance Doc Alignment)
+
+- Objective: finish the supported browser appliance startup contract and align the acceptance pack to the browser-era operator workflow.
+- Changes:
+  - added `start_browser_appliance.sh` as the supported local browser appliance entrypoint with default preflight execution
+  - updated the main developer, operator, and client-facing docs to use the startup script instead of raw `uvicorn`
+  - extended the acceptance evidence, benchmark checklist, and UAT checklist to explicitly capture browser startup, browser smoke, dashboard access, upload flow, review flow, and artifact retrieval
+- Files touched:
+  - `start_browser_appliance.sh`
+  - `README.md`
+  - `READMEDEV.md`
+  - `docs/LOCAL_APPLIANCE_RUNBOOK.md`
+  - `docs/CLIENT_PACKAGE.md`
+  - `docs/ACCEPTANCE_EVIDENCE_TEMPLATE.md`
+  - `docs/BENCHMARK_CHECKLIST.md`
+  - `docs/UAT_CHECKLIST.md`
+  - `docs/HANDOVER.md`

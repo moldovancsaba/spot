@@ -62,8 +62,8 @@ Fallback classifier route:
 - `ollama://qwen2.5:7b`
 
 Support lanes:
-- drafter: `ollama://gemma3:1b`
-- drafter fallback: `ollama://llama3.2:1b`
+- drafter: `ollama://granite4:350m`
+- drafter fallbacks: `ollama://gemma3:1b` -> `ollama://llama3.2:1b`
 - judge: `ollama://llama3.2:3b`
 - judge fallback: `ollama://gemma2:2b`
 
@@ -113,7 +113,14 @@ Low-confidence rows must be flaggable.
 - Remote Ollama is blocked unless explicitly overridden
 - No training on client data is part of {spot}
 
-## 11. Auditability
+## 11. Operator Surface
+
+- A local browser operator surface may exist over the runtime
+- That operator surface does not broaden the product boundary beyond local `.xlsx` classification
+- The browser surface is an operational interface, not a second source of product truth
+- Core runtime policy remains governed by this SSOT and `ssot/ssot.json`
+
+## 12. Auditability
 
 Each run must persist enough evidence to reconstruct:
 - what input was processed
@@ -122,7 +129,7 @@ Each run must persist enough evidence to reconstruct:
 - what policy and threshold were active
 - what flags and outcomes were produced
 
-## 12. Explicit Non-Goals
+## 13. Explicit Non-Goals
 
 Out of scope:
 - schema CRUD

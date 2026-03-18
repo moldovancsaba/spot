@@ -1,7 +1,7 @@
 # {spot} Developer Readme
 
 Document date: `2026-03-18`
-Workspace baseline: `0.3.2`
+Workspace baseline: `0.4.0`
 Latest shipped release: `v0.3.1`
 SSOT baseline: `0.2`
 
@@ -60,8 +60,8 @@ Primary route:
 
 Fallback and support routes:
 - `classifier fallback`: `ollama://qwen2.5:7b`
-- `drafter`: `ollama://gemma3:1b`
-- `drafter fallback`: `ollama://llama3.2:1b`
+- `drafter`: `ollama://granite4:350m`
+- `drafter fallbacks`: `ollama://gemma3:1b`, `ollama://llama3.2:1b`
 - `judge`: `ollama://llama3.2:3b`
 - `judge fallback`: `ollama://gemma2:2b`
 
@@ -80,6 +80,8 @@ Security posture:
 The repo already includes:
 - bootstrap command
 - preflight command
+- browser appliance startup path
+- browser operator smoke coverage
 - production-mode restrictions
 - audit manifest generation
 - fallback event reporting
@@ -93,6 +95,8 @@ The repo already includes:
 Current local acceptance path:
 - bootstrap the machine
 - run preflight
+- run the supported browser startup path
+- run browser smoke verification
 - run benchmark checklist
 - run UAT checklist
 - record evidence with the acceptance template
@@ -104,8 +108,8 @@ Current local acceptance path:
 - Keep these distinct.
 
 Current state:
-- workspace baseline: `0.3.2`
-- pipeline baseline: `mvp-0.3.2`
+- workspace baseline: `0.4.0`
+- pipeline baseline: `mvp-0.4.0`
 - latest shipped release: `v0.3.1`
 
 Update these surfaces together when the workspace baseline changes:
@@ -133,7 +137,7 @@ Minimum validation for routine repo work:
 
 ```bash
 git status --short --branch
-python3 -m py_compile src/*.py src/ensemble/*.py src/evaluation/*.py backend/main.py backend/models/*.py backend/routes/*.py
+python3 -m py_compile src/*.py src/ensemble/*.py src/evaluation/*.py backend/main.py backend/models/*.py backend/routes/*.py backend/services/*.py backend/browser_operator_smoke.py
 ```
 
 Operational validation when touching delivery/runtime behaviour:
@@ -145,8 +149,8 @@ SPOT_PRODUCTION_MODE=1 .venv/bin/python -m src.cli preflight --ssot ssot/ssot.js
 
 ## Current Next Step Priority
 
-The repo is aligned and hardened. The main remaining work is operational execution on the target Apple Silicon machine:
-- execute [`docs/BENCHMARK_CHECKLIST.md`](/Users/moldovancsaba/Projects/spot/docs/BENCHMARK_CHECKLIST.md)
-- execute [`docs/UAT_CHECKLIST.md`](/Users/moldovancsaba/Projects/spot/docs/UAT_CHECKLIST.md)
-- record results in [`docs/ACCEPTANCE_EVIDENCE_TEMPLATE.md`](/Users/moldovancsaba/Projects/spot/docs/ACCEPTANCE_EVIDENCE_TEMPLATE.md)
-- archive the completed evidence with the final client handover
+The active milestone is browser productionization:
+- current workspace baseline is `0.4.0`; `VERSION` and active docs are aligned to that baseline
+- browser operator baseline is implemented in code
+- browser smoke is synthetic integration verification, not live client acceptance proof
+- remaining pre-delivery work is release cutover plus fresh client-machine acceptance evidence on the current baseline

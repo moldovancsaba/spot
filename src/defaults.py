@@ -42,16 +42,16 @@ DEFAULT_DRAFTER_BACKEND = _env(
 ) or (_DEFAULT_SSOT.runtime.drafter.backend if _DEFAULT_SSOT else "ollama")
 DEFAULT_DRAFTER_MODEL = _env(
     "SPOT_ROUTE_DRAFTER_MODEL",
-    _DEFAULT_SSOT.runtime.drafter.model if _DEFAULT_SSOT else "gemma3:1b",
-) or (_DEFAULT_SSOT.runtime.drafter.model if _DEFAULT_SSOT else "gemma3:1b")
+    _DEFAULT_SSOT.runtime.drafter.model if _DEFAULT_SSOT else "granite4:350m",
+) or (_DEFAULT_SSOT.runtime.drafter.model if _DEFAULT_SSOT else "granite4:350m")
 DEFAULT_DRAFTER_FALLBACK_BACKEND = _env(
     "SPOT_ROUTE_DRAFTER_FALLBACK_BACKEND",
     _DEFAULT_SSOT.runtime.drafter.fallback_backend if _DEFAULT_SSOT else "ollama",
 ) or (_DEFAULT_SSOT.runtime.drafter.fallback_backend if _DEFAULT_SSOT else "ollama")
 DEFAULT_DRAFTER_FALLBACK_MODEL = _env(
     "SPOT_ROUTE_DRAFTER_FALLBACK_MODEL",
-    _DEFAULT_SSOT.runtime.drafter.fallback_model if _DEFAULT_SSOT else "llama3.2:1b",
-) or (_DEFAULT_SSOT.runtime.drafter.fallback_model if _DEFAULT_SSOT else "llama3.2:1b")
+    _DEFAULT_SSOT.runtime.drafter.fallback_model if _DEFAULT_SSOT else "gemma3:1b,llama3.2:1b",
+) or (_DEFAULT_SSOT.runtime.drafter.fallback_model if _DEFAULT_SSOT else "gemma3:1b,llama3.2:1b")
 DEFAULT_JUDGE_BACKEND = _env(
     "SPOT_ROUTE_JUDGE_BACKEND",
     _DEFAULT_SSOT.runtime.judge.backend if _DEFAULT_SSOT else "ollama",

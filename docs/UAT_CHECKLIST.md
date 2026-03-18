@@ -1,7 +1,7 @@
 # {spot} UAT Checklist
 
 Document date: `2026-03-18`
-Baseline: `0.3.2`
+Workspace baseline: `0.4.0`
 SSOT: `0.2`
 
 ## Purpose
@@ -14,7 +14,8 @@ This checklist is used for structured user acceptance testing on the target loca
 - `{spot}` bootstrap completed
 - `{spot}` preflight passes
 - approved client-owned workbook is available
-- operator has access to the local monitor and output location
+- workbook satisfies runtime input guardrails: `.xlsx`, <= `25 MiB`, <= `50000` rows, <= `10000` characters per `Post text` cell
+- operator has access to the local browser dashboard and output location
 - SSOT path is confirmed
 - production mode settings are confirmed
 
@@ -101,6 +102,7 @@ Record:
 
 Validate:
 - operator can run preflight
+- operator can start the supported browser appliance entrypoint
 - operator can start and monitor a run
 - operator can retrieve outputs and artefacts
 - operator can identify the next action when a row requires review
@@ -109,6 +111,20 @@ Record:
 - operator performing the test
 - actions completed without engineering help
 - any points of confusion
+
+## Test 7: Browser Workflow
+
+Validate:
+- operator can sign in through the local browser flow
+- operator can upload an `.xlsx` workbook through the browser intake path
+- operator can open run detail, review queue, row inspector, and artifact center pages
+- operator can complete at least one review annotation and retrieve one output artefact
+
+Record:
+- browser URLs used
+- upload ID and run ID
+- pages confirmed by the operator
+- any browser workflow confusion or blocked actions
 
 ## Acceptance Criteria
 

@@ -33,6 +33,7 @@ Primary runtime:
 Support runtime:
 - classifier fallback: `ollama://qwen2.5:7b`
 - drafter: `ollama://gemma3:1b`
+- drafter fallback: `ollama://llama3.2:1b`
 - judge: `ollama://llama3.2:3b`
 
 ### 2) Local Appliance Operations

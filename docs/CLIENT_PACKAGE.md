@@ -1,8 +1,8 @@
 # {spot} Client Package
 
-Document date: `2026-03-17`
-Workspace baseline: `0.3.2`
-Pipeline baseline: `mvp-0.3.2`
+Document date: `2026-03-18`
+Workspace baseline: `0.4.0`
+Pipeline baseline: `mvp-0.4.0`
 SSOT baseline: `0.2`
 
 ## Overview
@@ -24,8 +24,9 @@ The delivered `{spot}` package consists of:
 - local runtime package
 - SSOT-governed configuration baseline
 - local appliance runbook
+- supported browser appliance startup entrypoint
 - operator guidance
-- monitoring and process-control interface
+- browser operator surface and monitoring/process-control interface
 - benchmark and acceptance support package
 - audit artefact structure for completed runs
 
@@ -37,6 +38,7 @@ In scope:
 - exactly one category per row
 - deterministic fallback handling
 - review flagging for uncertain rows
+- local browser operator workflow
 - local monitoring and run control
 - auditable artefact generation
 
@@ -86,7 +88,8 @@ Primary route:
 
 Fallback and support routes:
 - classifier fallback: `ollama://qwen2.5:7b`
-- drafter: `ollama://gemma3:1b`
+- drafter: `ollama://granite4:350m`
+- drafter fallbacks: `ollama://gemma3:1b`, `ollama://llama3.2:1b`
 - judge: `ollama://llama3.2:3b`
 
 ## Security Posture
@@ -163,11 +166,18 @@ Base delivery calculation:
 `{spot}` should be treated as ready for structured client acceptance when:
 - SSOT loads cleanly
 - code compiles cleanly
+- supported browser startup path works on the target machine
+- browser smoke verification passes
 - preflight passes on the target machine
 - the primary MLX route completes a real run
 - fallback behaviour is visible and auditable
 - output workbook metadata is correct
 - acceptance evidence is reviewed against client-owned sample data
+
+Current pre-delivery status:
+- browser operator workflow is implemented in the local appliance
+- browser smoke verification is available as deterministic integration coverage
+- fresh live acceptance evidence on the current `0.4.0` browser-enabled baseline is still required before first client delivery
 
 ## Reference Documents
 
@@ -180,3 +190,11 @@ Base delivery calculation:
 - Acceptance evidence template: [`docs/ACCEPTANCE_EVIDENCE_TEMPLATE.md`](/Users/moldovancsaba/Projects/spot/docs/ACCEPTANCE_EVIDENCE_TEMPLATE.md)
 - Architecture: [`docs/ARCHITECTURE.md`](/Users/moldovancsaba/Projects/spot/docs/ARCHITECTURE.md)
 - SSOT contract: [`ssot/SSOT.md`](/Users/moldovancsaba/Projects/spot/ssot/SSOT.md)
+
+Supported local startup:
+
+```bash
+cd /Users/moldovancsaba/Projects/spot
+chmod +x start_browser_appliance.sh
+bash start_browser_appliance.sh
+```

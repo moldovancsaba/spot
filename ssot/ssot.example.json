@@ -42,9 +42,9 @@
     },
     "drafter": {
       "backend": "ollama",
-      "model": "gemma3:1b",
+      "model": "granite4:350m",
       "fallback_backend": "ollama",
-      "fallback_model": "llama3.2:1b"
+      "fallback_model": "gemma3:1b,llama3.2:1b"
     },
     "judge": {
       "backend": "ollama",

@@ -238,9 +238,11 @@ def run_drafter(text: str) -> tuple[str, List[str]]:
     if not text.strip():
         return text, []
     flags: List[str] = []
-    route_chain = [
-        (LANES.drafter_backend, LANES.drafter_model),
-        (LANES.drafter_fallback_backend, LANES.drafter_fallback_model),
+    fallback_models = [
+        model.strip() for model in LANES.drafter_fallback_model.split(",") if model.strip()
+    ]
+    route_chain = [(LANES.drafter_backend, LANES.drafter_model)] + [
+        (LANES.drafter_fallback_backend, model_name) for model_name in fallback_models
     ]
     for backend, model_name in route_chain:
         try:
