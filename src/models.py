@@ -29,6 +29,9 @@ class ClassificationResult:
     confidence: float
     explanation: str
     flags: List[str]
+    soft_signal_score: float | None = None
+    soft_signal_flags: List[str] | None = None
+    soft_signal_evidence: List[str] | None = None
     resolved_model_version: str | None = None
     model_votes: Dict[str, str] | None = None
     consensus_tier: str | None = None
@@ -54,6 +57,8 @@ class Policy:
     supported_languages: List[str]
     review_modes: List[str]
     low_confidence_threshold: float
+    soft_signal_review_threshold: float
+    soft_signal_flags: List[str]
 
 
 @dataclass(frozen=True)

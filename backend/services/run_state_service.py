@@ -203,7 +203,16 @@ def sync_review_rows_from_output(*, runs_dir: Path, run_id: str) -> dict:
         ws = wb[wb.sheetnames[0]]
         header = [str(v).strip() if v is not None else "" for v in next(ws.iter_rows(min_row=1, max_row=1, values_only=True))]
         header_idx = {name: idx for idx, name in enumerate(header)}
-        required = ["Item number", "Post text", "Assigned Category", "Confidence Score", "Explanation / Reasoning", "Flags", "Fallback Events", "Review Required"]
+        required = [
+            "Item number",
+            "Post text",
+            "Assigned Category",
+            "Confidence Score",
+            "Explanation / Reasoning",
+            "Flags",
+            "Fallback Events",
+            "Review Required",
+        ]
         if any(name not in header_idx for name in required):
             return state
 
@@ -215,6 +224,15 @@ def sync_review_rows_from_output(*, runs_dir: Path, run_id: str) -> dict:
             explanation = "" if row[header_idx["Explanation / Reasoning"]] is None else str(row[header_idx["Explanation / Reasoning"]]).strip()
             flags = "" if row[header_idx["Flags"]] is None else str(row[header_idx["Flags"]]).strip()
             fallback_events = "" if row[header_idx["Fallback Events"]] is None else str(row[header_idx["Fallback Events"]]).strip()
+            soft_signal_score = row[header_idx["Soft Signal Score"]] if "Soft Signal Score" in header_idx else None
+            soft_signal_flags = (
+                "" if "Soft Signal Flags" not in header_idx or row[header_idx["Soft Signal Flags"]] is None else str(row[header_idx["Soft Signal Flags"]]).strip()
+            )
+            soft_signal_evidence = (
+                ""
+                if "Soft Signal Evidence" not in header_idx or row[header_idx["Soft Signal Evidence"]] is None
+                else str(row[header_idx["Soft Signal Evidence"]]).strip()
+            )
             review_required = "" if row[header_idx["Review Required"]] is None else str(row[header_idx["Review Required"]]).strip()
             if review_required != "YES":
                 continue
@@ -229,6 +247,9 @@ def sync_review_rows_from_output(*, runs_dir: Path, run_id: str) -> dict:
                 "explanation": explanation,
                 "flags": [part for part in flags.split(";") if part],
                 "fallback_events": [part for part in fallback_events.split(";") if part],
+                "soft_signal_score": soft_signal_score,
+                "soft_signal_flags": [part for part in soft_signal_flags.split(";") if part],
+                "soft_signal_evidence": [part.strip() for part in soft_signal_evidence.split("|") if part.strip()],
                 "review_required": True,
                 "review_state": existing.get("review_state", "pending"),
                 "review_decision": existing.get("review_decision"),
@@ -553,6 +574,9 @@ def build_row_inspector(*, runs_dir: Path, run_id: str, row_index: int) -> dict 
             "explanation": row.get("explanation"),
             "flags": row.get("flags", []),
             "fallback_events": row.get("fallback_events", []),
+            "soft_signal_score": row.get("soft_signal_score"),
+            "soft_signal_flags": row.get("soft_signal_flags", []),
+            "soft_signal_evidence": row.get("soft_signal_evidence", []),
             "disagreement": disagreement_row,
         },
         "review_controls": {

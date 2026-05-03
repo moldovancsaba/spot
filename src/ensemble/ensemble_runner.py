@@ -61,6 +61,21 @@ def run_ensemble_batch(
                 minority_label = ",".join(sorted(minority_candidates))
 
         base = model_results[0]
+        soft_signal_score = max((result.soft_signal_score or 0.0) for result in model_results)
+        soft_signal_flags = sorted(
+            {
+                flag
+                for result in model_results
+                for flag in (result.soft_signal_flags or [])
+            }
+        )
+        soft_signal_evidence = list(
+            dict.fromkeys(
+                evidence
+                for result in model_results
+                for evidence in (result.soft_signal_evidence or [])
+            )
+        )[:3]
         merged_flags = _merge_flags(base.flags, consensus_flags, [f"CONSENSUS_{consensus_tier}"])
         judge_score = None
         judge_verdict = None
@@ -85,6 +100,9 @@ def run_ensemble_batch(
             confidence=base.confidence,
             explanation=base.explanation,
             flags=merged_flags,
+            soft_signal_score=soft_signal_score,
+            soft_signal_flags=soft_signal_flags,
+            soft_signal_evidence=soft_signal_evidence,
             resolved_model_version=base.resolved_model_version,
             model_votes=vote_map,
             consensus_tier=consensus_tier,

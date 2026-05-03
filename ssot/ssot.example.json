@@ -31,7 +31,15 @@
       "partial",
       "none"
     ],
-    "low_confidence_threshold": 0.65
+    "low_confidence_threshold": 0.65,
+    "soft_signal_review_threshold": 0.35,
+    "soft_signal_flags": [
+      "SOFT_SIGNAL_COLLECTIVE_BLAME",
+      "SOFT_SIGNAL_DUAL_LOYALTY",
+      "SOFT_SIGNAL_CODED_CONSPIRACY",
+      "SOFT_SIGNAL_DOGWHISTLE",
+      "SOFT_SIGNAL_HOLOCAUST_MINIMIZATION"
+    ]
   },
   "runtime": {
     "classifier": {

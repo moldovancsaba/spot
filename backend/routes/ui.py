@@ -1324,6 +1324,7 @@ def run_detail_page(run_id: str, request: Request):
           <div>${escapeHtml(row.assigned_category || '-')}</div>
           <div class="muted">${escapeHtml(row.post_text || '')}</div>
           <div class="muted">Flags: ${escapeHtml((row.flags || []).join(', ') || '-')}</div>
+          <div class="muted">Soft signals: ${escapeHtml((row.soft_signal_flags || []).join(', ') || '-')}</div>
           <div class="review-form">
             <select id="reviewState-${row.row_index}">
               <option value="pending" ${(row.review_state || 'pending') === 'pending' ? 'selected' : ''}>pending</option>
@@ -1604,6 +1605,8 @@ def review_queue_page(run_id: str, request: Request):
             <div>
               <div class="muted">${escapeHtml(row.post_text || '')}</div>
               <div class="muted" style="margin-top:8px;">Flags: ${escapeHtml((row.flags || []).join(', ') || '-')}</div>
+              <div class="muted">Soft signals: ${escapeHtml((row.soft_signal_flags || []).join(', ') || '-')}</div>
+              <div class="muted">Soft score: ${escapeHtml(row.soft_signal_score ?? '-')}</div>
               <div class="muted">Fallbacks: ${escapeHtml((row.fallback_events || []).join(', ') || '-')}</div>
             </div>
             <div class="review-form">
@@ -1820,7 +1823,10 @@ def row_inspector_page(run_id: str, row_index: int, request: Request):
       document.getElementById('explanationPre').textContent = JSON.stringify((data.evidence || {}).explanation || '', null, 2);
       document.getElementById('flagsPre').textContent = JSON.stringify({
         flags: (data.evidence || {}).flags || [],
-        fallback_events: (data.evidence || {}).fallback_events || []
+        fallback_events: (data.evidence || {}).fallback_events || [],
+        soft_signal_score: (data.evidence || {}).soft_signal_score ?? null,
+        soft_signal_flags: (data.evidence || {}).soft_signal_flags || [],
+        soft_signal_evidence: (data.evidence || {}).soft_signal_evidence || []
       }, null, 2);
       document.getElementById('disagreementPre').textContent = JSON.stringify((data.evidence || {}).disagreement, null, 2);
       document.getElementById('reviewStateInput').value = (data.review_controls || {}).review_state || 'pending';

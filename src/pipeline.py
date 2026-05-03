@@ -139,6 +139,10 @@ def _write_integrity_report(
         "consensus_confidence_summary": consensus_tier_summary,
         "disagreement_count": flag_dist.get("DISAGREEMENT", 0),
         "fallback_event_count": sum(len(r.fallback_events or []) for r in results),
+        "soft_signal_row_count": sum(1 for r in results if (r.soft_signal_flags or []) or (r.soft_signal_score or 0) > 0),
+        "soft_signal_flag_distribution": dict(
+            Counter(flag for r in results for flag in (r.soft_signal_flags or []))
+        ),
         "minority_report_count": sum(1 for r in results if r.minority_label),
         "taxonomy_violation_count": flag_dist.get("TAXONOMY_VIOLATION", 0),
         "empty_text_count": flag_dist.get("EMPTY_TEXT", 0),

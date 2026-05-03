@@ -74,6 +74,8 @@ def load_ssot(path: Path) -> SSOT:
                 supported_languages=list(policy["supported_languages"]),
                 review_modes=list(policy["review_modes"]),
                 low_confidence_threshold=float(policy["low_confidence_threshold"]),
+                soft_signal_review_threshold=float(policy["soft_signal_review_threshold"]),
+                soft_signal_flags=[str(flag).strip().upper() for flag in policy["soft_signal_flags"]],
             ),
             runtime=RuntimeDefaults(
                 classifier=_build_lane_route(runtime["classifier"], "classifier"),
@@ -104,6 +106,8 @@ def load_ssot(path: Path) -> SSOT:
     required_modes = {"full", "partial", "none"}
     if not required_modes.issubset(set(ssot.policy.review_modes)):
         raise SSOTError("review_modes must include full, partial, none")
+    if not ssot.policy.soft_signal_flags:
+        raise SSOTError("policy.soft_signal_flags cannot be empty")
     if set(ssot.taxonomy.categories) != CANONICAL_CATEGORIES:
         raise SSOTError(
             "SSOT taxonomy must exactly match canonical closed set for MVP integrity enforcement"

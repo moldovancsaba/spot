@@ -23,6 +23,41 @@ OLLAMA_TIMEOUT_SEC = int(os.getenv("OLLAMA_TIMEOUT_SEC", "20"))
 OLLAMA_TEMPERATURE = 0
 OLLAMA_TOP_P = 1
 LANES = load_lane_config()
+MAX_SOFT_SIGNAL_EVIDENCE = 3
+SOFT_SIGNAL_PATTERNS: dict[str, list[re.Pattern[str]]] = {
+    "SOFT_SIGNAL_DUAL_LOYALTY": [
+        re.compile(r"\bdual loyalty\b", re.IGNORECASE),
+        re.compile(r"\bmore loyal to israel\b", re.IGNORECASE),
+        re.compile(r"\bloyal to israel (?:than|over)\b", re.IGNORECASE),
+        re.compile(r"\bnot loyal to (?:this|our) countr", re.IGNORECASE),
+        re.compile(r"\bforeign allegiance\b", re.IGNORECASE),
+    ],
+    "SOFT_SIGNAL_COLLECTIVE_BLAME": [
+        re.compile(r"\ball jews?\b", re.IGNORECASE),
+        re.compile(r"\bthe jews?\s+(?:are|were|have|control|own|run|cause|caused|did)\b", re.IGNORECASE),
+        re.compile(r"\bjews?\s+(?:control|own|run|caused|caused this|are responsible)\b", re.IGNORECASE),
+        re.compile(r"\bjewish people\s+(?:are|were)?\s*responsible\b", re.IGNORECASE),
+    ],
+    "SOFT_SIGNAL_CODED_CONSPIRACY": [
+        re.compile(r"\brothschilds?\b", re.IGNORECASE),
+        re.compile(r"\bzionist occupied government\b", re.IGNORECASE),
+        re.compile(r"\bjewish lobby\b", re.IGNORECASE),
+        re.compile(r"\bglobalists?\s+(?:control|run|own|are behind)\b", re.IGNORECASE),
+        re.compile(r"\bcabal\b", re.IGNORECASE),
+    ],
+    "SOFT_SIGNAL_DOGWHISTLE": [
+        re.compile(r"\(\(\(.+?\)\)\)"),
+        re.compile(r"\bholohoax\b", re.IGNORECASE),
+        re.compile(r"\bzio\b", re.IGNORECASE),
+        re.compile(r"\bkhazar(?:ian)?\b", re.IGNORECASE),
+    ],
+    "SOFT_SIGNAL_HOLOCAUST_MINIMIZATION": [
+        re.compile(r"\b6 million (?:lie|myth)\b", re.IGNORECASE),
+        re.compile(r"\bso[- ]called holocaust\b", re.IGNORECASE),
+        re.compile(r"\bholocaust (?:was )?(?:exaggerated|inflated|overstated)\b", re.IGNORECASE),
+        re.compile(r"\bholocaust denial\b", re.IGNORECASE),
+    ],
+}
 
 
 def stable_row_hash(item_number: str, post_text: str) -> str:
@@ -69,18 +104,23 @@ def sanitize_explanation(text: str) -> str:
     return cleaned[:700]
 
 
-def _build_prompt(text: str, categories: List[str], fallback: str) -> str:
+def _build_prompt(text: str, categories: List[str], fallback: str, soft_signal_flags: List[str]) -> str:
     cats = json.dumps(categories, ensure_ascii=False)
+    soft_flags = json.dumps(sorted(set(soft_signal_flags)), ensure_ascii=False)
     return (
         "You are a strict single-label classifier for antisemitism taxonomy. "
         "Preprocess text internally before classification: normalize whitespace, remove non-semantic noise, and handle typos. "
         "Return exactly one JSON object and no other text. "
-        "Required keys: category, confidence, explanation, flags. "
+        "Required keys: category, confidence, explanation, flags, soft_signal_score, soft_signal_flags, soft_signal_evidence. "
         f"Allowed categories: {cats}. "
+        f"Allowed soft_signal_flags: {soft_flags}. "
         f"If uncertain or no clear evidence, use fallback '{fallback}'. "
         "For empty or missing text, set fallback, include EMPTY_TEXT and SKIPPED flags. "
         "For very short or nonsensical text, include NONSENSICAL_OR_SHORT flag. "
-        "confidence must be float [0,1]. flags must be array of uppercase tokens.\n"
+        "confidence must be float [0,1]. flags must be array of uppercase tokens. "
+        "soft_signal_score must be float [0,1]. soft_signal_flags must be an array of allowed tokens only. "
+        "soft_signal_evidence must be an array of exact short quoted phrases from the post text that justify each soft signal. "
+        "If no soft antisemitic signal is present, use soft_signal_score 0, soft_signal_flags [], soft_signal_evidence [].\n"
         f"Post text:\n{text}"
     )
 
@@ -164,6 +204,58 @@ def _extract_confidence_from_text(text: str, default: float = 0.5) -> float:
     except ValueError:
         return default
     return min(max(value, 0.0), 1.0)
+
+
+def _sanitize_soft_signal_flags(flags: list[str], ssot: SSOT) -> list[str]:
+    allowed = set(ssot.policy.soft_signal_flags)
+    normalized = []
+    for flag in flags:
+        token = str(flag).strip().upper()
+        if token in allowed:
+            normalized.append(token)
+    return sorted(set(normalized))
+
+
+def _extract_evidence_snippet(text: str, start: int, end: int, radius: int = 36) -> str:
+    left = max(0, start - radius)
+    right = min(len(text), end + radius)
+    snippet = text[left:right].strip()
+    snippet = re.sub(r"\s+", " ", snippet)
+    return snippet[:180]
+
+
+def _heuristic_soft_signals(text: str, ssot: SSOT) -> tuple[list[str], list[str]]:
+    found_flags: list[str] = []
+    evidence: list[str] = []
+    for flag_name, patterns in SOFT_SIGNAL_PATTERNS.items():
+        if flag_name not in set(ssot.policy.soft_signal_flags):
+            continue
+        for pattern in patterns:
+            match = pattern.search(text)
+            if not match:
+                continue
+            found_flags.append(flag_name)
+            evidence.append(_extract_evidence_snippet(text, match.start(), match.end()))
+            break
+    return sorted(set(found_flags)), evidence[:MAX_SOFT_SIGNAL_EVIDENCE]
+
+
+def _sanitize_soft_signal_evidence(evidence: list[str], text: str) -> list[str]:
+    sanitized: list[str] = []
+    lowered = text.lower()
+    for item in evidence:
+        snippet = re.sub(r"\s+", " ", str(item).strip().strip('"').strip("'"))
+        if not snippet:
+            continue
+        probe = snippet.lower()
+        if probe in lowered:
+            sanitized.append(snippet[:180])
+            continue
+        for token in re.findall(r"[A-Za-z0-9()'-]{4,}", probe):
+            if token in lowered:
+                sanitized.append(snippet[:180])
+                break
+    return list(dict.fromkeys(sanitized))[:MAX_SOFT_SIGNAL_EVIDENCE]
 
 
 def _extract_category_from_text(text: str) -> str:
@@ -317,7 +409,12 @@ def _enforce_taxonomy(raw_label: str, flags: List[str]) -> Tuple[str, List[str]]
 
 
 def _classify_with_backend(text: str, ssot: SSOT, backend: str, model_name: str) -> ClassificationResult:
-    prompt = _build_prompt(text, ssot.taxonomy.categories, ssot.taxonomy.fallback_category)
+    prompt = _build_prompt(
+        text,
+        ssot.taxonomy.categories,
+        ssot.taxonomy.fallback_category,
+        ssot.policy.soft_signal_flags,
+    )
     obj = _generate_json(backend, model_name, prompt)
 
     raw_text = str(obj.get("raw_text", ""))
@@ -340,6 +437,18 @@ def _classify_with_backend(text: str, ssot: SSOT, backend: str, model_name: str)
         else:
             explanation = "No explanation returned by model."
     explanation = sanitize_explanation(explanation)
+    model_soft_flags = _sanitize_soft_signal_flags(list(obj.get("soft_signal_flags", [])), ssot)
+    heuristic_soft_flags, heuristic_evidence = _heuristic_soft_signals(text, ssot)
+    soft_signal_flags = sorted(set(model_soft_flags + heuristic_soft_flags))
+    model_evidence = _sanitize_soft_signal_evidence(list(obj.get("soft_signal_evidence", [])), text)
+    soft_signal_evidence = list(dict.fromkeys(model_evidence + heuristic_evidence))[:MAX_SOFT_SIGNAL_EVIDENCE]
+    try:
+        soft_signal_score = float(obj.get("soft_signal_score", 0.0))
+    except (TypeError, ValueError):
+        soft_signal_score = 0.0
+    soft_signal_score = min(max(soft_signal_score, 0.0), 1.0)
+    if heuristic_soft_flags:
+        soft_signal_score = max(soft_signal_score, 0.55 if len(heuristic_soft_flags) == 1 else 0.7)
 
     return ClassificationResult(
         row_index=-1,
@@ -348,6 +457,9 @@ def _classify_with_backend(text: str, ssot: SSOT, backend: str, model_name: str)
         confidence=confidence,
         explanation=explanation,
         flags=flags,
+        soft_signal_score=soft_signal_score,
+        soft_signal_flags=soft_signal_flags,
+        soft_signal_evidence=soft_signal_evidence,
         resolved_model_version=format_model_version(backend, model_name),
     )
 
@@ -364,12 +476,18 @@ def _sanitize_flags(flags: List[str], text: str) -> List[str]:
 def _apply_review_mode(result: ClassificationResult, ssot: SSOT, review_mode: str) -> ClassificationResult:
     flags = list(result.flags)
     low_conf = result.confidence < ssot.policy.low_confidence_threshold
+    soft_signal_score = result.soft_signal_score or 0.0
+    soft_signal_flags = sorted(set(result.soft_signal_flags or []))
+    soft_signal_evidence = list(result.soft_signal_evidence or [])
     if low_conf:
         flags.append("LOW_CONFIDENCE")
+    soft_signal_review = bool(soft_signal_flags) or soft_signal_score >= ssot.policy.soft_signal_review_threshold
+    if soft_signal_review:
+        flags.append("SOFT_SIGNAL_REVIEW")
 
     if review_mode == "full":
         flags.append("REVIEW_REQUIRED")
-    elif review_mode == "partial" and low_conf:
+    elif review_mode == "partial" and (low_conf or soft_signal_review):
         flags.append("REVIEW_REQUIRED")
 
     if not result.explanation.strip():
@@ -383,6 +501,9 @@ def _apply_review_mode(result: ClassificationResult, ssot: SSOT, review_mode: st
         confidence=result.confidence,
         explanation=result.explanation,
         flags=sorted(set(flags)),
+        soft_signal_score=soft_signal_score,
+        soft_signal_flags=soft_signal_flags,
+        soft_signal_evidence=soft_signal_evidence,
         resolved_model_version=result.resolved_model_version,
         model_votes=result.model_votes,
         consensus_tier=result.consensus_tier,
@@ -406,6 +527,9 @@ def classify_row(row: InputRow, ssot: SSOT, review_mode: str, model_name: str = 
             confidence=0.51,
             explanation="Empty post text: skipped semantic analysis; fallback category applied per SSOT.",
             flags=["EMPTY_TEXT", "SKIPPED"],
+            soft_signal_score=0.0,
+            soft_signal_flags=[],
+            soft_signal_evidence=[],
             resolved_model_version=primary_route.version,
             drafted_text="",
             fallback_events=["EMPTY_TEXT_FALLBACK"],
@@ -448,6 +572,9 @@ def classify_row(row: InputRow, ssot: SSOT, review_mode: str, model_name: str = 
                 confidence=0.5,
                 explanation="Model request failed or timed out; fallback category applied.",
                 flags=["MODEL_REQUEST_FAILED", "CLASSIFIER_FALLBACK_FAILED"],
+                soft_signal_score=0.0,
+                soft_signal_flags=[],
+                soft_signal_evidence=[],
                 resolved_model_version=primary_route.version,
                 fallback_events=["CLASSIFIER_FALLBACK_FAILED"],
             )
