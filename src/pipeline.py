@@ -38,6 +38,16 @@ STATE_PROGRESS = {
 }
 
 
+def _language_allowed(run_language: str, supported_languages: list[str]) -> bool:
+    language = str(run_language).strip()
+    if not language:
+        return False
+    allowed = {str(item).strip() for item in supported_languages if str(item).strip()}
+    if "*" in allowed:
+        return True
+    return language in allowed
+
+
 def _now_iso() -> str:
     return datetime.now(UTC).isoformat()
 
@@ -305,7 +315,7 @@ def run_classification(
             raise ConfigError(
                 f"Invalid review_mode '{review_mode}'. Expected one of: {ssot.policy.review_modes}"
             )
-        if run_language not in ssot.policy.supported_languages:
+        if not _language_allowed(run_language, ssot.policy.supported_languages):
             raise ConfigError(
                 f"Invalid run_language '{run_language}'. Expected one of: {ssot.policy.supported_languages}"
             )

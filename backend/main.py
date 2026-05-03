@@ -6,6 +6,7 @@ import subprocess
 import time
 import shutil
 import uuid
+import urllib.parse
 
 from fastapi import Body, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse
@@ -328,7 +329,7 @@ def get_upload(upload_id: str, request: Request):
 @app.post("/uploads/intake")
 async def upload_intake(request: Request):
     require_permission(request, "upload")
-    filename = request.headers.get("x-filename", "upload.xlsx")
+    filename = urllib.parse.unquote(request.headers.get("x-filename", "upload.xlsx")).strip() or "upload.xlsx"
     content = await request.body()
     if not content:
         raise HTTPException(status_code=400, detail="empty request body")

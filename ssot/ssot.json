@@ -21,10 +21,7 @@
       "Category"
     ],
     "supported_languages": [
-      "hu",
-      "de",
-      "ru",
-      "other"
+      "*"
     ],
     "review_modes": [
       "full",

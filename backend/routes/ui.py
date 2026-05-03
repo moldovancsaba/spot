@@ -659,11 +659,16 @@ def app_shell_page(request: Request):
             <input type="file" id="uploadFile" accept=".xlsx" />
             <div class="upload-meta">
               <input type="text" id="runIdInput" placeholder="Run ID (for start action)" value="spot-browser-run" />
-              <select id="languageInput">
-                <option value="de">de</option>
-                <option value="en">en</option>
-                <option value="hu">hu</option>
-              </select>
+              <input type="text" id="languageInput" list="languageSuggestions" placeholder="Language code (e.g. he, ar, hu, de)" value="de" />
+              <datalist id="languageSuggestions">
+                <option value="he"></option>
+                <option value="ar"></option>
+                <option value="hu"></option>
+                <option value="de"></option>
+                <option value="en"></option>
+                <option value="ru"></option>
+                <option value="other"></option>
+              </datalist>
               <select id="reviewModeInput">
                 <option value="partial">partial</option>
                 <option value="full">full</option>
@@ -819,9 +824,10 @@ def app_shell_page(request: Request):
       button.disabled = true;
       try {
         const buf = await file.arrayBuffer();
+        const encodedFilename = encodeURIComponent(file.name || 'upload.xlsx');
         const res = await fetch('/uploads/intake', {
           method: 'POST',
-          headers: { 'X-Filename': file.name },
+          headers: { 'X-Filename': encodedFilename },
           body: buf,
         });
         const data = await res.json();
@@ -846,10 +852,14 @@ def app_shell_page(request: Request):
         return;
       }
       const runId = document.getElementById('runIdInput').value.trim();
-      const language = document.getElementById('languageInput').value;
+      const language = document.getElementById('languageInput').value.trim();
       const reviewMode = document.getElementById('reviewModeInput').value;
       if (!runId) {
         setMessage('uploadMessage', 'Run ID is required.', 'error');
+        return;
+      }
+      if (!language) {
+        setMessage('uploadMessage', 'Language code is required.', 'error');
         return;
       }
       const res = await fetch('/classify/start/' + encodeURIComponent(runId), {

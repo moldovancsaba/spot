@@ -106,6 +106,8 @@ def load_ssot(path: Path) -> SSOT:
     required_modes = {"full", "partial", "none"}
     if not required_modes.issubset(set(ssot.policy.review_modes)):
         raise SSOTError("review_modes must include full, partial, none")
+    if not ssot.policy.supported_languages:
+        raise SSOTError("supported_languages cannot be empty")
     if not ssot.policy.soft_signal_flags:
         raise SSOTError("policy.soft_signal_flags cannot be empty")
     if set(ssot.taxonomy.categories) != CANONICAL_CATEGORIES:
