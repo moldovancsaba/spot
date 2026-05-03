@@ -17,6 +17,7 @@ ARTIFACT_NAMES = [
     "integrity_report.json",
     "artifact_manifest.json",
     "policy.json",
+    "logs.txt",
     "progress.json",
     "review_state.json",
     "signoff.json",
@@ -24,10 +25,17 @@ ARTIFACT_NAMES = [
     "disagreement_report.json",
     "control.json",
 ]
+RUN_HISTORY_DIRNAME = "_history"
 
 
 def run_dir(runs_dir: Path, run_id: str) -> Path:
     return runs_dir / run_id
+
+
+def run_history_dir(runs_dir: Path) -> Path:
+    path = runs_dir / RUN_HISTORY_DIRNAME
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 def run_record_path(runs_dir: Path, run_id: str) -> Path:
@@ -326,7 +334,7 @@ def list_run_records(*, runs_dir: Path) -> list[dict]:
     if not runs_dir.exists():
         return items
     for child in sorted(runs_dir.iterdir(), reverse=True):
-        if not child.is_dir() or child.name == "uploads":
+        if not child.is_dir() or child.name in {"uploads", RUN_HISTORY_DIRNAME}:
             continue
         record = refresh_run_record(runs_dir=runs_dir, run_id=child.name) or read_run_record(runs_dir=runs_dir, run_id=child.name)
         if record:
@@ -447,6 +455,7 @@ def build_artifact_center(*, runs_dir: Path, run_id: str) -> dict | None:
             "integrity_report.json": "Integrity and distribution audit report",
             "artifact_manifest.json": "Artifact hash manifest",
             "policy.json": "Resolved run policy and route metadata",
+            "logs.txt": "Execution log for the run lifecycle",
             "progress.json": "Lifecycle progress record",
             "review_state.json": "Persistent browser review state",
             "signoff.json": "Acceptance decision record",

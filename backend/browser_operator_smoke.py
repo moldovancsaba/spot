@@ -89,6 +89,7 @@ def _prepare_synthetic_run(run_id: str) -> Path:
     (run_path / "artifact_manifest.json").write_text(json.dumps({"artifacts": ["output.xlsx"]}), encoding="utf-8")
     (run_path / "integrity_report.json").write_text(json.dumps({"status": "ok"}), encoding="utf-8")
     (run_path / "policy.json").write_text(json.dumps({"policy": "synthetic"}), encoding="utf-8")
+    (run_path / "logs.txt").write_text("synthetic browser smoke log\n", encoding="utf-8")
     return run_path
 
 
@@ -96,6 +97,10 @@ def main() -> int:
     client = TestClient(app)
     unauth_upload = client.post("/uploads/intake", headers={"X-Filename": "unauth.xlsx"}, content=_build_workbook_bytes())
     assert unauth_upload.status_code == 401, unauth_upload.text
+    unauth_runs = client.get("/runs")
+    assert unauth_runs.status_code == 401, unauth_runs.text
+    unauth_uploads = client.get("/uploads")
+    assert unauth_uploads.status_code == 401, unauth_uploads.text
 
     login = client.post("/auth/login", json={"actor_name": "browser-smoke", "role": "admin", "access_code": "spot-local"})
     assert login.status_code == 200, login.text
@@ -131,6 +136,16 @@ def main() -> int:
     assert row.status_code == 200, row.text
     artifacts = client.get(f"/runs/{run_id}/artifacts")
     assert artifacts.status_code == 200, artifacts.text
+    missing_row_update = client.post(
+        f"/runs/{run_id}/review-rows/999",
+        json={"review_state": "reviewed", "review_decision": "confirm", "reviewer_note": "should fail"},
+    )
+    assert missing_row_update.status_code == 404, missing_row_update.text
+    signoff_before_review = client.post(
+        f"/runs/{run_id}/signoff",
+        json={"decision": "accepted_with_conditions", "note": "should be blocked before review completion"},
+    )
+    assert signoff_before_review.status_code == 409, signoff_before_review.text
 
     review_update = client.post(
         f"/runs/{run_id}/review-rows/2",
