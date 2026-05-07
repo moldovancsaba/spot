@@ -2,10 +2,10 @@
 
 `{spot}` stands for `Smart Platform for Observing Threats`.
 
-Current workspace implementation baseline: `0.4.0`
-Pipeline baseline: `mvp-0.4.0`
+Current workspace implementation baseline: `0.4.1`
+Pipeline baseline: `mvp-0.4.1`
 SSOT baseline: `0.2`
-Date: `2026-03-18`
+Date: `2026-05-03`
 
 ## 1. What {spot} Is
 
@@ -28,7 +28,8 @@ The main goal of {spot} is to take rows of social media text from Excel files an
 - locally controllable
 
 In plain terms:
-- you provide an Excel file
+- you provide one or more Excel files to the local queue
+- {spot} validates each workbook and segments accepted rows into manageable chunks
 - {spot} reads each text row
 - {spot} assigns exactly one category
 - {spot} writes the governed result back into an output Excel file
@@ -244,7 +245,7 @@ This makes the system operable beyond simple CLI-only use.
 Current implementation stage:
 - the core runtime and browser operator surface are implemented
 - the browser surface is currently delivered from the FastAPI backend rather than a separate frontend application
-- release cutover and fresh client acceptance evidence on the `0.4.0` baseline remain pending
+- release cutover and fresh client acceptance evidence on the `0.4.1` baseline remain pending
 
 ## 15. Audit Artefacts
 

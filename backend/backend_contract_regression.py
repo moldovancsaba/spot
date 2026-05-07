@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 import uuid
+from unittest.mock import patch
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -20,6 +21,7 @@ from openpyxl import Workbook
 import backend.main as main_module
 from backend.services import auth_service
 from backend.services.run_state_service import create_run_record
+from backend.services import run_state_service
 
 
 def _build_workbook_bytes() -> bytes:
@@ -182,6 +184,187 @@ class BackendContractRegressionTests(unittest.TestCase):
 
         with self.assertRaises(HTTPException):
             main_module._assert_allowed_classify_payload({"output": "/tmp/out.xlsx"})
+
+    def test_recover_restarts_interrupted_segment_worker_run(self) -> None:
+        self._login_admin()
+        upload_id = "recover-upload"
+        upload_dir = self.runs_dir / "uploads" / upload_id
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        workbook_path = upload_dir / "recover.xlsx"
+        workbook_path.write_bytes(_build_workbook_bytes())
+        upload_record = {
+            "upload_id": upload_id,
+            "filename": "recover.xlsx",
+            "stored_path": str(workbook_path),
+            "bytes": workbook_path.stat().st_size,
+            "status": "accepted",
+            "created_at": 1771000000,
+            "validation": {"accepted": True, "row_count": 1},
+        }
+        from backend.services.ops_db_service import record_upload, register_run
+
+        record_upload(runs_dir=self.runs_dir, record=upload_record)
+        run_id = "recover-run"
+        run_path = self.runs_dir / run_id
+        run_path.mkdir(parents=True, exist_ok=True)
+        create_run_record(
+            runs_dir=self.runs_dir,
+            run_id=run_id,
+            input_path=str(workbook_path),
+            output_path=str(run_path / "output.xlsx"),
+            upload_id=upload_id,
+            language="de",
+            review_mode="partial",
+            start_payload={"upload_id": upload_id, "language": "de", "review_mode": "partial"},
+        )
+        register_run(
+            runs_dir=self.runs_dir,
+            run_id=run_id,
+            upload_id=upload_id,
+            language="de",
+            review_mode="partial",
+            state="PROCESSING",
+        )
+        (run_path / "progress.json").write_text(
+            json.dumps({"run_id": run_id, "state": "PROCESSING", "progress_percentage": 0.0, "processed_rows": 0, "total_rows": 1}),
+            encoding="utf-8",
+        )
+        (run_path / "control.json").write_text(
+            json.dumps({"run_id": run_id, "pid": 999999, "paused": False, "output": str(run_path / "output.xlsx")}),
+            encoding="utf-8",
+        )
+        with patch.object(
+            main_module,
+            "_start_classify_run",
+            return_value={"status": "restarted", "run_id": run_id, "pid": 12345},
+        ) as mocked_start:
+            response = self.client.post(f"/runs/{run_id}/recover")
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["status"], "restarted")
+        mocked_start.assert_called_once()
+
+    def test_heal_restarts_stalled_segment_worker_run(self) -> None:
+        self._login_admin()
+        upload_id = "heal-upload"
+        upload_dir = self.runs_dir / "uploads" / upload_id
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        workbook_path = upload_dir / "heal.xlsx"
+        workbook_path.write_bytes(_build_workbook_bytes())
+        run_id = "heal-run"
+        run_path = self.runs_dir / run_id
+        run_path.mkdir(parents=True, exist_ok=True)
+        create_run_record(
+            runs_dir=self.runs_dir,
+            run_id=run_id,
+            input_path=str(workbook_path),
+            output_path=str(run_path / "output.xlsx"),
+            upload_id=upload_id,
+            language="de",
+            review_mode="partial",
+            start_payload={"upload_id": upload_id, "language": "de", "review_mode": "partial"},
+        )
+        (run_path / "progress.json").write_text(
+            json.dumps({"run_id": run_id, "state": "PROCESSING", "progress_percentage": 5.0, "processed_rows": 5, "total_rows": 100}),
+            encoding="utf-8",
+        )
+        (run_path / "control.json").write_text(
+            json.dumps({"run_id": run_id, "pid": 54321, "paused": False, "output": str(run_path / "output.xlsx")}),
+            encoding="utf-8",
+        )
+        with patch.object(main_module, "_resolve_run_process_pid", return_value=54321), patch.object(
+            main_module, "_signal_run_process"
+        ) as mocked_signal, patch.object(
+            main_module, "_wait_for_pid_exit", return_value=True
+        ), patch.object(
+            main_module, "_start_classify_run", return_value={"status": "restarted", "run_id": run_id, "pid": 12345}
+        ) as mocked_start:
+            response = self.client.post(f"/runs/{run_id}/heal")
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["status"], "restarted")
+        mocked_signal.assert_called_once()
+        mocked_start.assert_called_once()
+
+    def test_native_runtime_suspend_marks_active_run_for_resume(self) -> None:
+        self._login_admin()
+        run_id = "native-suspend-run"
+        run_path = self.runs_dir / run_id
+        run_path.mkdir(parents=True, exist_ok=True)
+        create_run_record(
+            runs_dir=self.runs_dir,
+            run_id=run_id,
+            input_path="samples/sample_germany.xlsx",
+            output_path=str(run_path / "output.xlsx"),
+            upload_id="upload-1",
+            language="de",
+            review_mode="partial",
+            start_payload={"upload_id": "upload-1", "language": "de", "review_mode": "partial"},
+        )
+        (run_path / "progress.json").write_text(
+            json.dumps({"run_id": run_id, "state": "PROCESSING", "progress_percentage": 50.0, "processed_rows": 5, "total_rows": 10}),
+            encoding="utf-8",
+        )
+        (run_path / "control.json").write_text(
+            json.dumps({"run_id": run_id, "pid": 43210, "paused": False, "output": str(run_path / "output.xlsx")}),
+            encoding="utf-8",
+        )
+        with patch.object(main_module, "_pid_alive", side_effect=lambda pid: int(pid or 0) == 43210), patch.object(
+            main_module,
+            "_pid_command",
+            return_value=f"python backend/segment_worker.py --run-id {run_id}",
+        ), patch.object(
+            run_state_service,
+            "_pid_alive",
+            side_effect=lambda pid: int(pid or 0) == 43210,
+        ), patch.object(
+            run_state_service,
+            "_pid_command",
+            return_value=f"python backend/segment_worker.py --run-id {run_id}",
+        ), patch.object(main_module, "_signal_run_process") as mocked_signal:
+            response = self.client.post("/native/runtime/suspend")
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["status"], "suspend_requested")
+        self.assertEqual(payload["count"], 1)
+        self.assertEqual(payload["active_runs"][0]["run_id"], run_id)
+        mocked_signal.assert_called_once()
+        control = json.loads((run_path / "control.json").read_text(encoding="utf-8"))
+        self.assertTrue(control["shutdown_requested"])
+        self.assertEqual(control["shutdown_mode"], "suspend")
+        self.assertFalse(control["paused"])
+
+    def test_classify_status_does_not_trust_reused_unrelated_pid(self) -> None:
+        self._login_admin()
+        run_id = "status-pid-reuse"
+        run_path = self.runs_dir / run_id
+        run_path.mkdir(parents=True, exist_ok=True)
+        create_run_record(
+            runs_dir=self.runs_dir,
+            run_id=run_id,
+            input_path="samples/sample_germany.xlsx",
+            output_path=str(run_path / "output.xlsx"),
+            upload_id="upload-1",
+            language="de",
+            review_mode="partial",
+            start_payload={"upload_id": "upload-1", "language": "de", "review_mode": "partial"},
+        )
+        (run_path / "progress.json").write_text(
+            json.dumps({"run_id": run_id, "state": "INTERRUPTED", "processed_rows": 10, "total_rows": 100, "progress_percentage": 10.0}),
+            encoding="utf-8",
+        )
+        (run_path / "control.json").write_text(
+            json.dumps({"run_id": run_id, "pid": 424242, "paused": False, "output": str(run_path / "output.xlsx")}),
+            encoding="utf-8",
+        )
+        with patch.object(main_module, "_pid_alive", return_value=True), patch.object(
+            main_module,
+            "_pid_command",
+            return_value="python unrelated_service.py --port 9999",
+        ), patch.object(main_module, "_discover_classify_pid", return_value=None):
+            response = self.client.get(f"/classify/status/{run_id}")
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertFalse(payload["running"])
+        self.assertIsNone(payload["pid"])
 
 
 if __name__ == "__main__":

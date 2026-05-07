@@ -95,7 +95,7 @@ def _prepare_synthetic_run(run_id: str) -> Path:
 
 def main() -> int:
     client = TestClient(app)
-    unauth_upload = client.post("/uploads/intake", headers={"X-Filename": "unauth.xlsx"}, content=_build_workbook_bytes())
+    unauth_upload = client.post("/uploads/intake?filename=unauth.xlsx", content=_build_workbook_bytes())
     assert unauth_upload.status_code == 401, unauth_upload.text
     unauth_runs = client.get("/runs")
     assert unauth_runs.status_code == 401, unauth_runs.text
@@ -111,13 +111,13 @@ def main() -> int:
     assert session_body["session"]["role"] == "admin", session_body
 
     upload = client.post(
-        "/uploads/intake",
-        headers={"X-Filename": "browser_smoke.xlsx"},
+        "/uploads/intake?filename=Minta_N%C3%A9metorsz%C3%A1g.xlsx",
         content=_build_workbook_bytes(),
     )
     assert upload.status_code == 200, upload.text
     upload_body = upload.json()
     assert upload_body["status"] == "accepted", upload_body
+    assert upload_body["filename"] == "Minta_Németország.xlsx", upload_body
     upload_record = client.get(f"/uploads/{upload_body['upload_id']}")
     assert upload_record.status_code == 200, upload_record.text
 
@@ -171,8 +171,8 @@ def main() -> int:
     assert len(actions_after.json()["actions"]) >= len(actions_before.json()["actions"]), actions_after.text
 
     for path, needle in {
-        "/": "{spot} Browser Surface",
-        "/app": "{spot} Browser Surface",
+        "/": "Local Operator Surface",
+        "/app": "Local Operator Surface",
         f"/runs/{run_id}/view": "{spot} Run Workspace",
         f"/runs/{run_id}/review": "{spot} Review Workspace",
         f"/runs/{run_id}/review-rows/2/view": "{spot} Evidence Workspace",

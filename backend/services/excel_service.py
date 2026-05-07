@@ -5,7 +5,8 @@ import re
 import time
 from pathlib import Path
 
-from src.excel_io import InputFileError, read_input_rows
+from backend.services.ops_db_service import build_upload_queue_summary, record_upload
+from src.excel_io import InputFileError, MAX_INPUT_ROWS, MAX_POST_TEXT_LENGTH, read_input_rows
 from src.ssot_loader import SSOTError, load_ssot
 
 
@@ -58,7 +59,8 @@ def intake_workbook(
             "accepted": True,
             "row_count": len(rows),
             "expected_columns": ssot.policy.expected_columns,
-            "max_post_text_length": 10000,
+            "max_input_rows": MAX_INPUT_ROWS,
+            "max_post_text_length": MAX_POST_TEXT_LENGTH,
         }
     except (InputFileError, SSOTError) as exc:
         record["status"] = "rejected"
@@ -79,6 +81,7 @@ def intake_workbook(
         json.dumps(record, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+    record["queue_summary"] = record_upload(runs_dir=runs_dir, record=record)
     return record
 
 
@@ -87,7 +90,10 @@ def read_upload_record(*, runs_dir: Path, upload_id: str) -> dict | None:
     if not path.exists():
         return None
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        record = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(record, dict):
+            record["queue_summary"] = build_upload_queue_summary(runs_dir=runs_dir, upload_id=upload_id)
+        return record
     except Exception:
         return None
 
@@ -106,7 +112,8 @@ def list_upload_records(*, runs_dir: Path) -> list[dict]:
 
 def _sanitize_filename(filename: str) -> str:
     candidate = Path(filename or "upload.xlsx").name
-    candidate = re.sub(r"[^A-Za-z0-9._-]+", "_", candidate).strip("._")
+    candidate = re.sub(r"[\x00-\x1f\x7f/\\\\:*?\"<>|]+", "_", candidate)
+    candidate = re.sub(r"\s+", " ", candidate).strip(" ._")
     if not candidate:
         candidate = "upload.xlsx"
     if not candidate.lower().endswith(".xlsx"):

@@ -3,8 +3,8 @@
 
 AI-assisted antisemitism classification system with SSOT-governed, auditable local processing.
 
-Current workspace implementation: `0.4.0`
-Pipeline version: `mvp-0.4.0`
+Current workspace implementation: `0.4.1`
+Pipeline version: `mvp-0.4.1`
 Authoritative SSOT version: `0.2`
 Latest shipped release notes in repo: [`docs/RELEASE_NOTES_0.3.1.md`](/Users/moldovancsaba/Projects/spot/docs/RELEASE_NOTES_0.3.1.md)
 
@@ -16,6 +16,7 @@ Documentation map:
 - [Production Plan](/Users/moldovancsaba/Projects/spot/docs/PRODUCTION_PLAN.md)
 - [Client Package](/Users/moldovancsaba/Projects/spot/docs/CLIENT_PACKAGE.md)
 - [Local Appliance Runbook](/Users/moldovancsaba/Projects/spot/docs/LOCAL_APPLIANCE_RUNBOOK.md)
+- [Local Queue Operations Plan](/Users/moldovancsaba/Projects/spot/docs/LOCAL_QUEUE_OPERATIONS_PLAN.md)
 - [Benchmark Checklist](/Users/moldovancsaba/Projects/spot/docs/BENCHMARK_CHECKLIST.md)
 - [UAT Checklist](/Users/moldovancsaba/Projects/spot/docs/UAT_CHECKLIST.md)
 - [Acceptance Evidence Template](/Users/moldovancsaba/Projects/spot/docs/ACCEPTANCE_EVIDENCE_TEMPLATE.md)
@@ -51,6 +52,7 @@ Current next-phase product contract:
 Current implementation stage:
 - core deterministic runtime is implemented
 - local browser operator workflow is implemented
+- queue-backed local browser operations dashboard is implemented
 - productionization verification is in progress
 - live client acceptance on the current browser-enabled baseline is still pending
 
@@ -181,9 +183,10 @@ bash start_browser_appliance.sh
 
 Browser-intake foundation endpoints:
 
-- `POST /uploads/intake` with raw `.xlsx` request body and `X-Filename` header
+- `POST /uploads/intake?filename=<workbook.xlsx>` with raw `.xlsx` request body and legacy `X-Filename` header fallback
 - `GET /uploads`
 - `GET /uploads/{upload_id}`
+- `GET /operations/overview`
 - `POST /classify/start/{run_id}` with `{"upload_id":"..."}` to start from an accepted intake record
 
 Browser-state foundation endpoints:
@@ -206,6 +209,15 @@ Browser run-operation endpoints:
 - `POST /classify/resume/{run_id}`
 - `POST /classify/stop/{run_id}`
 - `GET /classify/status/{run_id}`
+
+Current browser operator surface:
+
+- queue one or more `.xlsx` workbooks into local intake
+- segment accepted workbooks into queue-backed local operations records
+- start a run from an accepted workbook
+- monitor row progress, segment progress, elapsed time, and throughput from the main dashboard
+- pause, resume, or stop the active run from the dashboard
+- review flagged rows and retrieve audit artifacts locally
 
 Browser auth and permission endpoints:
 

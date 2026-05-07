@@ -18,7 +18,7 @@ The functional and technical single source of truth inside this repository is:
 The active browser operator baseline contract is:
 - [`docs/BROWSER_OPERATOR_CONTRACT.md`](/Users/moldovancsaba/Projects/spot/docs/BROWSER_OPERATOR_CONTRACT.md)
 
-This document is the repo-side implementation contract for GitHub issue `#1` and the `{spot} v0.4.0 Browser Contract & Foundations` milestone.
+This document is the repo-side implementation contract for GitHub issue `#1` and the `{spot} v0.4.1 Browser Contract & Foundations` milestone.
 
 Execution breakdown for the active phase:
 - [`docs/BROWSER_PHASE_EXECUTION_PLAN.md`](/Users/moldovancsaba/Projects/spot/docs/BROWSER_PHASE_EXECUTION_PLAN.md)
@@ -37,6 +37,7 @@ Execution breakdown for the current active milestone:
 
 - Core runtime: implemented
 - Browser operator baseline: implemented
+- Queue-backed local operations dashboard: implemented
 - Browser productionization verification: implemented as deterministic smoke plus startup contract
 - Live client acceptance on the browser-enabled baseline: pending
 - Current remaining milestone focus: release cutover and post-release handover

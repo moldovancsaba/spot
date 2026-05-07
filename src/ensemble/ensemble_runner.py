@@ -24,7 +24,7 @@ def run_ensemble_batch(
     review_mode: str,
     max_workers: int,
     run_policy: RunPolicy,
-    progress_callback: Callable[[int, int], None] | None = None,
+    progress_callback: Callable[[int, int, ClassificationResult], None] | None = None,
     progress_every: int = 100,
 ) -> Tuple[List[ClassificationResult], List[str], Dict[str, Dict[str, int]], Dict[str, int], Dict[str, int]]:
     row_hashes = [stable_row_hash(r.item_number, r.post_text) for r in rows]
@@ -122,7 +122,7 @@ def run_ensemble_batch(
             results[idx] = future.result()
             completed += 1
             if progress_callback and (completed % progress_every == 0 or completed == total):
-                progress_callback(completed, total)
+                progress_callback(completed, total, results[idx])
 
     return (
         results,

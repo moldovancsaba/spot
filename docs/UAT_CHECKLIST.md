@@ -1,7 +1,7 @@
 # {spot} UAT Checklist
 
-Document date: `2026-03-18`
-Workspace baseline: `0.4.0`
+Document date: `2026-05-03`
+Workspace baseline: `0.4.1`
 SSOT: `0.2`
 
 ## Purpose
@@ -14,7 +14,7 @@ This checklist is used for structured user acceptance testing on the target loca
 - `{spot}` bootstrap completed
 - `{spot}` preflight passes
 - approved client-owned workbook is available
-- workbook satisfies runtime input guardrails: `.xlsx`, <= `25 MiB`, <= `50000` rows, <= `10000` characters per `Post text` cell
+- workbook satisfies runtime input guardrails: `.xlsx`, <= `25 MiB`, <= `100000` rows, <= `20000` characters per `Post text` cell
 - operator has access to the local browser dashboard and output location
 - SSOT path is confirmed
 - production mode settings are confirmed

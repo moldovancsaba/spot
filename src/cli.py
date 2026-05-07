@@ -31,6 +31,18 @@ def _parser() -> argparse.ArgumentParser:
     classify.add_argument("--limit", type=int, default=None)
     classify.add_argument("--progress-every", type=int, default=100)
 
+    benchmark = sub.add_parser("benchmark-workers", help="Benchmark local throughput across max_workers values")
+    benchmark.add_argument("--input", required=True, type=Path)
+    benchmark.add_argument("--ssot", default=Path("ssot/ssot.json"), type=Path)
+    benchmark.add_argument("--runs-dir", default=Path("runs"), type=Path)
+    benchmark.add_argument("--benchmark-run-id", required=True)
+    benchmark.add_argument("--language", required=True)
+    benchmark.add_argument("--review-mode", default="partial")
+    benchmark.add_argument("--worker-values", default="1,2,4")
+    benchmark.add_argument("--limit", type=int, default=None)
+    benchmark.add_argument("--progress-every", type=int, default=100)
+    benchmark.add_argument("--per-run-timeout-sec", type=int, default=0)
+
     evaluate = sub.add_parser("evaluate", help="Run deterministic single vs ensemble comparison")
     evaluate.add_argument("--input", required=True, type=Path)
     evaluate.add_argument("--ssot", default=Path("ssot/ssot.json"), type=Path)
@@ -121,6 +133,37 @@ def main() -> int:
                 progress_every=args.progress_every,
             )
             print(json.dumps({"status": "ok", "evaluation_report": str(report_path)}, ensure_ascii=False))
+            return 0
+        except Exception as exc:  # noqa: BLE001
+            print(
+                json.dumps(
+                    {
+                        "status": "error",
+                        "error_type": exc.__class__.__name__,
+                        "message": str(exc),
+                    },
+                    ensure_ascii=False,
+                )
+            )
+            return 1
+    elif args.command == "benchmark-workers":
+        try:
+            from .benchmark import benchmark_worker_configs
+
+            worker_values = [int(item.strip()) for item in str(args.worker_values).split(",") if item.strip()]
+            report_path = benchmark_worker_configs(
+                input_path=args.input,
+                ssot_path=args.ssot,
+                runs_dir=args.runs_dir,
+                benchmark_run_id=args.benchmark_run_id,
+                run_language=args.language,
+                review_mode=args.review_mode,
+                worker_values=worker_values,
+                limit=args.limit,
+                progress_every=args.progress_every,
+                per_run_timeout_sec=args.per_run_timeout_sec or None,
+            )
+            print(json.dumps({"status": "ok", "benchmark_report": str(report_path)}, ensure_ascii=False))
             return 0
         except Exception as exc:  # noqa: BLE001
             print(

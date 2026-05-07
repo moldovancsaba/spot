@@ -1,5 +1,58 @@
 # {spot} Handover Log
 
+## 2026-05-06 Europe/Budapest - Codex (Native Supervisor Lifecycle And Resume Contract)
+
+- Objective: make `spot.app` behave like a supervised local appliance instead of a native shell with a loosely managed backend.
+- Changes:
+  - added backend `POST /native/runtime/suspend` so the native supervisor can request resumable shutdown for active runs without converting them into operator cancellations
+  - changed `backend/segment_worker.py` so supervisor shutdown now writes `INTERRUPTED`, reconciles in-flight segments back to `QUEUED`, and preserves recoverability on the next launch
+  - kept operator `cancel` as a separate path that still writes `CANCELLED`
+  - changed `SpotCoreService` so native stop, restart, and app termination all suspend active runs before stopping the runtime
+  - added native startup auto-recovery for interrupted resumable runs
+  - changed `script/build_and_run.sh` so the dev wrapper no longer starts the backend outside `spot.app`
+  - added backend regression coverage for the new suspend contract
+- Files touched:
+  - `backend/main.py`
+  - `backend/segment_worker.py`
+  - `backend/backend_contract_regression.py`
+  - `app/spot-app/Sources/SpotApp.swift`
+  - `app/spot-app/Sources/SpotCoreService.swift`
+  - `app/spot-app/Sources/SpotModels.swift`
+  - `script/build_and_run.sh`
+  - `docs/NATIVE_APP_BUILD_HANDOFF.md`
+  - `docs/LOCAL_APPLIANCE_RUNBOOK.md`
+  - `docs/HANDOVER.md`
+- Validation:
+  - `python3 -m py_compile backend/main.py backend/services/run_state_service.py backend/segment_worker.py backend/backend_contract_regression.py` => passed
+  - `.venv/bin/python backend/backend_contract_regression.py` => passed
+  - `cd app/spot-app && swift build` => passed
+  - `bash -n script/build_and_run.sh && bash -n app/spot-app/build-bundle.sh` => passed
+
+## 2026-05-05 Europe/Budapest - Codex (Native Dashboard And Summary Recovery Fixes)
+
+- Objective: fix the native dashboard path where watched-folder intake could succeed locally while mission control still showed stale or empty run state.
+- Changes:
+  - hardened native `SpotRunProgress` decoding so local `run_record.json` files with ISO timestamp strings no longer fail to decode in the Swift shell
+  - changed native fallback selection to prefer real local run records over stale inbox-history `run_started` events
+  - changed native upload fallback to read local `upload.json` files when `/uploads` is unavailable or late
+  - changed backend summary refresh so `/runs`, `/runs/{run_id}`, `/runs/{run_id}/state`, and artifact-center summaries no longer rescan `output.xlsx` on every refresh
+  - preserved workbook review synchronization on review-specific routes only
+  - updated native handoff docs to describe watched-folder intake, inbox activity persistence, local file fallback, and lightweight summary routing
+- Files touched:
+  - `app/spot-app/Sources/SpotModels.swift`
+  - `app/spot-app/Sources/SpotCoreService.swift`
+  - `app/spot-app/Sources/SpotViews/SpotWorkspaceView.swift`
+  - `backend/main.py`
+  - `backend/services/run_state_service.py`
+  - `docs/NATIVE_APP_BUILD_HANDOFF.md`
+  - `docs/LOCAL_APPLIANCE_RUNBOOK.md`
+  - `docs/HANDOVER.md`
+- Validation:
+  - `python3 -m py_compile backend/main.py backend/services/run_state_service.py` => passed
+  - native backend probe after restart: `/api/health`, `/runs`, `/uploads`, `/operations/overview`, and `/runs/minta-ne-metorsza-g-20260505-204351/detail` all responded quickly
+  - `swift build` => passed
+  - `bash app/spot-app/build-bundle.sh` => passed
+
 ## 2026-03-18 Europe/Budapest - Codex (Pre-Delivery Truth Correction)
 
 - Objective: restore one clear current-state picture before first client delivery by aligning version markers, SSOT-facing docs, and acceptance documentation boundaries.
@@ -545,3 +598,112 @@
   - `docs/BENCHMARK_CHECKLIST.md`
   - `docs/UAT_CHECKLIST.md`
   - `docs/HANDOVER.md`
+
+## 2026-05-05 Europe/Budapest - Codex (Native App Scaffold Spec)
+
+- Objective: convert the learned `{reply}` native-shell pattern into a concrete `{spot}` implementation scaffold without prematurely writing app code.
+- Changes:
+  - added `docs/NATIVE_APP_SCAFFOLD_SPEC.md` as the file-by-file scaffold for a future `spot.app`
+  - defined the exact phase-1 file set: Swift package, plist, build/install scripts, launch wrapper, app entrypoint, runtime supervisor, and native build handoff
+  - documented the native-shell boundary clearly: `spot.app` should supervise the existing local appliance runtime, not replace the Python classification stack
+  - documented required method names, bundle contents, local writable paths, launch environment expectations, UI scope, and validation gates
+- Files touched:
+  - `docs/NATIVE_APP_SCAFFOLD_SPEC.md`
+  - `docs/HANDOVER.md`
+- Validation:
+  - documentation-only change; no code-path validation required
+- Known follow-up:
+  - implement the scaffold in the documented order once the native-app build milestone starts
+
+## 2026-05-05 Europe/Budapest - Codex (Native App Scaffold Security Hardening)
+
+- Objective: tighten the `{spot}` native-app scaffold so security requirements are explicit rather than implied.
+- Changes:
+  - expanded `docs/NATIVE_APP_SCAFFOLD_SPEC.md` with a dedicated security position, mandatory constraints, forbidden shortcuts, launch/auth rules, and native security validation gates
+  - clarified that the goal is secure-by-default local behavior, not an impossible claim of `100% secure`
+- Files touched:
+  - `docs/NATIVE_APP_SCAFFOLD_SPEC.md`
+  - `docs/HANDOVER.md`
+- Validation:
+  - documentation-only change; no code-path validation required
+- Known follow-up:
+  - enforce these constraints in the eventual `spot.app` scaffold and runtime supervisor implementation
+
+## 2026-05-05 Europe/Budapest - Codex (Native App Scaffold Implementation)
+
+- Objective: implement the first `{spot}` native-app scaffold in repo rather than leaving only planning docs.
+- Changes:
+  - added `app/spot-app` as a Swift 6 macOS 15 native shell package with `SpotApp`, `SpotCoreService`, and minimal workspace/control-center/settings views
+  - added deterministic icon, bundle, and install scripts for `spot.app`
+  - added `script/build_and_run.sh` as the native dev wrapper that writes native runtime config, builds the bundle, starts the bundled launcher, opens the app, and verifies `/auth/config`
+  - added `docs/NATIVE_APP_BUILD_HANDOFF.md` as the native build/install/launch source-of-truth document
+  - kept the Python local appliance as the runtime authority; the native shell supervises it instead of rewriting it
+- Files touched:
+  - `app/spot-app/Package.swift`
+  - `app/spot-app/Info.plist`
+  - `app/spot-app/build-icon.sh`
+  - `app/spot-app/build-bundle.sh`
+  - `app/spot-app/install-bundle.sh`
+  - `app/spot-app/Scripts/generate_app_icon.swift`
+  - `app/spot-app/Sources/SpotApp.swift`
+  - `app/spot-app/Sources/SpotCoreService.swift`
+  - `app/spot-app/Sources/SpotModels.swift`
+  - `app/spot-app/Sources/SpotViews/SpotWorkspaceView.swift`
+  - `app/spot-app/Sources/SpotViews/SpotControlCenterView.swift`
+  - `app/spot-app/Sources/SpotViews/SpotSettingsView.swift`
+  - `script/build_and_run.sh`
+  - `docs/NATIVE_APP_BUILD_HANDOFF.md`
+  - `docs/HANDOVER.md`
+- Validation:
+  - `cd app/spot-app && swift package dump-package >/dev/null` => passed
+  - `cd app/spot-app && swift build` => passed
+  - `cd app/spot-app && ./build-bundle.sh` => passed; bundle written to `app/spot-app/dist/spot.app`
+  - `cd app/spot-app && bash -n ./build-icon.sh && bash -n ./build-bundle.sh && bash -n ./install-bundle.sh && plutil -lint ./Info.plist` => passed
+  - `bash -n ./script/build_and_run.sh` => passed
+  - `bash ./script/build_and_run.sh --verify` => passed; `spot.app runtime ready on 127.0.0.1:8765`
+- Known follow-up:
+  - the native shell still opens the browser operator surface for the real review workflow; a fully native review workspace remains future work
+  - production install and first-run config UX for native runtime values remain future hardening work
+
+## 2026-05-05 Europe/Budapest - Codex (Native App Config Bootstrap Hardening)
+
+- Objective: continue the `{spot}` native scaffold by reducing first-run ambiguity around native runtime configuration.
+- Changes:
+  - taught `SpotCoreService` to create a first-run `native-runtime.env` template automatically under `~/Library/Application Support/spot`
+  - added native UI actions to open or rewrite that config template from the control-center and settings surfaces
+  - tightened dev-wrapper permissions so native config is written as `0600` and runtime directories are created with `0700`
+  - aligned `docs/NATIVE_APP_BUILD_HANDOFF.md` with the new config-template and permission behavior
+- Files touched:
+  - `app/spot-app/Sources/SpotCoreService.swift`
+  - `app/spot-app/Sources/SpotViews/SpotControlCenterView.swift`
+  - `app/spot-app/Sources/SpotViews/SpotSettingsView.swift`
+  - `script/build_and_run.sh`
+  - `docs/NATIVE_APP_BUILD_HANDOFF.md`
+  - `docs/HANDOVER.md`
+- Validation:
+  - `cd app/spot-app && swift build` => passed
+  - `bash -n ./script/build_and_run.sh` => passed
+  - `bash ./script/build_and_run.sh --verify` => passed; `spot.app runtime ready on 127.0.0.1:8765`
+- Known follow-up:
+  - production install should eventually replace the template/default access-code story with a deliberate first-run setup flow
+
+## 2026-05-05 Europe/Budapest - Codex (Native Health Contract Cleanup)
+
+- Objective: continue the `{spot}` native scaffold by replacing the opportunistic auth-config readiness probe with a dedicated loopback health contract.
+- Changes:
+  - added `GET /api/health` to `backend/main.py` for native runtime readiness probing without depending on auth configuration semantics
+  - switched the native shell and dev wrapper from `/auth/config` to `/api/health`
+  - updated the native build handoff document to reflect the dedicated health endpoint
+- Files touched:
+  - `backend/main.py`
+  - `app/spot-app/Sources/SpotModels.swift`
+  - `app/spot-app/Sources/SpotCoreService.swift`
+  - `script/build_and_run.sh`
+  - `docs/NATIVE_APP_BUILD_HANDOFF.md`
+  - `docs/HANDOVER.md`
+- Validation:
+  - `python3 -m py_compile backend/main.py` => passed
+  - `cd app/spot-app && swift build` => passed
+  - `bash ./script/build_and_run.sh --verify` => passed; `spot.app runtime ready on 127.0.0.1:8765`
+- Known follow-up:
+  - native runtime summary can later consume richer health payload fields if the backend grows a fuller appliance health model

@@ -7,6 +7,7 @@ import subprocess
 from datetime import UTC, datetime
 from collections import Counter
 from pathlib import Path
+from threading import Lock
 from typing import Optional
 
 from . import PIPELINE_VERSION
@@ -74,7 +75,8 @@ def _write_progress(
 ) -> None:
     progress_percentage = STATE_PROGRESS.get(state, 0)
     if state == "PROCESSING" and total_rows and processed_rows is not None:
-        # Map processing row progress into [10..90] overall progress window.
+        # Persist lifecycle-stage progress into the [10..90] processing window for run artifacts.
+        # Operator-facing dashboards should use row-based progress metrics instead of this staged value.
         stage_ratio = max(0.0, min(1.0, processed_rows / total_rows))
         progress_percentage = round(10 + (stage_ratio * 80), 1)
 
@@ -92,6 +94,46 @@ def _write_progress(
     (run_dir / "progress.json").write_text(json.dumps(progress, ensure_ascii=False, indent=2), encoding="utf-8")
     with (run_dir / "logs.txt").open("a", encoding="utf-8") as f:
         f.write(f"[{state}] {message}\n")
+
+
+def _write_processing_stats(
+    *,
+    run_dir: Path,
+    run_id: str,
+    started_at: str,
+    total_rows: int,
+    processed_rows: int,
+    threat_rows: int,
+    review_required_rows: int,
+    judged_rows: int,
+    second_pass_candidates: int | None = None,
+    second_pass_completed: int | None = None,
+    second_pass_overrides: int | None = None,
+) -> None:
+    started_dt = datetime.fromisoformat(started_at)
+    now_dt = datetime.now(UTC)
+    elapsed_seconds = max((now_dt - started_dt).total_seconds(), 0.0)
+    avg_seconds_per_row = round(elapsed_seconds / processed_rows, 4) if processed_rows > 0 else None
+    threat_rate = round(threat_rows / processed_rows, 4) if processed_rows > 0 else 0.0
+    projected_threat_rows = int(round(threat_rate * total_rows)) if processed_rows > 0 and total_rows > 0 else None
+    payload = {
+        "run_id": run_id,
+        "started_at": started_at,
+        "updated_at": now_dt.isoformat(),
+        "elapsed_seconds": round(elapsed_seconds, 2),
+        "processed_rows": processed_rows,
+        "total_rows": total_rows,
+        "avg_seconds_per_row": avg_seconds_per_row,
+        "threat_rows_detected": threat_rows,
+        "threat_rate": threat_rate,
+        "projected_threat_rows": projected_threat_rows,
+        "review_required_rows_detected": review_required_rows,
+        "judged_rows": judged_rows,
+        "second_pass_candidates": second_pass_candidates,
+        "second_pass_completed": second_pass_completed,
+        "second_pass_overrides": second_pass_overrides,
+    }
+    (run_dir / "processing_stats.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _write_integrity_report(
@@ -305,6 +347,12 @@ def run_classification(
     started_at = _now_iso()
     completed_at: str | None = None
     total_rows = 0
+    processing_stats = {
+        "threat_rows": 0,
+        "review_required_rows": 0,
+        "judged_rows": 0,
+    }
+    processing_stats_lock = Lock()
     try:
         _write_progress(run_dir, run_id, "PENDING", started_at=started_at)
         _write_progress(run_dir, run_id, "VALIDATING", started_at=started_at)
@@ -338,7 +386,14 @@ def run_classification(
             processed_rows=0,
         )
 
-        def _progress_update(done: int, total: int) -> None:
+        def _progress_update(done: int, total: int, latest_result) -> None:
+            with processing_stats_lock:
+                if latest_result.category != "Not Antisemitic":
+                    processing_stats["threat_rows"] += 1
+                if "REVIEW_REQUIRED" in (latest_result.flags or []):
+                    processing_stats["review_required_rows"] += 1
+                if latest_result.judge_verdict or latest_result.judge_score is not None:
+                    processing_stats["judged_rows"] += 1
             _write_progress(
                 run_dir,
                 run_id,
@@ -348,6 +403,17 @@ def run_classification(
                 total_rows=total,
                 processed_rows=done,
             )
+            with processing_stats_lock:
+                _write_processing_stats(
+                    run_dir=run_dir,
+                    run_id=run_id,
+                    started_at=started_at,
+                    total_rows=total,
+                    processed_rows=done,
+                    threat_rows=int(processing_stats["threat_rows"]),
+                    review_required_rows=int(processing_stats["review_required_rows"]),
+                    judged_rows=int(processing_stats["judged_rows"]),
+                )
         lane_config = load_lane_config()
         _validate_production_lane_policy(ssot=ssot, lane_config=lane_config)
         requested_model_specs = (
@@ -503,6 +569,30 @@ def run_classification(
             started_at=started_at,
             completed_at=completed_at,
             total_rows=total_rows,
+        )
+        _write_processing_stats(
+            run_dir=run_dir,
+            run_id=run_id,
+            started_at=started_at,
+            total_rows=total_rows,
+            processed_rows=len(results),
+            threat_rows=sum(1 for r in results if r.category != "Not Antisemitic"),
+            review_required_rows=sum(1 for r in results if "REVIEW_REQUIRED" in (r.flags or [])),
+            judged_rows=sum(1 for r in results if r.judge_verdict or r.judge_score is not None),
+            second_pass_candidates=sum(
+                1
+                for r in results
+                if any(
+                    flag in (r.flags or [])
+                    for flag in ["SECOND_PASS_RECHECK", "SECOND_PASS_CONFIRMED", "SECOND_PASS_DISAGREEMENT", "SECOND_PASS_UNAVAILABLE"]
+                )
+            ),
+            second_pass_completed=sum(
+                1
+                for r in results
+                if any(flag in (r.flags or []) for flag in ["SECOND_PASS_CONFIRMED", "SECOND_PASS_DISAGREEMENT"])
+            ),
+            second_pass_overrides=sum(1 for r in results if "SECOND_PASS_CATEGORY_OVERRIDDEN" in (r.flags or [])),
         )
         _write_artifact_manifest(run_dir)
     except Exception as exc:

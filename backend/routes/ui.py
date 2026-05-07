@@ -85,7 +85,7 @@ def agent_eval_page(request: Request):
 <html>
 <head>
   <meta charset='utf-8'/>
-  <title>{spot} Eval Monitor</title>
+  <title>{spot} Legacy Evaluation Monitor</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; margin: 24px; }
     .row { margin-bottom: 12px; }
@@ -96,7 +96,7 @@ def agent_eval_page(request: Request):
   </style>
 </head>
 <body>
-  <h2>{spot} Eval Monitor</h2>
+  <h2>{spot} Legacy Evaluation Monitor</h2>
   <div class='row'>
     <label>Run ID: <input id='runId' value='__DEFAULT_RUN_ID__' /></label>
     <button onclick='startRun()'>Start / Restart</button>
@@ -146,7 +146,7 @@ def classify_monitor_page(request: Request):
 <html>
 <head>
   <meta charset='utf-8'/>
-  <title>{spot} Classify Monitor</title>
+  <title>{spot} Legacy Classification Monitor</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; margin: 24px; }
     .row { margin-bottom: 12px; }
@@ -158,7 +158,7 @@ def classify_monitor_page(request: Request):
   </style>
 </head>
 <body>
-  <h2>{spot} Classify Monitor</h2>
+  <h2>{spot} Legacy Classification Monitor</h2>
   <div class='row'>
     <label>Run ID: <input id='runId' value='__DEFAULT_RUN_ID__' /></label>
   </div>
@@ -255,116 +255,153 @@ def app_shell_page(request: Request):
       font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
     }
     .shell {
-      max-width: 1360px;
+      max-width: 1440px;
       margin: 0 auto;
       padding: 28px 20px 40px;
     }
     .topbar {
+      display: grid;
+      gap: 18px;
+      margin-bottom: 20px;
+      padding: 22px 24px;
+      border: 1px solid var(--line);
+      background:
+        radial-gradient(circle at top right, rgba(15,118,110,0.10), transparent 24%),
+        linear-gradient(135deg, rgba(255,255,255,0.94), rgba(250,244,234,0.94));
+      border-radius: 28px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      position: relative;
+    }
+    .topbar::after {
+      content: "";
+      position: absolute;
+      width: 240px;
+      height: 240px;
+      border-radius: 50%;
+      right: -80px;
+      top: -120px;
+      background: radial-gradient(circle, rgba(180,83,9,0.10), transparent 68%);
+      pointer-events: none;
+    }
+    .brand-row {
       display: flex;
       justify-content: space-between;
-      align-items: center;
-      gap: 16px;
-      margin-bottom: 18px;
-      padding: 14px 18px;
-      border: 1px solid var(--line);
-      background: rgba(255,250,241,0.82);
-      border-radius: 18px;
-      box-shadow: var(--shadow);
+      gap: 20px;
+      align-items: flex-start;
     }
     .brand-mark {
       font-family: "Avenir Next", "Segoe UI", sans-serif;
       font-size: 12px;
       text-transform: uppercase;
-      letter-spacing: 0.14em;
+      letter-spacing: 0.18em;
       color: var(--accent);
-      font-weight: 700;
-      margin-bottom: 4px;
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+    .brand-title {
+      font-size: 44px;
+      line-height: 0.96;
+      max-width: 14ch;
+      margin-bottom: 12px;
     }
     .brand-copy {
       color: var(--muted);
-      font-size: 13px;
-      line-height: 1.45;
-      max-width: 42rem;
+      font-size: 17px;
+      line-height: 1.52;
+      max-width: 48rem;
     }
-    .quick-nav {
-      display: flex;
-      flex-wrap: wrap;
+    .session-rail {
+      min-width: 300px;
+      display: grid;
+      gap: 12px;
+      padding: 16px;
+      border-radius: 22px;
+      border: 1px solid rgba(15,118,110,0.16);
+      background: rgba(255,250,241,0.88);
+      position: relative;
+      z-index: 1;
+    }
+    .session-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 10px;
     }
-    .nav-chip {
-      display: inline-flex;
-      align-items: center;
-      text-decoration: none;
-      border-radius: 999px;
-      border: 1px solid var(--line);
-      color: var(--text);
-      background: rgba(255,255,255,0.72);
-      padding: 9px 14px;
-      font-size: 13px;
+    .session-field {
+      display: grid;
+      gap: 6px;
+    }
+    .session-field label {
       font-family: "Avenir Next", "Segoe UI", sans-serif;
-      font-weight: 700;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
     }
     .hero {
       display: grid;
-      grid-template-columns: 1.5fr 1fr;
-      gap: 20px;
-      align-items: stretch;
-      margin-bottom: 20px;
+      gap: 16px;
+      margin-bottom: 28px;
     }
     .hero-card, .panel {
       background: var(--panel);
       border: 1px solid var(--line);
-      border-radius: 20px;
+      border-radius: 24px;
       box-shadow: var(--shadow);
     }
     .hero-card {
-      padding: 24px;
-      position: relative;
-      overflow: hidden;
-    }
-    .hero-card::after {
-      content: "";
-      position: absolute;
-      right: -30px;
-      top: -30px;
-      width: 180px;
-      height: 180px;
-      border-radius: 50%;
-      background: radial-gradient(circle, rgba(15,118,110,0.16), transparent 70%);
-      pointer-events: none;
+      padding: 26px;
     }
     .eyebrow {
       text-transform: uppercase;
-      letter-spacing: 0.12em;
-      font-size: 12px;
+      letter-spacing: 0.14em;
+      font-size: 11px;
       color: var(--accent);
       margin-bottom: 10px;
       font-family: "Avenir Next", "Segoe UI", sans-serif;
-      font-weight: 700;
+      font-weight: 800;
     }
     h1, h2, h3 { margin: 0; }
-    h1 {
-      font-size: 36px;
-      line-height: 1.05;
-      margin-bottom: 12px;
-    }
-    .lede {
-      color: var(--muted);
-      font-size: 17px;
-      line-height: 1.5;
-      max-width: 52rem;
-    }
-    .status-grid {
+    .mission-grid {
       display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 12px;
-      padding: 18px;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 22px;
+      align-items: start;
+    }
+    .metrics-card {
+      background: linear-gradient(180deg, rgba(255,255,255,0.76), rgba(249,243,231,0.86));
+      border: 1px solid rgba(15,118,110,0.10);
+      border-radius: 22px;
+      padding: 24px;
+      display: grid;
+      gap: 20px;
+    }
+    .control-card {
+      background: linear-gradient(180deg, rgba(249,243,231,0.86), rgba(255,255,255,0.82));
+      border: 1px solid rgba(180,83,9,0.12);
+      border-radius: 22px;
+      padding: 24px;
+      display: grid;
+      gap: 18px;
+    }
+    .status-actions,
+    .session-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 16px;
     }
     .status-tile {
       background: var(--panel-2);
       border: 1px solid var(--line);
-      border-radius: 16px;
-      padding: 16px;
+      border-radius: 18px;
+      padding: 14px 16px;
+      min-width: 0;
+      overflow: hidden;
     }
     .status-label {
       color: var(--muted);
@@ -375,26 +412,53 @@ def app_shell_page(request: Request):
       font-family: "Avenir Next", "Segoe UI", sans-serif;
     }
     .status-value {
-      font-size: 28px;
+      font-size: clamp(22px, 2.2vw, 28px);
       font-weight: 700;
+      line-height: 1.02;
+      letter-spacing: -0.02em;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
     .status-sub {
       margin-top: 8px;
       color: var(--muted);
       font-size: 12px;
       font-family: "Avenir Next", "Segoe UI", sans-serif;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+    .control-note {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.45;
+    }
+    .inline-kpis {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .mini-kpi {
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.78);
+      padding: 8px 12px;
+      font-family: "Avenir Next", "Segoe UI", sans-serif;
+      font-size: 12px;
+      color: var(--muted);
     }
     .layout {
       display: grid;
-      grid-template-columns: 1.15fr 0.85fr;
+      grid-template-columns: 1.05fr 0.95fr;
       gap: 20px;
+      align-items: start;
     }
     .stack {
       display: grid;
       gap: 20px;
     }
     .panel {
-      padding: 18px;
+      padding: 24px 20px 20px;
+      min-width: 0;
     }
     .panel-head {
       display: flex;
@@ -404,7 +468,9 @@ def app_shell_page(request: Request):
       margin-bottom: 16px;
     }
     .panel-title {
-      font-size: 22px;
+      font-size: 28px;
+      line-height: 1.08;
+      padding-top: 2px;
     }
     .panel-note {
       color: var(--muted);
@@ -448,9 +514,44 @@ def app_shell_page(request: Request):
       color: var(--accent);
       border: 1px solid var(--line);
     }
+    .workflow-badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      border: 1px solid rgba(180,83,9,0.16);
+      background: rgba(180,83,9,0.08);
+      color: var(--accent-2);
+      padding: 8px 12px;
+      font-family: "Avenir Next", "Segoe UI", sans-serif;
+      font-weight: 700;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      line-height: 1.3;
+    }
     .upload-form {
       display: grid;
       gap: 12px;
+    }
+    .file-drop {
+      display: grid;
+      gap: 10px;
+      padding: 18px;
+      border: 1px dashed rgba(15,118,110,0.28);
+      background: linear-gradient(180deg, rgba(255,255,255,0.72), rgba(244,250,248,0.8));
+      border-radius: 18px;
+    }
+    .file-drop-title {
+      font-family: "Avenir Next", "Segoe UI", sans-serif;
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .file-drop-copy {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.45;
+      font-family: "Avenir Next", "Segoe UI", sans-serif;
     }
     .upload-meta {
       display: grid;
@@ -459,15 +560,21 @@ def app_shell_page(request: Request):
     }
     input[type="text"], select, input[type="file"] {
       width: 100%;
-      border-radius: 14px;
+      border-radius: 16px;
       border: 1px solid var(--line);
       background: white;
       padding: 11px 12px;
       font-size: 14px;
       color: var(--text);
     }
+    .section-grid {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 16px;
+      align-items: start;
+    }
     .message {
-      border-radius: 14px;
+      border-radius: 16px;
       padding: 12px 14px;
       font-size: 14px;
       line-height: 1.5;
@@ -493,10 +600,11 @@ def app_shell_page(request: Request):
     .card {
       border: 1px solid var(--line);
       background: white;
-      border-radius: 16px;
-      padding: 14px;
+      border-radius: 20px;
+      padding: 16px;
       display: grid;
-      gap: 8px;
+      gap: 10px;
+      min-width: 0;
     }
     .card.selected {
       border-color: rgba(15,118,110,0.4);
@@ -512,11 +620,58 @@ def app_shell_page(request: Request):
     .card-title {
       font-size: 16px;
       font-weight: 700;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
     .meta {
       color: var(--muted);
       font-size: 13px;
       font-family: "Avenir Next", "Segoe UI", sans-serif;
+      line-height: 1.4;
+      overflow-wrap: anywhere;
+    }
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .meta-box {
+      border: 1px solid rgba(217,207,191,0.8);
+      background: #fbf7f0;
+      border-radius: 14px;
+      padding: 12px;
+      min-width: 0;
+    }
+    .meta-box-label {
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 6px;
+      font-family: "Avenir Next", "Segoe UI", sans-serif;
+    }
+    .meta-box-value {
+      font-size: 18px;
+      font-weight: 700;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    .phase-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .phase-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: var(--panel-2);
+      padding: 6px 10px;
+      font-family: "Avenir Next", "Segoe UI", sans-serif;
+      font-size: 12px;
+      color: var(--muted);
     }
     .pill {
       display: inline-flex;
@@ -543,6 +698,7 @@ def app_shell_page(request: Request):
       background: white;
       border-radius: 14px;
       padding: 12px;
+      min-width: 0;
     }
     .detail-label {
       color: var(--muted);
@@ -569,75 +725,204 @@ def app_shell_page(request: Request):
       gap: 10px;
       margin-bottom: 12px;
     }
+    .detail-summary {
+      display: grid;
+      gap: 12px;
+    }
+    .run-detail-panel {
+      transition: all 0.2s ease;
+    }
+    .run-detail-panel.is-empty {
+      padding-bottom: 16px;
+    }
+    .empty-state {
+      display: grid;
+      gap: 10px;
+      border: 1px dashed rgba(15,118,110,0.22);
+      background: linear-gradient(180deg, rgba(255,255,255,0.68), rgba(249,243,231,0.78));
+      border-radius: 18px;
+      padding: 18px;
+    }
+    .empty-state-title {
+      font-size: 18px;
+      font-weight: 700;
+    }
+    .empty-state-copy {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    details.debug {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: #fbf7f0;
+      overflow: hidden;
+    }
+    details.debug summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 14px 16px;
+      font-family: "Avenir Next", "Segoe UI", sans-serif;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    details.debug summary::-webkit-details-marker { display: none; }
+    .scroll-region {
+      max-height: 760px;
+      overflow: auto;
+      padding-right: 4px;
+      min-width: 0;
+    }
+    .scroll-region.runs {
+      max-height: 820px;
+    }
+    .scroll-region.uploads {
+      max-height: 960px;
+    }
     @media (max-width: 980px) {
-      .hero, .layout, .upload-meta, .detail-grid {
+      .layout, .upload-meta, .detail-grid, .section-grid, .metrics-grid, .mission-grid, .session-grid, .meta-grid {
         grid-template-columns: 1fr;
       }
-      .topbar {
+      .brand-row {
         display: grid;
       }
-      h1 { font-size: 30px; }
+      .brand-title { font-size: 34px; }
     }
   </style>
 </head>
 <body>
   <div class="shell">
     <section class="topbar">
-      <div>
-        <div class="brand-mark">{spot} Browser Surface</div>
-        <div class="brand-copy">Local `.xlsx` intake, deterministic runs, reviewer triage, and audit retrieval in one operator-focused browser workspace.</div>
-      </div>
-      <div class="quick-nav">
-        <a class="nav-chip" href="/classify-monitor" target="_blank">Classify Monitor</a>
-        <a class="nav-chip" href="/agent-eval" target="_blank">Eval Monitor</a>
+      <div class="brand-row">
+        <div>
+          <div class="brand-mark">Local Operator Surface</div>
+          <h1 class="brand-title">{spot} Browser Operations Dashboard</h1>
+          <div class="brand-copy">Local-first upload, run tracking, review-state visibility, and audit-oriented operator actions for the current `.xlsx` workflow.</div>
+        </div>
+        <div class="session-rail">
+          <div class="eyebrow">Operator Session</div>
+          <div class="message" id="authMessage">Loading session.</div>
+          <div class="session-grid">
+            <div class="session-field">
+              <label for="actorNameInput">Actor</label>
+              <input type="text" id="actorNameInput" placeholder="Actor name" value="local-operator" />
+            </div>
+            <div class="session-field">
+              <label for="roleInput">Role</label>
+              <select id="roleInput">
+                <option value="operator">operator</option>
+                <option value="reviewer">reviewer</option>
+                <option value="acceptance_lead">acceptance_lead</option>
+                <option value="admin">admin</option>
+              </select>
+            </div>
+            <div class="session-field">
+              <label for="accessCodeInput">Access Code</label>
+              <input type="text" id="accessCodeInput" placeholder="Local access code" value="spot-local" />
+            </div>
+          </div>
+          <div class="session-actions">
+            <button class="secondary" type="button" onclick="login()">Login</button>
+            <button class="secondary" type="button" onclick="logout()">Logout</button>
+          </div>
+        </div>
       </div>
     </section>
     <section class="hero">
       <div class="hero-card">
-        <div class="eyebrow">Local Operator Surface</div>
-        <h1>{spot} Browser Operations Dashboard</h1>
-        <p class="lede">
-          Local-first upload, run tracking, review-state visibility, and audit-oriented operator actions for the current `.xlsx` workflow.
-        </p>
-      </div>
-      <div class="hero-card">
-        <div class="status-grid">
-          <div class="status-tile">
-            <div class="status-label">Runs</div>
-            <div class="status-value" id="runCount">0</div>
-            <div class="status-sub" id="runHealth">No run selected</div>
+        <div class="mission-grid">
+          <div class="metrics-card">
+            <div>
+              <div class="eyebrow">Mission Control</div>
+              <div class="brand-copy">Processing status, operator controls, throughput, and queue pressure for the currently active local workload.</div>
+            </div>
+            <div class="status-actions">
+              <button class="secondary" type="button" id="pauseActiveButton" onclick="manageActiveRun('pause')" disabled>Pause Processing</button>
+              <button class="secondary" type="button" id="resumeActiveButton" onclick="manageActiveRun('resume')" disabled>Resume Processing</button>
+              <button class="warn" type="button" id="stopActiveButton" onclick="manageActiveRun('stop')" disabled>Stop Run</button>
+            </div>
+            <div class="metrics-grid">
+              <div class="status-tile">
+                <div class="status-label">Run State</div>
+                <div class="status-value" id="activeRunState">Idle</div>
+                <div class="status-sub" id="activeRunId">No active run</div>
+              </div>
+              <div class="status-tile">
+                <div class="status-label">Processed Rows</div>
+                <div class="status-value" id="rowsInvestigated">0</div>
+                <div class="status-sub">Rows classified so far</div>
+              </div>
+              <div class="status-tile">
+                <div class="status-label">Total Rows</div>
+                <div class="status-value" id="rowsLoaded">0</div>
+                <div class="status-sub">Rows accepted for the active run</div>
+              </div>
+              <div class="status-tile">
+                <div class="status-label">Row Progress</div>
+                <div class="status-value" id="queueProgress">0%</div>
+                <div class="status-sub" id="queueEta">Estimated time remaining unavailable</div>
+              </div>
+              <div class="status-tile">
+                <div class="status-label">Rows Remaining</div>
+                <div class="status-value" id="activeRowsRemaining">-</div>
+                <div class="status-sub">Rows not yet classified</div>
+              </div>
+              <div class="status-tile">
+                <div class="status-label">Average Seconds per Row</div>
+                <div class="status-value" id="activeAvgSecPerRow">-</div>
+                <div class="status-sub">Observed processing speed</div>
+              </div>
+              <div class="status-tile">
+                <div class="status-label">Elapsed Processing Time</div>
+                <div class="status-value" id="activeElapsedSeconds">-</div>
+                <div class="status-sub">Wall-clock time since run start</div>
+              </div>
+              <div class="status-tile">
+                <div class="status-label">Review-Required Rows</div>
+                <div class="status-value" id="activeReviewRequiredRows">-</div>
+                <div class="status-sub">Rows flagged for reviewer action</div>
+              </div>
+            </div>
+            <div class="inline-kpis">
+              <span class="mini-kpi">Judge-Lane Rows: <strong id="rowsJudged">0</strong></span>
+              <span class="mini-kpi">Threat Rows: <strong id="activeThreats">-</strong></span>
+              <span class="mini-kpi">Threat Rate: <strong id="activeThreatRate">-</strong></span>
+              <span class="mini-kpi">Projected Threats: <strong id="activeThreatProjection">-</strong></span>
+            </div>
+            <div class="message" id="activeProcessingMessage">No active run metrics yet.</div>
           </div>
-          <div class="status-tile">
-            <div class="status-label">Accepted Uploads</div>
-            <div class="status-value" id="uploadCount">0</div>
-            <div class="status-sub">Guardrail-validated workbooks</div>
-          </div>
-          <div class="status-tile">
-            <div class="status-label">Active Run</div>
-            <div class="status-value" id="activeRunState">Idle</div>
-            <div class="status-sub" id="activeRunId">No active run</div>
-          </div>
-          <div class="status-tile">
-            <div class="status-label">Review Queue</div>
-            <div class="status-value" id="pendingReviewCount">0</div>
-            <div class="status-sub">Pending reviewer triage</div>
-          </div>
-        </div>
-        <div style="padding: 0 18px 18px;">
-          <div class="message" id="authMessage">Loading session.</div>
-          <div class="upload-meta" style="margin-top:12px;">
-            <input type="text" id="actorNameInput" placeholder="Actor name" value="local-operator" />
-            <select id="roleInput">
-              <option value="operator">operator</option>
-              <option value="reviewer">reviewer</option>
-              <option value="acceptance_lead">acceptance_lead</option>
-              <option value="admin">admin</option>
-            </select>
-            <input type="text" id="accessCodeInput" placeholder="Local access code" value="spot-local" />
-          </div>
-          <div class="actions" style="margin-top:12px;">
-            <button class="secondary" type="button" onclick="login()">Login</button>
-            <button class="secondary" type="button" onclick="logout()">Logout</button>
+          <div class="control-card">
+            <div>
+              <div class="eyebrow">Operational Snapshot</div>
+              <div class="control-note">A compact readout of intake health, review load, and current queue pressure. This surface should stay readable while a run is in motion.</div>
+            </div>
+            <div class="metrics-grid" style="grid-template-columns: repeat(2, minmax(0, 1fr));">
+              <div class="status-tile">
+                <div class="status-label">Run Records</div>
+                <div class="status-value" id="runCount">0</div>
+                <div class="status-sub" id="runHealth">No run selected</div>
+              </div>
+              <div class="status-tile">
+                <div class="status-label">Accepted Workbooks</div>
+                <div class="status-value" id="uploadCount">0</div>
+                <div class="status-sub">Validated intake records</div>
+              </div>
+              <div class="status-tile">
+                <div class="status-label">Pending Review Rows</div>
+                <div class="status-value" id="pendingReviewCount">0</div>
+                <div class="status-sub">Rows awaiting reviewer action</div>
+              </div>
+              <div class="status-tile">
+                <div class="status-label">Segment Queue</div>
+                <div class="status-value" id="segmentCount">0</div>
+                <div class="status-sub" id="segmentHealth">No queued uploads</div>
+              </div>
+            </div>
+            <div class="message" id="queueSummaryMessage">Queue summary unavailable.</div>
           </div>
         </div>
       </div>
@@ -649,14 +934,16 @@ def app_shell_page(request: Request):
           <div class="panel-head">
             <div>
               <h2 class="panel-title">Upload Intake</h2>
-              <div class="panel-note">Submit an approved `.xlsx` workbook, validate it against runtime guardrails, and start a run from the accepted intake record.</div>
+              <div class="panel-note">Queue one or more approved `.xlsx` workbooks, validate them against runtime guardrails, and promote the selected intake record into a live run.</div>
             </div>
-            <div class="actions">
-              <span class="pill warn">Upload -> Run -> Review -> Artifacts</span>
-            </div>
+            <span class="workflow-badge">Queue Intake -> Run Control -> Review -> Artifacts</span>
           </div>
-          <form class="upload-form" onsubmit="event.preventDefault(); uploadWorkbook();">
-            <input type="file" id="uploadFile" accept=".xlsx" />
+          <form class="upload-form" onsubmit="event.preventDefault(); uploadWorkbooks();">
+            <div class="file-drop">
+              <div class="file-drop-title">Workbook Intake</div>
+              <div class="file-drop-copy">Choose one or more Excel workbooks. Intake validation happens immediately, and accepted files become queue candidates for run start.</div>
+              <input type="file" id="uploadFile" accept=".xlsx" multiple />
+            </div>
             <div class="upload-meta">
               <input type="text" id="runIdInput" placeholder="Run ID (for start action)" value="spot-browser-run" />
               <input type="text" id="languageInput" list="languageSuggestions" placeholder="Language code (e.g. he, ar, hu, de)" value="de" />
@@ -676,24 +963,80 @@ def app_shell_page(request: Request):
               </select>
             </div>
             <div class="actions">
-              <button class="primary" id="uploadButton" type="submit">Validate Upload</button>
-              <button class="warn" id="startUploadButton" type="button" onclick="startSelectedUpload()" disabled>Start Run From Selected Upload</button>
+              <button class="primary" id="uploadButton" type="submit">Add Workbooks To Queue</button>
+              <button class="warn" id="startUploadButton" type="button" onclick="startSelectedUpload()" disabled>Start Run From Selected Workbook</button>
             </div>
-            <div class="message" id="uploadMessage">No upload submitted yet.</div>
+            <div class="message" id="uploadMessage">No workbooks queued yet.</div>
           </form>
         </div>
 
-        <div class="panel">
-          <div class="panel-head">
-            <div>
-              <h2 class="panel-title">Recent Runs</h2>
-              <div class="panel-note">The dashboard reads persisted run records and refreshes review summaries from local artifacts.</div>
+        <div class="section-grid">
+          <div class="panel">
+            <div class="panel-head">
+              <div>
+                <h2 class="panel-title">Recent Runs</h2>
+                <div class="panel-note">Persisted run records prioritized for operator decisions, not raw storage inspection.</div>
+              </div>
+              <div class="actions">
+                <button class="secondary" onclick="loadDashboard()">Refresh</button>
+              </div>
             </div>
-            <div class="actions">
-              <button class="secondary" onclick="loadDashboard()">Refresh</button>
+            <div class="scroll-region runs">
+              <div class="list" id="runsList"></div>
             </div>
           </div>
-          <div class="list" id="runsList"></div>
+
+          <div class="panel run-detail-panel is-empty" id="runDetailPanel">
+            <div class="panel-head">
+              <div>
+                <h2 class="panel-title">Run Detail</h2>
+                <div class="panel-note">Select a run to inspect state, review summary, and next operator actions.</div>
+              </div>
+            </div>
+            <div id="runDetailEmpty" class="empty-state">
+              <div class="empty-state-title">No run selected</div>
+              <div class="empty-state-copy">Choose a run from the left column to unlock lifecycle controls, review payloads, and action history. This panel stays compact until it has something worth showing.</div>
+            </div>
+            <div id="runDetail" style="display:none;">
+              <div class="detail-summary">
+                <div class="detail-grid">
+                  <div class="detail-box">
+                    <div class="detail-label">Run ID</div>
+                    <div id="detailRunId"></div>
+                  </div>
+                  <div class="detail-box">
+                    <div class="detail-label">State</div>
+                    <div id="detailState"></div>
+                  </div>
+                  <div class="detail-box">
+                    <div class="detail-label">Review Summary</div>
+                    <div id="detailReview"></div>
+                  </div>
+                  <div class="detail-box">
+                    <div class="detail-label">Upload Link</div>
+                    <div id="detailUpload"></div>
+                  </div>
+                </div>
+                <div class="toolbar">
+                  <button class="secondary" type="button" onclick="loadSelectedRun()">Refresh Run Detail</button>
+                  <button class="secondary" type="button" onclick="loadSelectedRunReviews()">Load Review Rows</button>
+                  <button class="secondary" type="button" onclick="loadSelectedRunActions()">Load Action Log</button>
+                  <button class="secondary" type="button" id="pauseSelectedButton" onclick="manageSelectedRun('pause')" disabled>Pause</button>
+                  <button class="secondary" type="button" id="resumeSelectedButton" onclick="manageSelectedRun('resume')" disabled>Resume</button>
+                  <button class="warn" type="button" id="stopSelectedButton" onclick="manageSelectedRun('stop')" disabled>Stop</button>
+                </div>
+                <div class="message" id="detailMessage">Run detail loaded.</div>
+                <details class="debug">
+                  <summary>Review Rows Payload</summary>
+                  <pre id="reviewRowsPre">[]</pre>
+                </details>
+                <details class="debug">
+                  <summary>Action Log Payload</summary>
+                  <pre id="actionsPre">[]</pre>
+                </details>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -702,50 +1045,44 @@ def app_shell_page(request: Request):
           <div class="panel-head">
             <div>
               <h2 class="panel-title">Accepted Uploads</h2>
-              <div class="panel-note">Only accepted intake records can be used to start browser-driven runs.</div>
+              <div class="panel-note">Accepted intake records are queue candidates. Select one to promote it into the current run lane.</div>
             </div>
           </div>
-          <div class="list" id="uploadsList"></div>
+          <div class="scroll-region uploads">
+            <div class="list" id="uploadsList"></div>
+          </div>
         </div>
 
         <div class="panel">
           <div class="panel-head">
             <div>
-              <h2 class="panel-title">Run Detail</h2>
-              <div class="panel-note">Select a run to inspect current state, review summary, and recent operator actions.</div>
+              <h2 class="panel-title">Queue Overview</h2>
+              <div class="panel-note">High-level queue visibility stays in view; raw diagnostics are available only when needed.</div>
             </div>
           </div>
-          <div id="runDetailEmpty" class="message">No run selected.</div>
-          <div id="runDetail" style="display:none;">
-            <div class="detail-grid">
-              <div class="detail-box">
-                <div class="detail-label">Run ID</div>
-                <div id="detailRunId"></div>
-              </div>
-              <div class="detail-box">
-                <div class="detail-label">State</div>
-                <div id="detailState"></div>
-              </div>
-              <div class="detail-box">
-                <div class="detail-label">Review Summary</div>
-                <div id="detailReview"></div>
-              </div>
-              <div class="detail-box">
-                <div class="detail-label">Upload Link</div>
-                <div id="detailUpload"></div>
-              </div>
+          <div class="meta-grid" style="margin-bottom:16px;">
+            <div class="meta-box">
+              <div class="meta-box-label">Tracked Uploads</div>
+              <div class="meta-box-value" id="overviewUploadCount">0</div>
             </div>
-            <div class="toolbar">
-              <button class="secondary" type="button" onclick="loadSelectedRun()">Refresh Run Detail</button>
-              <button class="secondary" type="button" onclick="loadSelectedRunReviews()">Load Review Rows</button>
-              <button class="secondary" type="button" onclick="loadSelectedRunActions()">Load Action Log</button>
+            <div class="meta-box">
+              <div class="meta-box-label">Active Uploads</div>
+              <div class="meta-box-value" id="overviewActiveUploadCount">0</div>
             </div>
-            <div class="message" id="detailMessage">Run detail loaded.</div>
-            <h3 style="margin: 18px 0 10px;">Review Rows</h3>
-            <pre id="reviewRowsPre">[]</pre>
-            <h3 style="margin: 18px 0 10px;">Action Log</h3>
-            <pre id="actionsPre">[]</pre>
+            <div class="meta-box">
+              <div class="meta-box-label">Total Segments</div>
+              <div class="meta-box-value" id="overviewSegmentCount">0</div>
+            </div>
+            <div class="meta-box">
+              <div class="meta-box-label">Processed Rows</div>
+              <div class="meta-box-value" id="overviewProcessedRows">0</div>
+            </div>
           </div>
+          <div class="phase-row" id="queueOverviewPhases"></div>
+          <details class="debug" style="margin-top:16px;">
+            <summary>Raw Queue Diagnostics</summary>
+            <pre id="queueOverviewPre">No queue data loaded yet.</pre>
+          </details>
         </div>
       </div>
     </section>
@@ -754,6 +1091,30 @@ def app_shell_page(request: Request):
   <script>
     let selectedUploadId = null;
     let selectedRunId = null;
+
+    function formatEta(seconds) {
+      const value = Number(seconds);
+      if (!Number.isFinite(value) || value <= 0) return 'Estimated time remaining unavailable';
+      if (value < 60) return `ETA ${value}s`;
+      const minutes = Math.floor(value / 60);
+      const remainingSeconds = value % 60;
+      if (minutes < 60) return `ETA ${minutes}m ${remainingSeconds}s`;
+      const hours = Math.floor(minutes / 60);
+      const remainingMinutes = minutes % 60;
+      return `ETA ${hours}h ${remainingMinutes}m`;
+    }
+
+    function formatDuration(seconds) {
+      const value = Number(seconds);
+      if (!Number.isFinite(value) || value < 0) return '-';
+      if (value < 60) return `${value.toFixed(0)}s`;
+      const minutes = Math.floor(value / 60);
+      const remainingSeconds = Math.floor(value % 60);
+      if (minutes < 60) return `${minutes}m ${remainingSeconds}s`;
+      const hours = Math.floor(minutes / 60);
+      const remainingMinutes = minutes % 60;
+      return `${hours}h ${remainingMinutes}m`;
+    }
 
     function escapeHtml(v) {
       return String(v ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',\"'\":'&#39;'}[ch]));
@@ -772,22 +1133,73 @@ def app_shell_page(request: Request):
       el.textContent = text;
     }
 
+    function formatNumber(value) {
+      const num = Number(value);
+      if (!Number.isFinite(num)) return '-';
+      return num.toLocaleString();
+    }
+
+    function formatPercent(value) {
+      const num = Number(value);
+      if (!Number.isFinite(num)) return '-';
+      return `${num.toFixed(2)}%`;
+    }
+
+    function renderPhasePills(phases) {
+      const entries = Object.entries(phases || {});
+      if (!entries.length) {
+        return '<span class="phase-pill">No queue phases</span>';
+      }
+      return entries.map(([name, count]) => `
+        <span class="phase-pill"><strong>${escapeHtml(name)}</strong><span>${escapeHtml(count)}</span></span>
+      `).join('');
+    }
+
+    function setProcessButtons({ pause, resume, stop }) {
+      document.getElementById('pauseActiveButton').disabled = !pause;
+      document.getElementById('resumeActiveButton').disabled = !resume;
+      document.getElementById('stopActiveButton').disabled = !stop;
+      document.getElementById('pauseSelectedButton').disabled = !pause;
+      document.getElementById('resumeSelectedButton').disabled = !resume;
+      document.getElementById('stopSelectedButton').disabled = !stop;
+    }
+
+    async function manageRun(runId, action, messageId) {
+      if (!runId) {
+        setMessage(messageId, 'No run is available for this action.', 'error');
+        return;
+      }
+      const pathByAction = {
+        pause: '/classify/pause/' + encodeURIComponent(runId),
+        resume: '/classify/resume/' + encodeURIComponent(runId),
+        stop: '/classify/stop/' + encodeURIComponent(runId),
+      };
+      const res = await fetch(pathByAction[action], { method: 'POST' });
+      const data = await res.json();
+      setMessage(messageId, res.ok ? `Run action "${action}" completed for ${runId}.` : JSON.stringify(data, null, 2), res.ok ? 'ok' : 'error');
+      await loadDashboard();
+      if (selectedRunId === runId) {
+        await loadSelectedRun();
+      }
+    }
+
+    async function manageActiveRun(action) {
+      const runId = document.getElementById('activeRunId').textContent;
+      await manageRun(runId === 'No active run' ? '' : runId, action, 'activeProcessingMessage');
+    }
+
+    async function manageSelectedRun(action) {
+      await manageRun(selectedRunId, action, 'detailMessage');
+    }
+
     async function loadSession() {
       const res = await fetch('/auth/session');
       const data = await res.json();
       const session = data.session || {};
       if (data.authenticated) {
-        setMessage('authMessage', JSON.stringify({
-          authenticated: true,
-          actor_name: session.actor_name,
-          role: session.role,
-          auth_enabled: data.auth_enabled
-        }, null, 2), 'ok');
+        setMessage('authMessage', `Authenticated as ${session.actor_name || 'unknown'} · role ${session.role || 'unknown'} · local auth ${data.auth_enabled ? 'enabled' : 'disabled'}.`, 'ok');
       } else {
-        setMessage('authMessage', JSON.stringify({
-          authenticated: false,
-          auth_enabled: data.auth_enabled
-        }, null, 2), 'error');
+        setMessage('authMessage', `No active operator session. Local auth ${data.auth_enabled ? 'is enabled' : 'is disabled'}.`, 'error');
       }
     }
 
@@ -802,42 +1214,50 @@ def app_shell_page(request: Request):
         })
       });
       const data = await res.json();
-      setMessage('authMessage', JSON.stringify(data, null, 2), res.ok ? 'ok' : 'error');
+      setMessage('authMessage', res.ok ? `Login succeeded for ${data.actor_name || document.getElementById('actorNameInput').value}.` : JSON.stringify(data, null, 2), res.ok ? 'ok' : 'error');
       await loadSession();
     }
 
     async function logout() {
       const res = await fetch('/auth/logout', { method: 'POST' });
-      const data = await res.json();
-      setMessage('authMessage', JSON.stringify(data, null, 2), 'ok');
+      await res.json();
+      setMessage('authMessage', 'Local operator session closed.', 'ok');
       await loadSession();
     }
 
-    async function uploadWorkbook() {
+    async function uploadWorkbooks() {
       const fileInput = document.getElementById('uploadFile');
       const button = document.getElementById('uploadButton');
-      const file = fileInput.files[0];
-      if (!file) {
-        setMessage('uploadMessage', 'Choose a .xlsx workbook first.', 'error');
+      const files = Array.from(fileInput.files || []);
+      if (!files.length) {
+        setMessage('uploadMessage', 'Choose one or more .xlsx workbooks first.', 'error');
         return;
       }
       button.disabled = true;
       try {
-        const buf = await file.arrayBuffer();
-        const encodedFilename = encodeURIComponent(file.name || 'upload.xlsx');
-        const res = await fetch('/uploads/intake', {
-          method: 'POST',
-          headers: { 'X-Filename': encodedFilename },
-          body: buf,
-        });
-        const data = await res.json();
-        if (!res.ok) {
-          setMessage('uploadMessage', JSON.stringify(data, null, 2), 'error');
-          return;
+        const results = [];
+        for (const file of files) {
+          const buf = await file.arrayBuffer();
+          const encodedFilename = encodeURIComponent(file.name || 'upload.xlsx');
+          const res = await fetch('/uploads/intake?filename=' + encodedFilename, {
+            method: 'POST',
+            body: buf,
+          });
+          const data = await res.json();
+          results.push({ ok: res.ok, data });
+          if (res.ok && data.status === 'accepted') {
+            selectedUploadId = data.upload_id;
+          }
         }
-        selectedUploadId = data.upload_id;
-        document.getElementById('startUploadButton').disabled = data.status !== 'accepted';
-        setMessage('uploadMessage', JSON.stringify(data, null, 2), data.status === 'accepted' ? 'ok' : 'error');
+        document.getElementById('startUploadButton').disabled = !selectedUploadId;
+        const accepted = results.filter(item => item.ok && item.data.status === 'accepted').length;
+        const rejected = results.filter(item => item.ok && item.data.status !== 'accepted').length;
+        const failed = results.filter(item => !item.ok).length;
+        setMessage(
+          'uploadMessage',
+          `${accepted} workbook(s) accepted, ${rejected} rejected, ${failed} failed request(s). ${selectedUploadId ? `Selected intake record: ${selectedUploadId}.` : 'No accepted workbook selected yet.'}`,
+          accepted > 0 ? 'ok' : 'error',
+        );
         await loadDashboard();
       } catch (err) {
         setMessage('uploadMessage', String(err), 'error');
@@ -877,26 +1297,94 @@ def app_shell_page(request: Request):
         return;
       }
       selectedRunId = runId;
-      setMessage('uploadMessage', JSON.stringify(data, null, 2), 'ok');
+      setMessage('uploadMessage', `Run ${runId} started from intake record ${selectedUploadId}.`, 'ok');
       await loadDashboard();
       await loadSelectedRun();
     }
 
     async function loadDashboard() {
-      const [runsRes, uploadsRes] = await Promise.all([fetch('/runs'), fetch('/uploads')]);
+      const [runsRes, uploadsRes, overviewRes] = await Promise.all([fetch('/runs'), fetch('/uploads'), fetch('/operations/overview')]);
       const runs = await runsRes.json();
       const uploads = await uploadsRes.json();
+      const overview = await overviewRes.json();
       renderRuns(Array.isArray(runs) ? runs : []);
       renderUploads(Array.isArray(uploads) ? uploads : []);
+      document.getElementById('queueOverviewPre').textContent = JSON.stringify(overview, null, 2);
+      document.getElementById('overviewUploadCount').textContent = formatNumber((overview && overview.uploads) || 0);
+      document.getElementById('overviewActiveUploadCount').textContent = formatNumber((overview && overview.active_uploads) || 0);
+      document.getElementById('overviewSegmentCount').textContent = formatNumber((overview && overview.total_segments) || 0);
+      document.getElementById('overviewProcessedRows').textContent = formatNumber((overview && overview.processed_rows) || 0);
+      document.getElementById('queueOverviewPhases').innerHTML = renderPhasePills((overview && overview.segments_by_status) || {});
       const acceptedUploads = uploads.filter(u => u.status === 'accepted');
       const activeRun = runs.find(r => ['STARTING', 'PENDING', 'VALIDATING', 'PROCESSING', 'WRITING', 'PAUSED'].includes(String(r.state || r.status || '').toUpperCase()));
       const pendingReview = runs.reduce((acc, r) => acc + Number((((r.review_summary || {}).pending_rows) || 0)), 0);
+      const activeQueueUpload = ((overview && overview.recent_uploads) || []).find(item => item.run && ['STARTING', 'PENDING', 'VALIDATING', 'PROCESSING', 'WRITING', 'PAUSED'].includes(String(item.run.state || '').toUpperCase()));
       document.getElementById('runCount').textContent = String(runs.length);
       document.getElementById('uploadCount').textContent = String(acceptedUploads.length);
       document.getElementById('activeRunState').textContent = activeRun ? String(activeRun.state || activeRun.status) : 'Idle';
       document.getElementById('activeRunId').textContent = activeRun ? String(activeRun.run_id || '-') : 'No active run';
       document.getElementById('runHealth').textContent = runs.length ? `Latest: ${String((runs[0] || {}).run_id || '-')}` : 'No run selected';
       document.getElementById('pendingReviewCount').textContent = String(pendingReview);
+      document.getElementById('segmentCount').textContent = String((overview && overview.total_segments) || 0);
+      document.getElementById('segmentHealth').textContent = activeQueueUpload
+        ? `${((activeQueueUpload.segments_by_status) || {}).COMPLETED || 0} completed · ${((activeQueueUpload.segments_by_status) || {}).PROCESSING || 0} processing · ${((activeQueueUpload.segments_by_status) || {}).QUEUED || 0} queued`
+        : `${((overview && overview.segments_by_status) || {}).COMPLETED || 0} completed · ${((overview && overview.segments_by_status) || {}).PROCESSING || 0} processing · ${((overview && overview.segments_by_status) || {}).QUEUED || 0} queued`;
+      document.getElementById('queueProgress').textContent = formatPercent((activeQueueUpload && activeQueueUpload.progress_percentage) || (overview && overview.progress_percentage) || 0);
+      document.getElementById('queueEta').textContent = activeQueueUpload ? formatEta((activeQueueUpload.run || {}).estimated_remaining_seconds) : 'ETA unavailable';
+      document.getElementById('queueSummaryMessage').textContent = activeQueueUpload
+        ? `Active intake ${activeQueueUpload.filename || activeQueueUpload.upload_id} is in ${String(((activeQueueUpload.run || {}).state) || 'unknown').toLowerCase()} state with ${formatPercent(activeQueueUpload.row_progress_percentage || 0)} row completion and ${formatPercent(activeQueueUpload.segment_progress_percentage || 0)} segment completion.`
+        : `The queue is tracking ${formatNumber((overview && overview.uploads) || 0)} upload records across ${formatNumber((overview && overview.total_segments) || 0)} segments.`;
+      const activeStats = ((activeQueueUpload || {}).run || {}).processing_stats || ((activeQueueUpload || {}).processing_stats) || {};
+      const activeQueueRun = ((activeQueueUpload || {}).run) || {};
+      document.getElementById('rowsLoaded').textContent = formatNumber(activeQueueRun.total_rows || activeStats.total_rows || 0);
+      document.getElementById('rowsInvestigated').textContent = formatNumber(activeQueueRun.processed_rows || activeStats.processed_rows || 0);
+      document.getElementById('rowsJudged').textContent = formatNumber(activeStats.judged_rows || 0);
+      const activeState = String(activeQueueRun.state || '').toUpperCase();
+      setProcessButtons({
+        pause: ['STARTING', 'PENDING', 'VALIDATING', 'PROCESSING', 'WRITING'].includes(activeState),
+        resume: activeState === 'PAUSED',
+        stop: ['STARTING', 'PENDING', 'VALIDATING', 'PROCESSING', 'WRITING', 'PAUSED'].includes(activeState),
+      });
+      renderActiveProcessing(activeQueueUpload);
+    }
+
+    function renderActiveProcessing(activeQueueUpload) {
+      const stats = ((activeQueueUpload || {}).run || {}).processing_stats || ((activeQueueUpload || {}).processing_stats) || {};
+      const run = ((activeQueueUpload || {}).run) || {};
+      const processedRows = Number(run.processed_rows || stats.processed_rows || 0);
+      const totalRows = Number(run.total_rows || stats.total_rows || 0);
+      const rowsRemaining = Math.max(totalRows - processedRows, 0);
+      document.getElementById('rowsLoaded').textContent = formatNumber(totalRows);
+      document.getElementById('rowsInvestigated').textContent = formatNumber(processedRows);
+      document.getElementById('activeRowsRemaining').textContent = totalRows > 0
+        ? formatNumber(rowsRemaining)
+        : '-';
+      document.getElementById('activeAvgSecPerRow').textContent = Number.isFinite(Number(stats.avg_seconds_per_row))
+        ? `${Number(stats.avg_seconds_per_row).toFixed(2)} s`
+        : '-';
+      document.getElementById('activeElapsedSeconds').textContent = Number.isFinite(Number(stats.elapsed_seconds))
+        ? formatDuration(Number(stats.elapsed_seconds))
+        : '-';
+      document.getElementById('activeReviewRequiredRows').textContent = Number.isFinite(Number(stats.review_required_rows_detected))
+        ? formatNumber(stats.review_required_rows_detected)
+        : '-';
+      document.getElementById('activeThreats').textContent = Number.isFinite(Number(stats.threat_rows_detected))
+        ? formatNumber(stats.threat_rows_detected)
+        : '-';
+      document.getElementById('activeThreatRate').textContent = Number.isFinite(Number(stats.threat_rate))
+        ? `${(Number(stats.threat_rate) * 100).toFixed(2)}%`
+        : '-';
+      document.getElementById('activeThreatProjection').textContent = Number.isFinite(Number(stats.projected_threat_rows))
+        ? `${formatNumber(stats.projected_threat_rows)} est.`
+        : '-';
+      if (activeQueueUpload) {
+        const threatRate = Number.isFinite(Number(stats.threat_rate)) ? `${(Number(stats.threat_rate) * 100).toFixed(2)}% provisional threat rate` : 'Threat rate unavailable';
+        const elapsed = Number.isFinite(Number(stats.elapsed_seconds)) ? `${formatDuration(Number(stats.elapsed_seconds))} elapsed` : 'Elapsed time unavailable';
+        const judged = Number.isFinite(Number(stats.judged_rows)) ? `${formatNumber(stats.judged_rows)} judge-lane rows` : 'Judge-lane row count unavailable';
+        setMessage('activeProcessingMessage', `${formatNumber(processedRows)} of ${formatNumber(totalRows)} rows processed · ${elapsed} · ${threatRate} · ${judged}`, 'ok');
+        return;
+      }
+      setMessage('activeProcessingMessage', 'No active run metrics yet.', '');
     }
 
     function renderRuns(runs) {
@@ -912,7 +1400,17 @@ def app_shell_page(request: Request):
             <span class="${pillClass(run.state || run.status)}">${escapeHtml(run.state || run.status || 'unknown')}</span>
           </div>
           <div class="meta">Language: ${escapeHtml(run.language || '-')} · Review mode: ${escapeHtml(run.review_mode || '-')}</div>
-          <div class="meta">Pending review: ${escapeHtml((((run.review_summary || {}).pending_rows) || 0))} · Upload: ${escapeHtml(run.upload_id || '-')}</div>
+          <div class="meta-grid">
+            <div class="meta-box">
+              <div class="meta-box-label">Rows</div>
+              <div class="meta-box-value">${escapeHtml((((run.progress || {}).processed_rows) || (run.processed_rows || 0)))} / ${escapeHtml((((run.progress || {}).total_rows) || (run.total_rows || '-')))}</div>
+            </div>
+            <div class="meta-box">
+              <div class="meta-box-label">Review Queue</div>
+              <div class="meta-box-value">${escapeHtml((((run.review_summary || {}).pending_rows) || 0))}</div>
+            </div>
+          </div>
+          <div class="meta">Upload link: ${escapeHtml(run.upload_id || 'none attached')}</div>
           <div class="actions">
             <button class="secondary" type="button" onclick="selectRun('${escapeHtml(run.run_id || '')}')">Open Run Detail</button>
             <a class="ghost-link" href="/runs/${encodeURIComponent(run.run_id || '')}/view">Full Page</a>
@@ -935,7 +1433,18 @@ def app_shell_page(request: Request):
             <span class="${pillClass(upload.status)}">${escapeHtml(upload.status || 'unknown')}</span>
           </div>
           <div class="meta">${escapeHtml(upload.upload_id || '-')}</div>
-          <div class="meta">Rows: ${escapeHtml((((upload.validation || {}).row_count) || '-'))}</div>
+          <div class="meta-grid">
+            <div class="meta-box">
+              <div class="meta-box-label">Rows</div>
+              <div class="meta-box-value">${escapeHtml((((upload.validation || {}).row_count) || '-'))}</div>
+            </div>
+            <div class="meta-box">
+              <div class="meta-box-label">Segments</div>
+              <div class="meta-box-value">${escapeHtml((((upload.queue_summary || {}).segment_count) || 0))}</div>
+            </div>
+          </div>
+          <div class="meta">Row progress ${formatPercent((((upload.queue_summary || {}).row_progress_percentage) || 0))} · Segment progress ${formatPercent((((upload.queue_summary || {}).segment_progress_percentage) || 0))}</div>
+          <div class="phase-row">${renderPhasePills(((upload.queue_summary || {}).segments_by_status) || {})}</div>
           <div class="actions">
             <button class="secondary" type="button" onclick="selectUpload('${escapeHtml(upload.upload_id || '')}')">Use For Run Start</button>
           </div>
@@ -946,7 +1455,7 @@ def app_shell_page(request: Request):
     function selectUpload(uploadId) {
       selectedUploadId = uploadId;
       document.getElementById('startUploadButton').disabled = false;
-      setMessage('uploadMessage', 'Selected upload: ' + uploadId, 'ok');
+      setMessage('uploadMessage', 'Selected workbook for run start: ' + uploadId, 'ok');
     }
 
     async function selectRun(runId) {
@@ -962,14 +1471,26 @@ def app_shell_page(request: Request):
         setMessage('detailMessage', JSON.stringify(data, null, 2), 'error');
         return;
       }
+      document.getElementById('runDetailPanel').classList.remove('is-empty');
       document.getElementById('runDetailEmpty').style.display = 'none';
       document.getElementById('runDetail').style.display = 'block';
       document.getElementById('detailRunId').textContent = data.run_id || '-';
-      document.getElementById('detailState').textContent = `${data.state || '-'} (${(data.progress || {}).progress_percentage ?? 0}%)`;
+      const rowPct = (data.progress && Number.isFinite(Number(data.progress.total_rows)) && Number(data.progress.total_rows) > 0)
+        ? ((Number(data.progress.processed_rows || 0) / Number(data.progress.total_rows)) * 100).toFixed(2)
+        : String((data.progress || {}).progress_percentage ?? 0);
+      document.getElementById('detailState').textContent = `${data.state || '-'} (${rowPct}% of rows)`;
       const summary = data.review_summary || {};
       document.getElementById('detailReview').textContent = `required=${summary.review_required_rows || 0}, reviewed=${summary.reviewed_rows || 0}, pending=${summary.pending_rows || 0}`;
       document.getElementById('detailUpload').textContent = data.upload_id || '-';
-      setMessage('detailMessage', JSON.stringify(data, null, 2), 'ok');
+      const processedRows = Number((data.progress || {}).processed_rows || 0);
+      const totalRows = Number((data.progress || {}).total_rows || 0);
+      const state = String(data.state || '').toUpperCase();
+      setProcessButtons({
+        pause: ['STARTING', 'PENDING', 'VALIDATING', 'PROCESSING', 'WRITING'].includes(state),
+        resume: state === 'PAUSED',
+        stop: ['STARTING', 'PENDING', 'VALIDATING', 'PROCESSING', 'WRITING', 'PAUSED'].includes(state),
+      });
+      setMessage('detailMessage', `${data.state || 'Unknown'} · ${formatNumber(processedRows)} processed row(s) out of ${totalRows > 0 ? formatNumber(totalRows) : 'unknown total'} · pending review ${summary.pending_rows || 0}.`, 'ok');
     }
 
     async function loadSelectedRunReviews() {
@@ -986,7 +1507,14 @@ def app_shell_page(request: Request):
       document.getElementById('actionsPre').textContent = JSON.stringify(data, null, 2);
     }
 
+    function resetRunDetailPanel() {
+      document.getElementById('runDetailPanel').classList.add('is-empty');
+      document.getElementById('runDetailEmpty').style.display = 'grid';
+      document.getElementById('runDetail').style.display = 'none';
+    }
+
     loadDashboard();
+    resetRunDetailPanel();
     loadSession();
     setInterval(loadDashboard, 5000);
     setInterval(loadSession, 5000);
@@ -1148,12 +1676,11 @@ def run_detail_page(run_id: str, request: Request):
       <div class="actions">
         <button class="secondary" type="button" onclick="loadDetail()">Refresh</button>
         <button class="secondary" type="button" onclick="loadActions()">Load Actions</button>
-        <button class="secondary" type="button" id="pauseBtn" onclick="runOperation('pause')">Pause</button>
-        <button class="secondary" type="button" id="resumeBtn" onclick="runOperation('resume')">Resume</button>
-        <button class="secondary" type="button" id="cancelBtn" onclick="runOperation('cancel')">Cancel</button>
-        <button class="secondary" type="button" id="retryBtn" onclick="runOperation('retry')">Retry</button>
-        <button class="secondary" type="button" id="recoverBtn" onclick="runOperation('recover')">Recover</button>
-        <a class="link-btn" href="/classify-monitor" target="_blank">Legacy Classify Monitor</a>
+        <button class="secondary" type="button" id="pauseBtn" onclick="runOperation('pause')">Pause Processing</button>
+        <button class="secondary" type="button" id="resumeBtn" onclick="runOperation('resume')">Resume Processing</button>
+        <button class="secondary" type="button" id="cancelBtn" onclick="runOperation('cancel')">Cancel Run</button>
+        <button class="secondary" type="button" id="retryBtn" onclick="runOperation('retry')">Retry Run</button>
+        <button class="secondary" type="button" id="recoverBtn" onclick="runOperation('recover')">Recover Run</button>
       </div>
       <div class="message" id="detailMessage">Loading run detail.</div>
     </section>
@@ -1255,7 +1782,12 @@ def run_detail_page(run_id: str, request: Request):
       currentDetail = data;
       document.getElementById('statePill').className = pillClass(data.state);
       document.getElementById('statePill').textContent = data.state || '-';
-      document.getElementById('progressValue').textContent = `${(data.progress || {}).progress_percentage ?? 0}%`;
+      const processedRows = Number((data.progress || {}).processed_rows || 0);
+      const totalRows = Number((data.progress || {}).total_rows || 0);
+      const rowPct = totalRows > 0 ? ((processedRows / totalRows) * 100).toFixed(2) : String((data.progress || {}).progress_percentage ?? 0);
+      document.getElementById('progressValue').textContent = totalRows > 0
+        ? `${processedRows} / ${totalRows} rows (${rowPct}%)`
+        : `${rowPct}%`;
       const summary = data.review_summary || {};
       document.getElementById('reviewValue').textContent = `required=${summary.review_required_rows || 0}, pending=${summary.pending_rows || 0}`;
       document.getElementById('signoffValue').textContent = data.signoff ? data.signoff.decision : 'not signed';
@@ -1442,7 +1974,6 @@ def run_detail_page(run_id: str, request: Request):
 
 @router.get("/runs/{run_id}/review", response_class=HTMLResponse)
 def review_queue_page(run_id: str, request: Request):
-    require_permission(request, "view")
     page = """<!doctype html>
 <html>
 <head>
@@ -1469,8 +2000,14 @@ def review_queue_page(run_id: str, request: Request):
     h1,h2 { margin:0; }
     h1 { font-size: 34px; }
     .muted { color:var(--muted); line-height:1.45; }
+    .session-panel { display:grid; gap:14px; }
+    .session-grid { display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:10px; }
+    .session-field { display:grid; gap:6px; }
+    .session-field label, .micro-label, .section-label {
+      color:var(--muted); text-transform:uppercase; font-size:12px; letter-spacing:.08em; font-family:"Avenir Next","Segoe UI",sans-serif;
+    }
     .filters { display:grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap:10px; }
-    select, textarea { width:100%; border-radius:12px; border:1px solid var(--line); padding:10px 12px; background:white; font-family:"Avenir Next","Segoe UI",sans-serif; font-size:14px; }
+    input[type="text"], select, textarea { width:100%; border-radius:12px; border:1px solid var(--line); padding:10px 12px; background:white; font-family:"Avenir Next","Segoe UI",sans-serif; font-size:14px; }
     button, a.link-btn {
       border:0; border-radius:999px; padding:10px 14px; cursor:pointer; text-decoration:none;
       font-family:"Avenir Next","Segoe UI",sans-serif; font-size:14px;
@@ -1487,15 +2024,67 @@ def review_queue_page(run_id: str, request: Request):
     .row-head { display:flex; justify-content:space-between; gap:10px; align-items:flex-start; }
     .pill { display:inline-flex; border-radius:999px; padding:5px 10px; border:1px solid var(--line); font-size:12px; font-weight:700; font-family:"Avenir Next","Segoe UI",sans-serif; }
     .pill.ok { color:var(--ok); } .pill.warn { color:var(--warn); } .pill.danger { color:var(--danger); }
-    .grid { display:grid; grid-template-columns: 1.1fr .9fr; gap:10px; }
+    .grid { display:grid; grid-template-columns: 1.15fr .85fr; gap:14px; }
+    .content-stack, .review-form, .evidence-stack { display:grid; gap:10px; }
+    .content-box, .evidence-box {
+      background:#fbf7f0; border:1px solid var(--line); border-radius:14px; padding:12px;
+    }
+    .row-text, .explanation-text {
+      white-space:pre-wrap; line-height:1.6; font-size:15px;
+    }
+    .chip-row { display:flex; flex-wrap:wrap; gap:8px; }
+    .chip {
+      display:inline-flex; align-items:center; border-radius:999px; padding:6px 10px;
+      background:white; border:1px solid var(--line); font-family:"Avenir Next","Segoe UI",sans-serif; font-size:12px;
+    }
+    .review-meta { display:grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap:10px; }
+    .meta-card {
+      background:#fbf7f0; border:1px solid var(--line); border-radius:14px; padding:12px;
+    }
     .review-form { display:grid; gap:8px; }
     .message { white-space:pre-wrap; padding:10px 12px; border-radius:12px; background:#f7f1e6; border:1px solid var(--line); font-size:13px; line-height:1.45; }
-    @media (max-width: 960px) { .filters,.stats,.grid { grid-template-columns:1fr; } .head { flex-direction:column; } h1 { font-size:28px; } }
+    .message.error { border-color:rgba(185,28,28,0.24); background:rgba(185,28,28,0.08); color:var(--danger); }
+    .message.ok { border-color:rgba(22,101,52,0.24); background:rgba(22,101,52,0.08); color:var(--ok); }
+    @media (max-width: 960px) { .filters,.stats,.grid,.session-grid,.review-meta { grid-template-columns:1fr; } .head { flex-direction:column; } h1 { font-size:28px; } }
   </style>
 </head>
 <body>
   <div class="shell">
     __PAGE_TOPBAR__
+    <section class="panel">
+      <div class="head">
+        <div>
+          <h2>Reviewer Session</h2>
+          <div class="muted">This page can load before authentication. Sign in here to unlock the flagged-row queue and save reviewer decisions.</div>
+        </div>
+      </div>
+      <div class="session-panel">
+        <div class="message" id="authMessage">Checking current reviewer session.</div>
+        <div class="session-grid">
+          <div class="session-field">
+            <label for="actorNameInput">Actor</label>
+            <input type="text" id="actorNameInput" value="local-reviewer" />
+          </div>
+          <div class="session-field">
+            <label for="roleInput">Role</label>
+            <select id="roleInput">
+              <option value="reviewer">reviewer</option>
+              <option value="admin">admin</option>
+              <option value="acceptance_lead">acceptance_lead</option>
+              <option value="operator">operator</option>
+            </select>
+          </div>
+          <div class="session-field">
+            <label for="accessCodeInput">Access Code</label>
+            <input type="text" id="accessCodeInput" value="spot-local" />
+          </div>
+        </div>
+        <div class="actions">
+          <button class="secondary" type="button" onclick="login()">Login</button>
+          <button class="secondary" type="button" onclick="logout()">Logout</button>
+        </div>
+      </div>
+    </section>
     <section class="panel">
       <div class="head">
         <div>
@@ -1561,11 +2150,65 @@ def review_queue_page(run_id: str, request: Request):
       return String(v ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',\"'\":'&#39;'}[ch]));
     }
 
+    function setMessage(id, text, tone='') {
+      const node = document.getElementById(id);
+      node.className = tone ? `message ${tone}` : 'message';
+      node.textContent = text;
+    }
+
     function pillClass(status) {
       const txt = String(status || '').toUpperCase();
       if (txt.includes('REVIEWED') || txt.includes('CONFIRM')) return 'pill ok';
       if (txt.includes('ESCALAT')) return 'pill danger';
       return 'pill warn';
+    }
+
+    function chips(items, emptyLabel='none') {
+      const values = Array.isArray(items) ? items.filter(Boolean) : [];
+      if (!values.length) return `<span class="chip">${escapeHtml(emptyLabel)}</span>`;
+      return values.map(value => `<span class="chip">${escapeHtml(value)}</span>`).join('');
+    }
+
+    function summarizeExplanation(text) {
+      const value = String(text || '').trim();
+      if (!value) return 'No explanation recorded for this row.';
+      return value;
+    }
+
+    async function loadSession() {
+      const res = await fetch('/auth/session');
+      const data = await res.json();
+      const session = data.session || {};
+      if (data.authenticated) {
+        setMessage('authMessage', `Authenticated as ${session.actor_name || 'unknown'} with role ${session.role || 'unknown'}.`, 'ok');
+      } else {
+        setMessage('authMessage', `No active reviewer session. Login is required to view flagged rows.`, 'error');
+      }
+      return data;
+    }
+
+    async function login() {
+      const res = await fetch('/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          actor_name: document.getElementById('actorNameInput').value,
+          role: document.getElementById('roleInput').value,
+          access_code: document.getElementById('accessCodeInput').value
+        })
+      });
+      const data = await res.json();
+      setMessage('authMessage', res.ok ? `Login succeeded for ${document.getElementById('actorNameInput').value}.` : JSON.stringify(data, null, 2), res.ok ? 'ok' : 'error');
+      await loadSession();
+      if (res.ok) await loadQueue();
+    }
+
+    async function logout() {
+      await fetch('/auth/logout', { method: 'POST' });
+      setMessage('authMessage', 'Reviewer session closed.', 'ok');
+      await loadSession();
+      renderRows([]);
+      setMessage('queueMessage', 'Login required to load the review queue.', 'error');
     }
 
     function currentFilters() {
@@ -1581,11 +2224,21 @@ def review_queue_page(run_id: str, request: Request):
       const res = await fetch('/runs/' + encodeURIComponent(runId) + '/review-rows?' + currentFilters().toString());
       const data = await res.json();
       if (!res.ok) {
-        document.getElementById('queueMessage').textContent = JSON.stringify(data, null, 2);
+        if (res.status === 401) {
+          renderRows([]);
+          document.getElementById('statRows').textContent = '0';
+          document.getElementById('statPending').textContent = '0';
+          document.getElementById('statReviewed').textContent = '0';
+          document.getElementById('statEscalated').textContent = '0';
+          setMessage('queueMessage', 'Authentication required. Login above, then refresh the queue.', 'error');
+          await loadSession();
+          return;
+        }
+        setMessage('queueMessage', JSON.stringify(data, null, 2), 'error');
         return;
       }
       const rows = data.rows || [];
-      document.getElementById('queueMessage').textContent = `filters=${JSON.stringify(data.filters || {})}\nrun_state=${data.state || '-'}\nrows=${rows.length}`;
+      setMessage('queueMessage', `${rows.length} flagged row(s) loaded for run ${runId}. Current run state: ${data.state || '-'}.`, rows.length ? 'ok' : '');
       document.getElementById('statRows').textContent = String(rows.length);
       document.getElementById('statPending').textContent = String(rows.filter(r => (r.review_state || 'pending') === 'pending').length);
       document.getElementById('statReviewed').textContent = String(rows.filter(r => r.review_state === 'reviewed').length);
@@ -1612,14 +2265,42 @@ def review_queue_page(run_id: str, request: Request):
             </div>
           </div>
           <div class="grid">
-            <div>
-              <div class="muted">${escapeHtml(row.post_text || '')}</div>
-              <div class="muted" style="margin-top:8px;">Flags: ${escapeHtml((row.flags || []).join(', ') || '-')}</div>
-              <div class="muted">Soft signals: ${escapeHtml((row.soft_signal_flags || []).join(', ') || '-')}</div>
-              <div class="muted">Soft score: ${escapeHtml(row.soft_signal_score ?? '-')}</div>
-              <div class="muted">Fallbacks: ${escapeHtml((row.fallback_events || []).join(', ') || '-')}</div>
+            <div class="content-stack">
+              <div class="content-box">
+                <div class="section-label">Source Text</div>
+                <div class="row-text">${escapeHtml(row.post_text || '') || '<em>No source text available.</em>'}</div>
+              </div>
+              <div class="content-box">
+                <div class="section-label">Classifier Explanation</div>
+                <div class="explanation-text">${escapeHtml(summarizeExplanation(row.explanation))}</div>
+              </div>
+              <div class="evidence-stack">
+                <div class="evidence-box">
+                  <div class="section-label">Flags</div>
+                  <div class="chip-row">${chips(row.flags, 'no flags')}</div>
+                </div>
+                <div class="evidence-box">
+                  <div class="section-label">Soft Signals</div>
+                  <div class="chip-row">${chips(row.soft_signal_flags, 'no soft signals')}</div>
+                  <div class="muted" style="margin-top:8px;">Soft score: ${escapeHtml(row.soft_signal_score ?? '-')}</div>
+                </div>
+                <div class="evidence-box">
+                  <div class="section-label">Fallback Events</div>
+                  <div class="chip-row">${chips(row.fallback_events, 'no fallbacks')}</div>
+                </div>
+              </div>
             </div>
             <div class="review-form">
+              <div class="review-meta">
+                <div class="meta-card">
+                  <div class="micro-label">Review Decision</div>
+                  <div>${escapeHtml(row.review_decision || 'no decision')}</div>
+                </div>
+                <div class="meta-card">
+                  <div class="micro-label">Assigned Category</div>
+                  <div>${escapeHtml(row.assigned_category || '-')}</div>
+                </div>
+              </div>
               <select id="reviewState-${row.row_index}">
                 <option value="pending" ${(row.review_state || 'pending') === 'pending' ? 'selected' : ''}>pending</option>
                 <option value="reviewed" ${(row.review_state || '') === 'reviewed' ? 'selected' : ''}>reviewed</option>
@@ -1655,12 +2336,14 @@ def review_queue_page(run_id: str, request: Request):
         body: JSON.stringify(payload)
       });
       const data = await res.json();
-      document.getElementById('queueMessage').textContent = JSON.stringify(data, null, 2);
+      setMessage('queueMessage', res.ok ? `Saved review state for row ${rowIndex}.` : JSON.stringify(data, null, 2), res.ok ? 'ok' : 'error');
       await loadQueue();
     }
 
+    loadSession();
     loadQueue();
     setInterval(loadQueue, 5000);
+    setInterval(loadSession, 15000);
   </script>
 </body>
 </html>"""
@@ -1684,7 +2367,6 @@ def review_queue_page(run_id: str, request: Request):
 
 @router.get("/runs/{run_id}/review-rows/{row_index}/view", response_class=HTMLResponse)
 def row_inspector_page(run_id: str, row_index: int, request: Request):
-    require_permission(request, "view")
     page = """<!doctype html>
 <html>
 <head>
@@ -1711,6 +2393,11 @@ def row_inspector_page(run_id: str, row_index: int, request: Request):
     h1,h2,h3 { margin:0; }
     h1 { font-size: 34px; }
     .muted { color:var(--muted); line-height:1.45; }
+    .session-grid { display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:10px; }
+    .session-field { display:grid; gap:6px; }
+    .session-field label, .section-label {
+      color:var(--muted); text-transform:uppercase; font-size:12px; letter-spacing:.08em; font-family:"Avenir Next","Segoe UI",sans-serif;
+    }
     .grid { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:12px; }
     .box { background:white; border:1px solid var(--line); border-radius:14px; padding:12px; }
     .label { color:var(--muted); text-transform:uppercase; font-size:12px; letter-spacing:.08em; margin-bottom:8px; font-family:"Avenir Next","Segoe UI",sans-serif; }
@@ -1718,7 +2405,7 @@ def row_inspector_page(run_id: str, row_index: int, request: Request):
     .pill { display:inline-flex; border-radius:999px; padding:5px 10px; border:1px solid var(--line); font-size:12px; font-weight:700; font-family:"Avenir Next","Segoe UI",sans-serif; }
     .pill.ok { color:var(--ok); } .pill.warn { color:var(--warn); } .pill.danger { color:var(--danger); }
     .actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:12px; }
-    button, a.link-btn, select, textarea {
+    button, a.link-btn, input[type="text"], select, textarea {
       border:0; border-radius:999px; padding:10px 14px; cursor:pointer; text-decoration:none;
       font-family:"Avenir Next","Segoe UI",sans-serif; font-size:14px;
     }
@@ -1726,18 +2413,65 @@ def row_inspector_page(run_id: str, row_index: int, request: Request):
     button.secondary, a.link-btn { background:#e8decf; color:var(--text); }
     select, textarea { border-radius:12px; border:1px solid var(--line); background:white; padding:10px 12px; width:100%; }
     textarea { min-height: 120px; }
+    .message { white-space:pre-wrap; padding:10px 12px; border-radius:12px; background:#f7f1e6; border:1px solid var(--line); font-size:13px; line-height:1.45; }
+    .message.error { border-color:rgba(185,28,28,0.24); background:rgba(185,28,28,0.08); color:var(--danger); }
+    .message.ok { border-color:rgba(22,101,52,0.24); background:rgba(22,101,52,0.08); color:var(--ok); }
+    .stack { display:grid; gap:12px; }
+    .body-copy { white-space:pre-wrap; line-height:1.65; font-size:15px; }
+    .chip-row { display:flex; flex-wrap:wrap; gap:8px; }
+    .chip {
+      display:inline-flex; align-items:center; border-radius:999px; padding:6px 10px;
+      background:#fbf6ee; border:1px solid var(--line); font-family:"Avenir Next","Segoe UI",sans-serif; font-size:12px;
+    }
+    details.debug {
+      border:1px solid var(--line); border-radius:14px; background:#fbf6ee; overflow:hidden;
+    }
+    details.debug summary {
+      cursor:pointer; list-style:none; padding:12px 14px; font-family:"Avenir Next","Segoe UI",sans-serif; font-size:13px; color:var(--muted);
+    }
+    details.debug summary::-webkit-details-marker { display:none; }
     pre {
-      margin: 0; padding: 12px; border-radius: 14px; border:1px solid var(--line); background:#fbf6ee;
+      margin: 0; padding: 12px; border-top:1px solid var(--line);
       overflow:auto; font-size:12px; line-height:1.45; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     }
-    .message { white-space:pre-wrap; padding:10px 12px; border-radius:12px; background:#f7f1e6; border:1px solid var(--line); font-size:13px; line-height:1.45; }
-    .stack { display:grid; gap:12px; }
-    @media (max-width: 920px) { .grid { grid-template-columns:1fr; } .head { flex-direction:column; } h1 { font-size:28px; } }
+    @media (max-width: 920px) { .grid,.session-grid { grid-template-columns:1fr; } .head { flex-direction:column; } h1 { font-size:28px; } }
   </style>
 </head>
 <body>
   <div class="shell">
     __PAGE_TOPBAR__
+    <section class="panel">
+      <div class="head">
+        <div>
+          <h2>Reviewer Session</h2>
+          <div class="muted">Use the same local sign-in here if you opened the row inspector directly.</div>
+        </div>
+      </div>
+      <div class="message" id="authMessage">Checking current reviewer session.</div>
+      <div class="session-grid">
+        <div class="session-field">
+          <label for="actorNameInput">Actor</label>
+          <input type="text" id="actorNameInput" value="local-reviewer" />
+        </div>
+        <div class="session-field">
+          <label for="roleInput">Role</label>
+          <select id="roleInput">
+            <option value="reviewer">reviewer</option>
+            <option value="admin">admin</option>
+            <option value="acceptance_lead">acceptance_lead</option>
+            <option value="operator">operator</option>
+          </select>
+        </div>
+        <div class="session-field">
+          <label for="accessCodeInput">Access Code</label>
+          <input type="text" id="accessCodeInput" value="spot-local" />
+        </div>
+      </div>
+      <div class="actions">
+        <button class="secondary" type="button" onclick="login()">Login</button>
+        <button class="secondary" type="button" onclick="logout()">Logout</button>
+      </div>
+    </section>
     <section class="panel">
       <div class="head">
         <div>
@@ -1761,7 +2495,10 @@ def row_inspector_page(run_id: str, row_index: int, request: Request):
 
     <section class="panel">
       <div class="head"><h2>Source Row</h2></div>
-      <pre id="rowPre">{}</pre>
+      <div class="box">
+        <div class="label">Post Text</div>
+        <div class="body-copy" id="rowPre"></div>
+      </div>
     </section>
 
     <section class="panel">
@@ -1769,17 +2506,25 @@ def row_inspector_page(run_id: str, row_index: int, request: Request):
       <div class="stack">
         <div class="box">
           <div class="label">Explanation</div>
-          <pre id="explanationPre"></pre>
+          <div class="body-copy" id="explanationPre"></div>
         </div>
         <div class="box">
           <div class="label">Flags And Fallback Events</div>
-          <pre id="flagsPre"></pre>
+          <div id="flagsPre"></div>
         </div>
         <div class="box">
           <div class="label">Disagreement Evidence</div>
-          <pre id="disagreementPre">null</pre>
+          <div id="disagreementPre" class="body-copy muted">No disagreement evidence loaded yet.</div>
         </div>
       </div>
+    </section>
+
+    <section class="panel">
+      <div class="head"><h2>Row Debug Payload</h2></div>
+      <details class="debug">
+        <summary>Open raw row payload</summary>
+        <pre id="debugRowPre">{}</pre>
+      </details>
     </section>
 
     <section class="panel">
@@ -1809,6 +2554,10 @@ def row_inspector_page(run_id: str, row_index: int, request: Request):
     const runId = '__RUN_ID__';
     const rowIndex = '__ROW_INDEX__';
 
+    function escapeHtml(v) {
+      return String(v ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',\"'\":'&#39;'}[ch]));
+    }
+
     function pillClass(status) {
       const txt = String(status || '').toUpperCase();
       if (txt.includes('REVIEWED') || txt.includes('CONFIRM')) return 'pill ok';
@@ -1816,11 +2565,63 @@ def row_inspector_page(run_id: str, row_index: int, request: Request):
       return 'pill warn';
     }
 
+    function setMessage(id, text, tone='') {
+      const node = document.getElementById(id);
+      node.className = tone ? `message ${tone}` : 'message';
+      node.textContent = text;
+    }
+
+    function chips(items, emptyLabel='none') {
+      const values = Array.isArray(items) ? items.filter(Boolean) : [];
+      if (!values.length) return `<span class="chip">${escapeHtml(emptyLabel)}</span>`;
+      return values.map(value => `<span class="chip">${escapeHtml(String(value))}</span>`).join('');
+    }
+
+    async function loadSession() {
+      const res = await fetch('/auth/session');
+      const data = await res.json();
+      const session = data.session || {};
+      if (data.authenticated) {
+        setMessage('authMessage', `Authenticated as ${session.actor_name || 'unknown'} with role ${session.role || 'unknown'}.`, 'ok');
+      } else {
+        setMessage('authMessage', 'No active reviewer session. Login is required to load this row.', 'error');
+      }
+      return data;
+    }
+
+    async function login() {
+      const res = await fetch('/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          actor_name: document.getElementById('actorNameInput').value,
+          role: document.getElementById('roleInput').value,
+          access_code: document.getElementById('accessCodeInput').value
+        })
+      });
+      const data = await res.json();
+      setMessage('authMessage', res.ok ? `Login succeeded for ${document.getElementById('actorNameInput').value}.` : JSON.stringify(data, null, 2), res.ok ? 'ok' : 'error');
+      await loadSession();
+      if (res.ok) await loadInspector();
+    }
+
+    async function logout() {
+      await fetch('/auth/logout', { method: 'POST' });
+      setMessage('authMessage', 'Reviewer session closed.', 'ok');
+      await loadSession();
+      setMessage('inspectorMessage', 'Login required to load row detail.', 'error');
+    }
+
     async function loadInspector() {
       const res = await fetch('/runs/' + encodeURIComponent(runId) + '/review-rows/' + encodeURIComponent(rowIndex));
       const data = await res.json();
       if (!res.ok) {
-        document.getElementById('inspectorMessage').textContent = JSON.stringify(data, null, 2);
+        if (res.status === 401) {
+          setMessage('inspectorMessage', 'Authentication required. Login above, then reload this row.', 'error');
+          await loadSession();
+          return;
+        }
+        setMessage('inspectorMessage', JSON.stringify(data, null, 2), 'error');
         return;
       }
       document.getElementById('statePill').className = pillClass((data.review_controls || {}).review_state || 'pending');
@@ -1829,20 +2630,27 @@ def row_inspector_page(run_id: str, row_index: int, request: Request):
       document.getElementById('confidenceValue').textContent = String(((data.row || {}).confidence_score) ?? '-');
       document.getElementById('reviewStateValue').textContent = (data.review_controls || {}).review_state || 'pending';
       document.getElementById('reviewDecisionValue').textContent = (data.review_controls || {}).review_decision || '-';
-      document.getElementById('rowPre').textContent = JSON.stringify(data.row || {}, null, 2);
-      document.getElementById('explanationPre').textContent = JSON.stringify((data.evidence || {}).explanation || '', null, 2);
-      document.getElementById('flagsPre').textContent = JSON.stringify({
-        flags: (data.evidence || {}).flags || [],
-        fallback_events: (data.evidence || {}).fallback_events || [],
-        soft_signal_score: (data.evidence || {}).soft_signal_score ?? null,
-        soft_signal_flags: (data.evidence || {}).soft_signal_flags || [],
-        soft_signal_evidence: (data.evidence || {}).soft_signal_evidence || []
-      }, null, 2);
-      document.getElementById('disagreementPre').textContent = JSON.stringify((data.evidence || {}).disagreement, null, 2);
+      document.getElementById('rowPre').textContent = (data.row || {}).post_text || '';
+      document.getElementById('explanationPre').textContent = (data.evidence || {}).explanation || 'No explanation recorded for this row.';
+      document.getElementById('flagsPre').innerHTML = `
+        <div class="section-label">Flags</div>
+        <div class="chip-row">${chips((data.evidence || {}).flags, 'no flags')}</div>
+        <div class="section-label" style="margin-top:12px;">Fallback Events</div>
+        <div class="chip-row">${chips((data.evidence || {}).fallback_events, 'no fallbacks')}</div>
+        <div class="section-label" style="margin-top:12px;">Soft Signals</div>
+        <div class="chip-row">${chips((data.evidence || {}).soft_signal_flags, 'no soft signals')}</div>
+        <div class="muted" style="margin-top:10px;">Soft score: ${String((data.evidence || {}).soft_signal_score ?? '-')}</div>
+        <div class="muted">Soft evidence: ${((data.evidence || {}).soft_signal_evidence || []).join(' | ') || 'none'}</div>
+      `;
+      const disagreement = (data.evidence || {}).disagreement;
+      document.getElementById('disagreementPre').innerHTML = disagreement
+        ? `<details class="debug" open><summary>Disagreement evidence</summary><pre>${JSON.stringify(disagreement, null, 2)}</pre></details>`
+        : '<div class="muted">No disagreement report entry exists for this row.</div>';
+      document.getElementById('debugRowPre').textContent = JSON.stringify(data.row || {}, null, 2);
       document.getElementById('reviewStateInput').value = (data.review_controls || {}).review_state || 'pending';
       document.getElementById('reviewDecisionInput').value = (data.review_controls || {}).review_decision || '';
       document.getElementById('reviewNoteInput').value = (data.review_controls || {}).reviewer_note || '';
-      document.getElementById('inspectorMessage').textContent = `run_id=${data.run_id}\nrow_index=${data.row_index}\nrun_state=${data.run_state}\nreview_state=${(data.review_controls || {}).review_state || 'pending'}`;
+      setMessage('inspectorMessage', `Run ${data.run_id} · row ${data.row_index} · run state ${data.run_state} · review state ${(data.review_controls || {}).review_state || 'pending'}.`, 'ok');
     }
 
     async function saveInspector() {
@@ -1858,12 +2666,14 @@ def row_inspector_page(run_id: str, row_index: int, request: Request):
         body: JSON.stringify(payload)
       });
       const data = await res.json();
-      document.getElementById('inspectorMessage').textContent = JSON.stringify(data, null, 2);
+      setMessage('inspectorMessage', res.ok ? `Saved review state for row ${rowIndex}.` : JSON.stringify(data, null, 2), res.ok ? 'ok' : 'error');
       await loadInspector();
     }
 
+    loadSession();
     loadInspector();
     setInterval(loadInspector, 5000);
+    setInterval(loadSession, 15000);
   </script>
 </body>
 </html>"""

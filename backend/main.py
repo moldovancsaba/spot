@@ -3,10 +3,13 @@ import json
 import os
 import signal
 import subprocess
+import sys
+import threading
 import time
 import shutil
 import uuid
 import urllib.parse
+import urllib.request
 
 from fastapi import Body, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse
@@ -21,6 +24,7 @@ from backend.services.auth_service import (
 from backend.services.request_auth import require_permission, session_payload
 from backend.routes.ui import router as ui_router
 from backend.services.excel_service import intake_workbook, list_upload_records, read_upload_record
+from backend.services.ops_db_service import build_run_segment_summary, build_operations_overview, reset_run_segments
 from backend.services.run_state_service import (
     append_action,
     build_artifact_center,
@@ -32,7 +36,9 @@ from backend.services.run_state_service import (
     read_action_log,
     read_review_state,
     read_run_record,
+    reconcile_run_segments,
     refresh_run_record,
+    run_dir,
     run_history_dir,
     sync_review_rows_from_output,
     upsert_review_row,
@@ -45,18 +51,38 @@ from src.defaults import (
     DEFAULT_INPUT_PATH,
     DEFAULT_LANGUAGE,
     DEFAULT_LIMIT,
+    DEFAULT_LOCKED_SSOT_PATH,
     DEFAULT_MAX_WORKERS,
+    DEFAULT_OLLAMA_URL,
     DEFAULT_PRODUCTION_MODE,
     DEFAULT_PROGRESS_EVERY,
     DEFAULT_REVIEW_MODE,
     DEFAULT_SINGLE_MODEL,
     DEFAULT_SSOT_PATH,
 )
+from src.lanes import load_lane_config
 
-app = FastAPI(title="{spot} Classification Backend", version="0.4.0")
+app = FastAPI(title="{spot} Classification Backend", version="0.4.1")
 RUNS_DIR = Path(os.getenv("RUNS_DIR", str(Path(__file__).resolve().parent.parent / "runs")))
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-PYTHON_BIN = PROJECT_ROOT / ".venv" / "bin" / "python"
+PYTHON_BIN = Path(os.getenv("SPOT_NATIVE_PYTHON_BIN") or sys.executable)
+BACKEND_ACTIVE_RUN_STATES = {"STARTING", "PENDING", "VALIDATING", "PROCESSING", "WRITING", "PAUSED"}
+SUPERVISOR_PID = int(os.getenv("SPOT_NATIVE_SUPERVISOR_PID", "0") or "0")
+_SUPERVISOR_WATCHDOG_STARTED = False
+
+
+@app.get("/api/health")
+def api_health():
+    return {
+        "ok": True,
+        "status": "online",
+        "launch": {"ready": True},
+        "service": "{spot} Classification Backend",
+        "version": "0.4.1",
+        "auth_enabled": auth_enabled(),
+        "host": "127.0.0.1",
+        "port": 8765,
+    }
 
 
 @app.get("/auth/config")
@@ -118,6 +144,8 @@ def auth_logout(request: Request, response: Response):
 
 
 def _ssot_path_from_payload(payload: dict) -> Path:
+    if DEFAULT_PRODUCTION_MODE:
+        return Path(os.getenv("SPOT_LOCKED_SSOT_PATH", DEFAULT_LOCKED_SSOT_PATH))
     return Path(str(payload.get("ssot", DEFAULT_SSOT_PATH)))
 
 
@@ -139,7 +167,7 @@ def _resolve_input_path_from_payload(payload: dict) -> str:
 @app.get("/runs/{run_id}")
 def get_run(run_id: str, request: Request):
     require_permission(request, "view")
-    run = refresh_run_record(runs_dir=RUNS_DIR, run_id=run_id)
+    run = refresh_run_record(runs_dir=RUNS_DIR, run_id=run_id, sync_review_rows=False)
     if run:
         return run
     progress_path = RUNS_DIR / run_id / "progress.json"
@@ -181,7 +209,7 @@ def list_runs(request: Request):
 @app.get("/runs/{run_id}/state")
 def get_run_state(run_id: str, request: Request):
     require_permission(request, "view")
-    run = refresh_run_record(runs_dir=RUNS_DIR, run_id=run_id)
+    run = refresh_run_record(runs_dir=RUNS_DIR, run_id=run_id, sync_review_rows=False)
     if not run:
         raise HTTPException(status_code=404, detail="run not found")
     return run
@@ -326,10 +354,20 @@ def get_upload(upload_id: str, request: Request):
     return record
 
 
+@app.get("/operations/overview")
+def operations_overview(request: Request):
+    require_permission(request, "view")
+    return build_operations_overview(runs_dir=RUNS_DIR)
+
+
 @app.post("/uploads/intake")
 async def upload_intake(request: Request):
     require_permission(request, "upload")
-    filename = urllib.parse.unquote(request.headers.get("x-filename", "upload.xlsx")).strip() or "upload.xlsx"
+    filename = (
+        urllib.parse.unquote(request.query_params.get("filename", "")).strip()
+        or urllib.parse.unquote(request.headers.get("x-filename", "")).strip()
+        or "upload.xlsx"
+    )
     content = await request.body()
     if not content:
         raise HTTPException(status_code=400, detail="empty request body")
@@ -383,6 +421,54 @@ def _pid_alive(pid: int | None) -> bool:
         return False
 
 
+def _pid_command(pid: int | None) -> str:
+    if not pid:
+        return ""
+    try:
+        return subprocess.check_output(
+            ["ps", "-p", str(int(pid)), "-o", "command="],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except Exception:
+        return ""
+
+
+def _pid_matches_run(pid: int | None, run_id: str) -> bool:
+    command = _pid_command(pid)
+    if not command or run_id not in command:
+        return False
+    return "backend/segment_worker.py" in command or "src.cli classify" in command
+
+
+def _resolve_run_process_pid(run_id: str, pid: int | None) -> int | None:
+    if pid and _pid_alive(pid) and _pid_matches_run(pid, run_id):
+        return int(pid)
+    discovered = _discover_classify_pid(run_id)
+    if discovered and _pid_alive(discovered) and _pid_matches_run(discovered, run_id):
+        return int(discovered)
+    return None
+
+
+def _signal_run_process(pid: int, sig: int) -> None:
+    try:
+        os.killpg(pid, sig)
+        return
+    except Exception:
+        os.kill(pid, sig)
+
+
+def _wait_for_pid_exit(pid: int | None, timeout_seconds: float = 5.0) -> bool:
+    if pid is None:
+        return True
+    deadline = time.time() + timeout_seconds
+    while time.time() < deadline:
+        if not _pid_alive(pid):
+            return True
+        time.sleep(0.1)
+    return not _pid_alive(pid)
+
+
 def _discover_classify_pid(run_id: str) -> int | None:
     try:
         out = subprocess.check_output(["ps", "aux"], text=True, stderr=subprocess.DEVNULL)
@@ -390,7 +476,9 @@ def _discover_classify_pid(run_id: str) -> int | None:
         return None
     needle = f"--run-id {run_id}"
     for line in out.splitlines():
-        if "src.cli classify" not in line or needle not in line:
+        if needle not in line:
+            continue
+        if "backend/segment_worker.py" not in line and "src.cli classify" not in line:
             continue
         parts = line.split()
         if len(parts) < 2:
@@ -431,6 +519,121 @@ def _archive_existing_run_state(run_id: str) -> None:
         counter += 1
         destination = history_root / f"{archive_name}-{counter}"
     shutil.move(str(run_dir), str(destination))
+
+
+def _ollama_server_reachable(timeout: float = 2.0) -> bool:
+    base_url = DEFAULT_OLLAMA_URL.rsplit("/api/", 1)[0]
+    tags_url = f"{base_url}/api/tags"
+    request = urllib.request.Request(tags_url, method="GET")
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return 200 <= getattr(response, "status", 0) < 300
+    except Exception:
+        return False
+
+
+def _assert_required_local_model_services_ready() -> None:
+    lane_config = load_lane_config()
+    uses_ollama = any(
+        backend == "ollama"
+        for backend in [
+            lane_config.classifier_backend,
+            lane_config.classifier_fallback_backend,
+            lane_config.drafter_backend,
+            lane_config.drafter_fallback_backend,
+            lane_config.judge_backend,
+            lane_config.judge_fallback_backend,
+        ]
+    )
+    if uses_ollama and not _ollama_server_reachable():
+        raise HTTPException(
+            status_code=409,
+            detail="ollama runtime is required by the configured lane stack but the local ollama server is not reachable",
+        )
+
+
+def _find_blocking_active_run(*, excluding_run_id: str | None = None) -> dict | None:
+    for record in _active_run_records(excluding_run_id=excluding_run_id):
+        return record
+    return None
+
+
+def _active_run_records(*, excluding_run_id: str | None = None) -> list[dict]:
+    active_records: list[dict] = []
+    for record in list_run_records(runs_dir=RUNS_DIR):
+        candidate_run_id = str(record.get("run_id") or "")
+        if not candidate_run_id or candidate_run_id == excluding_run_id:
+            continue
+        state = str(record.get("state") or "").upper()
+        if state not in BACKEND_ACTIVE_RUN_STATES:
+            continue
+        control = record.get("control") or {}
+        pid = _resolve_run_process_pid(candidate_run_id, control.get("pid"))
+        if pid is not None or state == "PAUSED":
+            active_records.append(record)
+    return active_records
+
+
+def _mark_run_shutdown_requested(run_id: str) -> dict:
+    control = _read_control(run_id) or {"run_id": run_id}
+    control["shutdown_requested"] = True
+    control["shutdown_mode"] = "suspend"
+    control["shutdown_requested_at"] = int(time.time())
+    control["paused"] = False
+    _write_control(run_id, control)
+    return control
+
+
+def _request_run_suspend(*, run_id: str, actor: str) -> dict:
+    record = refresh_run_record(runs_dir=RUNS_DIR, run_id=run_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="run not found")
+    control = _mark_run_shutdown_requested(run_id)
+    pid = _resolve_run_process_pid(run_id, control.get("pid"))
+    if pid is not None:
+        _signal_run_process(int(pid), signal.SIGTERM)
+    append_action(
+        runs_dir=RUNS_DIR,
+        run_id=run_id,
+        actor=actor,
+        action="classify_suspend_requested",
+        payload={"pid": pid, "shutdown_mode": "suspend"},
+    )
+    return {
+        "run_id": run_id,
+        "pid": pid,
+        "status": "suspend_requested",
+        "state": record.get("state"),
+    }
+
+
+def _native_supervisor_watchdog() -> None:
+    if SUPERVISOR_PID <= 0:
+        return
+    while True:
+        time.sleep(2)
+        if _pid_alive(SUPERVISOR_PID):
+            continue
+        for record in _active_run_records():
+            run_id = str(record.get("run_id") or "")
+            if not run_id:
+                continue
+            try:
+                _request_run_suspend(run_id=run_id, actor="spot-native-supervisor-watchdog")
+            except Exception:
+                pass
+        os.kill(os.getpid(), signal.SIGTERM)
+        return
+
+
+@app.on_event("startup")
+def startup_native_supervisor_watchdog() -> None:
+    global _SUPERVISOR_WATCHDOG_STARTED
+    if SUPERVISOR_PID <= 0 or _SUPERVISOR_WATCHDOG_STARTED:
+        return
+    thread = threading.Thread(target=_native_supervisor_watchdog, name="spot-native-watchdog", daemon=True)
+    thread.start()
+    _SUPERVISOR_WATCHDOG_STARTED = True
 
 
 @app.post("/agent-eval/start/{evaluation_run_id}")
@@ -502,11 +705,20 @@ def classify_start(run_id: str, request: Request, payload: dict | None = Body(de
     return _start_classify_run(run_id=run_id, payload=payload, actor=str(session.get("actor_name", "local-operator")))
 
 
-def _start_classify_run(*, run_id: str, payload: dict, actor: str) -> dict:
+def _start_classify_run(*, run_id: str, payload: dict, actor: str, resume_existing: bool = False) -> dict:
+    _assert_required_local_model_services_ready()
+    blocking_run = _find_blocking_active_run(excluding_run_id=run_id)
+    if blocking_run:
+        blocking_run_id = str(blocking_run.get("run_id") or "")
+        blocking_state = str(blocking_run.get("state") or "UNKNOWN")
+        raise HTTPException(
+            status_code=409,
+            detail=f"run '{blocking_run_id}' is already active in state '{blocking_state}'",
+        )
     control = _read_control(run_id) or {}
-    existing_pid = control.get("pid")
-    if _pid_alive(existing_pid):
-        os.kill(existing_pid, signal.SIGTERM)
+    existing_pid = _resolve_run_process_pid(run_id, control.get("pid"))
+    if existing_pid is not None:
+        _signal_run_process(existing_pid, signal.SIGTERM)
         time.sleep(0.2)
 
     run_dir = RUNS_DIR / run_id
@@ -525,46 +737,89 @@ def _start_classify_run(*, run_id: str, payload: dict, actor: str) -> dict:
     max_workers = str(payload.get("max_workers", DEFAULT_MAX_WORKERS))
     progress_every = str(payload.get("progress_every", DEFAULT_PROGRESS_EVERY))
     limit = payload.get("limit", None)
-    _archive_existing_run_state(run_id)
-    create_run_record(
-        runs_dir=RUNS_DIR,
-        run_id=run_id,
-        input_path=input_path,
-        output_path=output_path,
-        upload_id=str(payload.get("upload_id")) if payload.get("upload_id") is not None else None,
-        language=language,
-        review_mode=review_mode,
-        start_payload=payload,
-    )
-
-    cmd = [
-        str(PYTHON_BIN),
-        "-m",
-        "src.cli",
-        "classify",
-        "--input",
-        input_path,
-        "--output",
-        output_path,
-        "--run-id",
-        run_id,
-        "--language",
-        language,
-        "--review-mode",
-        review_mode,
-        "--ssot",
-        ssot_path,
-        "--runs-dir",
-        "runs",
-        "--max-workers",
-        max_workers,
-        "--progress-every",
-        progress_every,
-    ]
+    if resume_existing:
+        existing_record = read_run_record(runs_dir=RUNS_DIR, run_id=run_id)
+        if not existing_record:
+            raise HTTPException(status_code=404, detail="run not found")
+        existing_record["input_path"] = input_path
+        existing_record["output_path"] = output_path
+        existing_record["upload_id"] = str(payload.get("upload_id")) if payload.get("upload_id") is not None else existing_record.get("upload_id")
+        existing_record["language"] = language
+        existing_record["review_mode"] = review_mode
+        existing_record["start_payload"] = payload
+        existing_record["state"] = "STARTING"
+        write_run_record(runs_dir=RUNS_DIR, run_id=run_id, record=existing_record)
+    else:
+        _archive_existing_run_state(run_id)
+        create_run_record(
+            runs_dir=RUNS_DIR,
+            run_id=run_id,
+            input_path=input_path,
+            output_path=output_path,
+            upload_id=str(payload.get("upload_id")) if payload.get("upload_id") is not None else None,
+            language=language,
+            review_mode=review_mode,
+            start_payload=payload,
+        )
+    if payload.get("upload_id"):
+        if not resume_existing:
+            reset_run_segments(runs_dir=RUNS_DIR, run_id=run_id)
+        cmd = [
+            str(PYTHON_BIN),
+            str(PROJECT_ROOT / "backend" / "segment_worker.py"),
+            "--run-id",
+            run_id,
+            "--upload-id",
+            str(payload.get("upload_id") or ""),
+            "--input",
+            input_path,
+            "--output",
+            output_path,
+            "--language",
+            language,
+            "--review-mode",
+            review_mode,
+            "--ssot",
+            ssot_path,
+            "--runs-dir",
+            str(RUNS_DIR),
+            "--max-workers",
+            max_workers,
+            "--progress-every",
+            progress_every,
+        ]
+        if resume_existing:
+            cmd.append("--resume-existing")
+        log_path = RUNS_DIR / f"{run_id}-segment-worker.log"
+    else:
+        cmd = [
+            str(PYTHON_BIN),
+            "-m",
+            "src.cli",
+            "classify",
+            "--input",
+            input_path,
+            "--output",
+            output_path,
+            "--run-id",
+            run_id,
+            "--language",
+            language,
+            "--review-mode",
+            review_mode,
+            "--ssot",
+            ssot_path,
+            "--runs-dir",
+            "runs",
+            "--max-workers",
+            max_workers,
+            "--progress-every",
+            progress_every,
+        ]
+        log_path = RUNS_DIR / f"{run_id}-classify-ui.log"
     if limit is not None:
         cmd.extend(["--limit", str(limit)])
 
-    log_path = RUNS_DIR / f"{run_id}-classify-ui.log"
     log = log_path.open("w", encoding="utf-8")
     proc = subprocess.Popen(
         cmd,
@@ -588,13 +843,13 @@ def _start_classify_run(*, run_id: str, payload: dict, actor: str) -> dict:
     append_action(
         runs_dir=RUNS_DIR,
         run_id=run_id,
-        action="classify_started",
+        action="classify_recovered" if resume_existing else "classify_started",
         actor=actor,
         payload={"pid": proc.pid, "upload_id": payload.get("upload_id"), "language": language, "review_mode": review_mode},
     )
     refresh_run_record(runs_dir=RUNS_DIR, run_id=run_id)
     return {
-        "status": "started",
+        "status": "restarted" if resume_existing else "started",
         "run_id": run_id,
         "pid": proc.pid,
         "input": input_path,
@@ -607,14 +862,12 @@ def _start_classify_run(*, run_id: str, payload: dict, actor: str) -> dict:
 def classify_pause(run_id: str, request: Request):
     session = require_permission(request, "manage_run")
     control = _read_control(run_id)
-    pid = control.get("pid") if control else _discover_classify_pid(run_id)
+    pid = _resolve_run_process_pid(run_id, control.get("pid") if control else None)
     if not control:
         control = {"run_id": run_id, "pid": pid, "paused": False}
     if pid is None:
         raise HTTPException(status_code=404, detail="run process not found")
-    if not _pid_alive(pid):
-        raise HTTPException(status_code=409, detail="process not running")
-    os.kill(pid, signal.SIGSTOP)
+    _signal_run_process(pid, signal.SIGSTOP)
     control["paused"] = True
     control["paused_at"] = int(time.time())
     _write_control(run_id, control)
@@ -627,14 +880,12 @@ def classify_pause(run_id: str, request: Request):
 def classify_resume(run_id: str, request: Request):
     session = require_permission(request, "manage_run")
     control = _read_control(run_id)
-    pid = control.get("pid") if control else _discover_classify_pid(run_id)
+    pid = _resolve_run_process_pid(run_id, control.get("pid") if control else None)
     if not control:
         control = {"run_id": run_id, "pid": pid, "paused": True}
     if pid is None:
         raise HTTPException(status_code=404, detail="run process not found")
-    if not _pid_alive(pid):
-        raise HTTPException(status_code=409, detail="process not running")
-    os.kill(pid, signal.SIGCONT)
+    _signal_run_process(pid, signal.SIGCONT)
     control["paused"] = False
     control["resumed_at"] = int(time.time())
     _write_control(run_id, control)
@@ -647,13 +898,12 @@ def classify_resume(run_id: str, request: Request):
 def classify_stop(run_id: str, request: Request):
     session = require_permission(request, "manage_run")
     control = _read_control(run_id)
-    pid = control.get("pid") if control else _discover_classify_pid(run_id)
+    pid = _resolve_run_process_pid(run_id, control.get("pid") if control else None)
     if not control:
         control = {"run_id": run_id, "pid": pid, "paused": False}
     if pid is None:
         raise HTTPException(status_code=404, detail="run process not found")
-    if _pid_alive(pid):
-        os.kill(pid, signal.SIGTERM)
+    _signal_run_process(pid, signal.SIGTERM)
     control["paused"] = False
     control["stopped_at"] = int(time.time())
     control["cancelled"] = True
@@ -672,6 +922,24 @@ def run_cancel(run_id: str, request: Request):
     return classify_stop(run_id=run_id, request=request)
 
 
+@app.post("/native/runtime/suspend")
+def native_runtime_suspend(request: Request):
+    session = require_permission(request, "manage_run")
+    suspended = [
+        _request_run_suspend(
+            run_id=str(record.get("run_id") or ""),
+            actor=str(session.get("actor_name", "spot-native-supervisor")),
+        )
+        for record in _active_run_records()
+        if str(record.get("run_id") or "")
+    ]
+    return {
+        "status": "suspend_requested",
+        "active_runs": suspended,
+        "count": len(suspended),
+    }
+
+
 @app.post("/runs/{run_id}/retry")
 def run_retry(run_id: str, request: Request):
     session = require_permission(request, "manage_run")
@@ -681,7 +949,7 @@ def run_retry(run_id: str, request: Request):
     if str(record.get("state")) not in {"FAILED", "CANCELLED", "INTERRUPTED"}:
         raise HTTPException(status_code=409, detail=f"run state '{record.get('state')}' is not retryable")
     control = record.get("control") or {}
-    if _pid_alive(control.get("pid")):
+    if _resolve_run_process_pid(run_id, control.get("pid")) is not None:
         raise HTTPException(status_code=409, detail="run is still active")
     payload = dict(record.get("start_payload") or {})
     if not payload:
@@ -703,14 +971,38 @@ def run_recover(run_id: str, request: Request):
     if not record:
         raise HTTPException(status_code=404, detail="run not found")
     control = record.get("control") or {}
-    pid = control.get("pid")
+    pid = _resolve_run_process_pid(run_id, control.get("pid"))
+    segment_summary = build_run_segment_summary(runs_dir=RUNS_DIR, run_id=run_id)
+    pending_segments = int(segment_summary.get("segments_by_status", {}).get("QUEUED", 0))
+    processing_segments = int(segment_summary.get("segments_by_status", {}).get("PROCESSING", 0))
+    should_resume_worker = (
+        bool(record.get("upload_id"))
+        and pid is None
+        and str(record.get("state")) in {"INTERRUPTED", "FAILED"}
+        and (pending_segments > 0 or processing_segments > 0)
+    )
+    if should_resume_worker:
+        payload = dict(record.get("start_payload") or {})
+        if not payload:
+            raise HTTPException(status_code=409, detail="run cannot be recovered because start payload is unavailable")
+        payload.setdefault("upload_id", record.get("upload_id"))
+        payload.setdefault("language", record.get("language"))
+        payload.setdefault("review_mode", record.get("review_mode"))
+        return _start_classify_run(
+            run_id=run_id,
+            payload=payload,
+            actor=str(session.get("actor_name", "local-operator")),
+            resume_existing=True,
+        )
     recovered_status = {
         "run_id": run_id,
         "pid": pid,
-        "running": _pid_alive(pid),
+        "running": pid is not None,
         "paused": bool(control.get("paused")),
         "state": record.get("state"),
         "output_ready": bool(record.get("output_path") and Path(str(record.get("output_path"))).exists()),
+        "pending_segments": pending_segments,
+        "processing_segments": processing_segments,
     }
     append_action(
         runs_dir=RUNS_DIR,
@@ -722,15 +1014,54 @@ def run_recover(run_id: str, request: Request):
     return recovered_status
 
 
+@app.post("/runs/{run_id}/heal")
+def run_heal(run_id: str, request: Request):
+    session = require_permission(request, "manage_run")
+    actor = str(session.get("actor_name", "local-operator"))
+    record = refresh_run_record(runs_dir=RUNS_DIR, run_id=run_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="run not found")
+    payload = dict(record.get("start_payload") or {})
+    if not payload:
+        raise HTTPException(status_code=409, detail="run cannot be healed because start payload is unavailable")
+
+    control = record.get("control") or {}
+    pid = _resolve_run_process_pid(run_id, control.get("pid"))
+    upload_id = str(record.get("upload_id") or payload.get("upload_id") or "")
+    if upload_id:
+        reconcile_run_segments(runs_dir=RUNS_DIR, run_id=run_id, target_state="QUEUED")
+        _mark_run_shutdown_requested(run_id)
+    if pid is not None:
+        _signal_run_process(int(pid), signal.SIGTERM)
+        if not _wait_for_pid_exit(pid):
+            _signal_run_process(int(pid), signal.SIGKILL)
+            _wait_for_pid_exit(pid, timeout_seconds=1.5)
+
+    payload.setdefault("upload_id", record.get("upload_id"))
+    payload.setdefault("language", record.get("language"))
+    payload.setdefault("review_mode", record.get("review_mode"))
+    append_action(
+        runs_dir=RUNS_DIR,
+        run_id=run_id,
+        actor=actor,
+        action="run_heal_requested",
+        payload={"previous_pid": pid, "source_state": record.get("state"), "upload_id": payload.get("upload_id")},
+    )
+    return _start_classify_run(
+        run_id=run_id,
+        payload=payload,
+        actor=actor,
+        resume_existing=True,
+    )
+
+
 @app.get("/classify/status/{run_id}")
 def classify_status(run_id: str, request: Request):
     require_permission(request, "view")
     progress = _safe_read_json(RUNS_DIR / run_id / "progress.json")
     control = _read_control(run_id)
-    pid = control.get("pid") if control else None
-    if pid is None:
-        pid = _discover_classify_pid(run_id)
-    running = _pid_alive(pid)
+    pid = _resolve_run_process_pid(run_id, control.get("pid") if control else None)
+    running = pid is not None
     paused = bool(control.get("paused")) if control else False
     output_path = control.get("output") if control else None
     output_exists = bool(output_path and Path(output_path).exists())

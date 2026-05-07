@@ -2,8 +2,8 @@
 
 `{spot}` stands for `Smart Platform for Observing Threats`.
 
-Current workspace implementation: `0.4.0`
-Pipeline version: `mvp-0.4.0`
+Current workspace implementation: `0.4.1`
+Pipeline version: `mvp-0.4.1`
 SSOT version: `0.2`
 
 ## System Boundary
@@ -11,8 +11,8 @@ SSOT version: `0.2`
 {spot} is a local, deterministic `.xlsx` classification system.
 It processes text already present in Excel rows and produces governed Excel outputs plus audit artifacts.
 
-The next product phase adds a browser operator surface over this runtime. That browser surface does not change the system boundary: `{spot}` remains `.xlsx`-only, local-first, and auditable.
-The current browser operator surface is implemented directly in the FastAPI backend as local server-rendered pages. It is an operational layer over the core runtime, not a separate product architecture.
+The current product phase adds a browser operator surface over this runtime. That browser surface does not change the system boundary: `{spot}` remains `.xlsx`-only, local-first, and auditable.
+The current browser operator surface is implemented directly in the FastAPI backend as local server-rendered pages with a queue-backed local operations index. It is an operational layer over the core runtime, not a separate product architecture.
 
 ## Main Components
 
@@ -24,6 +24,7 @@ The current browser operator surface is implemented directly in the FastAPI back
 - Excel ingestion/output: [`src/excel_io.py`](/Users/moldovancsaba/Projects/spot/src/excel_io.py)
 - Evaluation runner: [`src/evaluation/evaluate.py`](/Users/moldovancsaba/Projects/spot/src/evaluation/evaluate.py)
 - Monitoring backend: [`backend/main.py`](/Users/moldovancsaba/Projects/spot/backend/main.py)
+- Local operations index: [`backend/services/ops_db_service.py`](/Users/moldovancsaba/Projects/spot/backend/services/ops_db_service.py)
 
 Browser operator contract:
 - [`docs/BROWSER_OPERATOR_CONTRACT.md`](/Users/moldovancsaba/Projects/spot/docs/BROWSER_OPERATOR_CONTRACT.md)
@@ -38,7 +39,8 @@ Browser operator contract:
 6. Enforce taxonomy and fallback rules
 7. Apply review policy
 8. Write output workbook
-9. Persist integrity, policy, progress, and logs
+9. Persist integrity, policy, progress, logs, and queue snapshots
+10. Surface upload, run, review, and segment status through the local browser operator dashboard
 
 ## Runtime Paths
 

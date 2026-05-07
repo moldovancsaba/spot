@@ -1,7 +1,7 @@
 # {spot} Developer Readme
 
-Document date: `2026-03-18`
-Workspace baseline: `0.4.0`
+Document date: `2026-05-03`
+Workspace baseline: `0.4.1`
 Latest shipped release: `v0.3.1`
 SSOT baseline: `0.2`
 
@@ -108,8 +108,8 @@ Current local acceptance path:
 - Keep these distinct.
 
 Current state:
-- workspace baseline: `0.4.0`
-- pipeline baseline: `mvp-0.4.0`
+- workspace baseline: `0.4.1`
+- pipeline baseline: `mvp-0.4.1`
 - latest shipped release: `v0.3.1`
 
 Update these surfaces together when the workspace baseline changes:
@@ -150,7 +150,8 @@ SPOT_PRODUCTION_MODE=1 .venv/bin/python -m src.cli preflight --ssot ssot/ssot.js
 ## Current Next Step Priority
 
 The active milestone is browser productionization:
-- current workspace baseline is `0.4.0`; `VERSION` and active docs are aligned to that baseline
+- current workspace baseline is `0.4.1`; `VERSION` and active docs are aligned to that baseline
 - browser operator baseline is implemented in code
+- queue-backed local operations and dashboard monitoring are implemented in code
 - browser smoke is synthetic integration verification, not live client acceptance proof
 - remaining pre-delivery work is release cutover plus fresh client-machine acceptance evidence on the current baseline

@@ -49,6 +49,34 @@ python3 -m src.cli bootstrap \
   --logs-dir logs
 ```
 
+```bash
+.venv/bin/python -m src.cli evaluate \
+  --input samples/sample_germany.xlsx \
+  --ssot ssot/ssot.json \
+  --runs-dir runs \
+  --evaluation-run-id eval-2000 \
+  --language de \
+  --review-mode partial \
+  --single-model mlx://mlx-community/Apertus-8B-Instruct-2509-4bit \
+  --ensemble-models ollama://qwen2.5:7b,ollama://gemma2:9b,ollama://llama3.1:8b \
+  --max-workers 1 \
+  --limit 500 \
+  --progress-every 10
+```
+
+```bash
+.venv/bin/python -m src.cli benchmark-workers \
+  --input samples/sample_germany.xlsx \
+  --ssot ssot/ssot.json \
+  --runs-dir runs \
+  --benchmark-run-id bench-001 \
+  --language de \
+  --review-mode partial \
+  --worker-values 1,2,4 \
+  --limit 500 \
+  --progress-every 10
+```
+
 Browser appliance workflow:
 - supported startup entrypoint: `bash start_browser_appliance.sh`
 - the script runs preflight first unless `SPOT_RUN_PREFLIGHT=0`
@@ -64,5 +92,8 @@ Minimum validation:
 
 ```bash
 git status --short --branch
-python3 -m py_compile src/*.py src/ensemble/*.py src/evaluation/*.py backend/main.py backend/models/*.py backend/routes/*.py backend/services/*.py backend/browser_operator_smoke.py
+python3 -m py_compile src/*.py src/ensemble/*.py src/evaluation/*.py backend/main.py backend/models/*.py backend/routes/*.py backend/services/*.py backend/browser_operator_smoke.py backend/backend_contract_regression.py backend/ops_queue_regression.py backend/segment_worker.py src/benchmark.py src/targeted_adjudication_regression.py
+.venv/bin/python backend/backend_contract_regression.py
+.venv/bin/python backend/ops_queue_regression.py
+.venv/bin/python src/targeted_adjudication_regression.py
 ```

@@ -1,8 +1,8 @@
 # {spot} Foundation Hardening Plan
 
-Current workspace implementation baseline: `0.4.0`
+Current workspace implementation baseline: `0.4.1`
 SSOT baseline: `0.2`
-Document date: `2026-03-18`
+Document date: `2026-05-03`
 
 ## Objective
 

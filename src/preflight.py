@@ -258,6 +258,7 @@ def run_preflight(ssot_path: Path, runs_dir: Path, port: int = 8765) -> dict:
                 "ollama_binary",
                 ollama_path is not None,
                 f"Ollama binary: {ollama_path or 'not found'}",
+                severity="warning",
             )
         )
 

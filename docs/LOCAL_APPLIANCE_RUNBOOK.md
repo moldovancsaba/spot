@@ -1,8 +1,8 @@
 # {spot} Local Appliance Runbook
 
-Current workspace implementation baseline: `0.4.0`
+Current workspace implementation baseline: `0.4.1`
 SSOT baseline: `0.2`
-Document date: `2026-03-18`
+Document date: `2026-05-03`
 
 ## Purpose
 
@@ -133,6 +133,19 @@ Verification boundary:
 - this smoke command validates the browser integration seams inside the local app
 - it does not replace live benchmark/UAT execution on the target delivery machine
 
+Current browser dashboard capabilities:
+- queue one or more `.xlsx` workbooks into local intake
+- inspect accepted uploads and their queue segmentation summary
+- monitor run state, row progress, segment progress, elapsed time, and average seconds per row
+- pause, resume, or stop the active run from the main dashboard
+- open review-required rows and retrieve artifacts locally
+
+Native app note:
+- `spot.app` currently uses a separate native-local workflow with watched-folder intake, native inbox history, and local run/upload fallback state
+- native runtime shutdown is now expected to suspend active segment-worker runs for later recovery instead of cancelling them
+- relaunching `spot.app` is expected to restart the loopback backend and recover an interrupted resumable run when segment state remains queued
+- the browser runbook above does not describe the native dashboard recovery logic or its watched-folder automation contract
+
 ## Preflight Command
 
 Run before first use on a machine or after runtime changes:
@@ -181,13 +194,15 @@ Main local URLs:
 
 Operator checks:
 - run state moves through validation, processing, writing, completion
-- `progress.json` updates during processing
+- row and segment counters advance on the main dashboard during processing
+- `progress.json` and `processing_stats.json` update during processing
 - `integrity_report.json` exists after completion
 
 ## Artifact Checklist
 
 Each successful classification run should retain:
 - `progress.json`
+- `processing_stats.json`
 - `integrity_report.json`
 - `policy.json`
 - `output.xlsx`

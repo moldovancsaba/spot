@@ -2,7 +2,7 @@
 
 This document is the implementation contract for the browser operator phase tracked by GitHub issue `#1`.
 
-Current contract milestone: `{spot} v0.4.0 Browser Contract & Foundations`
+Current contract milestone: `{spot} v0.4.1 Browser Contract & Foundations`
 
 ## Purpose
 
@@ -88,7 +88,7 @@ For the local appliance phase, one person may hold all three roles, but the acti
 
 ### 1. Upload
 
-The operator opens the local browser app and submits one `.xlsx` workbook.
+The operator opens the local browser app and submits one or more `.xlsx` workbooks into the local intake queue.
 
 System behavior:
 
@@ -96,6 +96,7 @@ System behavior:
 - validates file type and workbook readability
 - validates required worksheet and required columns
 - validates current runtime guardrails such as row count and maximum text length
+- segments accepted workbook rows into manageable local queue records
 
 Outcome:
 
@@ -178,8 +179,8 @@ Current backend foundation for this phase:
 
 - `GET /app` serves the local operator dashboard shell
 - `GET /` also resolves to the same dashboard
-- the dashboard currently exposes upload intake, accepted upload selection, recent runs, and run-detail inspection
-- the active browser surfaces now share a consistent navigation treatment, stronger selection states, and denser operator-facing status cards
+- the dashboard currently exposes upload queue intake, accepted upload selection, recent runs, queue metrics, and run-detail inspection
+- the active browser surfaces now share a consistent navigation treatment, stronger selection states, denser operator-facing status cards, and main-dashboard run controls
 
 ### Upload Intake Page
 
@@ -192,9 +193,10 @@ Must provide:
 
 Current backend foundation for this phase:
 
-- `POST /uploads/intake` accepts raw `.xlsx` bytes with `X-Filename`
+- `POST /uploads/intake?filename=<workbook.xlsx>` accepts raw `.xlsx` bytes with legacy `X-Filename` header fallback
 - `GET /uploads` lists persisted intake records
 - `GET /uploads/{upload_id}` returns the stored intake result
+- `GET /operations/overview` returns queue-backed upload, run, and segment summaries
 - accepted `upload_id` values can be handed into run creation
 
 ### Runs Dashboard
@@ -204,6 +206,7 @@ Must provide:
 - recent runs
 - status, language, review mode, timestamps, and next action
 - entry points to run details and pending review work
+- queue-backed metrics for row progress, segment progress, throughput, and estimated remaining work
 
 ### Run Detail Page
 
@@ -220,7 +223,8 @@ Current backend foundation for this phase:
 - `GET /runs/{run_id}/detail` returns a shaped run-detail contract
 - `GET /runs/{run_id}/view` serves a dedicated browser run-detail page
 - `POST /runs/{run_id}/cancel`, `POST /runs/{run_id}/retry`, and `POST /runs/{run_id}/recover` now support browser recovery flows
-- the current page exposes progress, review summary, next actions, recovery status, pause/resume/cancel/retry/recover controls, review-row updates, artifact visibility, and sign-off controls
+- `POST /classify/pause/{run_id}`, `POST /classify/resume/{run_id}`, and `POST /classify/stop/{run_id}` support active-run control from the main dashboard
+- the current page exposes progress, review summary, next actions, recovery status, pause/resume/stop/cancel/retry/recover controls, review-row updates, artifact visibility, and sign-off controls
 
 ### Review Queue
 

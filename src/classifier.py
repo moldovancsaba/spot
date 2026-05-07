@@ -473,6 +473,203 @@ def _sanitize_flags(flags: List[str], text: str) -> List[str]:
     return sanitized
 
 
+def _normalize_backend_result(
+    *,
+    row: InputRow,
+    drafted_text: str,
+    result: ClassificationResult,
+    text: str,
+) -> ClassificationResult:
+    result.row_index = row.row_index
+    result.raw_category = result.raw_category or ""
+    result.drafted_text = drafted_text
+    result.flags = _sanitize_flags(result.flags, text)
+    enforced_category, enforced_flags = _enforce_taxonomy(result.category, result.flags)
+    result.category = enforced_category
+    result.flags = enforced_flags
+    if not result.category:
+        result.category = "Not Antisemitic"
+        result.flags.append("EMPTY_CATEGORY_RECOVERED")
+    result.fallback_events = sorted(set(result.fallback_events or []))
+    return result
+
+
+def _should_run_targeted_second_pass(result: ClassificationResult, ssot: SSOT) -> bool:
+    if "MODEL_REQUEST_FAILED" in (result.flags or []):
+        return True
+    if "CLASSIFIER_FALLBACK_FAILED" in (result.flags or []):
+        return True
+    if "CLASSIFIER_FALLBACK" in (result.flags or []):
+        return True
+    if "LOW_CONFIDENCE" in (result.flags or []):
+        return True
+    if "SOFT_SIGNAL_REVIEW" in (result.flags or []):
+        return True
+    if result.category != "Not Antisemitic" and float(result.confidence or 0.0) < 0.9:
+        return True
+    if (result.soft_signal_score or 0.0) >= ssot.policy.soft_signal_review_threshold:
+        return True
+    return False
+
+
+def _alternate_classifier_route(model_name: str = ""):
+    primary_route = parse_model_spec(model_name, LANES.classifier_backend, LANES.classifier_model)
+    fallback_route = parse_model_spec(
+        "",
+        LANES.classifier_fallback_backend,
+        LANES.classifier_fallback_model,
+    )
+    if primary_route.version == fallback_route.version:
+        return primary_route, False
+    return fallback_route, True
+
+
+def _judge_rank(verdict: str | None) -> int:
+    if verdict == "PASS":
+        return 2
+    if verdict == "REVIEW":
+        return 1
+    if verdict == "FAIL":
+        return 0
+    return -1
+
+
+def _adjudicate_targeted_row(
+    row: InputRow,
+    initial_result: ClassificationResult,
+    ssot: SSOT,
+    review_mode: str,
+    model_name: str = "",
+) -> ClassificationResult:
+    if not _should_run_targeted_second_pass(initial_result, ssot):
+        return initial_result
+
+    text = row.post_text.strip()
+    drafted_text = initial_result.drafted_text or text
+    merged_flags = list(initial_result.flags or [])
+    fallback_events = list(initial_result.fallback_events or [])
+    model_votes = dict(initial_result.model_votes or {})
+    if initial_result.resolved_model_version:
+        model_votes.setdefault(initial_result.resolved_model_version, initial_result.category)
+
+    alternate_result: ClassificationResult | None = None
+    alternate_route, used_alternate = _alternate_classifier_route(model_name)
+    if used_alternate and text:
+        try:
+            alternate_result = _classify_with_backend(
+                drafted_text,
+                ssot,
+                backend=alternate_route.backend,
+                model_name=alternate_route.model_name,
+            )
+            alternate_result = _normalize_backend_result(
+                row=row,
+                drafted_text=drafted_text,
+                result=alternate_result,
+                text=text,
+            )
+            merged_flags.append("SECOND_PASS_RECHECK")
+            if alternate_result.resolved_model_version:
+                model_votes[alternate_result.resolved_model_version] = alternate_result.category
+            fallback_events.append("SECOND_PASS_ALT_ROUTE")
+        except Exception:
+            merged_flags.append("SECOND_PASS_UNAVAILABLE")
+            fallback_events.append("SECOND_PASS_UNAVAILABLE")
+
+    selected_result = initial_result
+    judge_score = initial_result.judge_score
+    judge_verdict = initial_result.judge_verdict
+    judge_flags: list[str] = []
+
+    if alternate_result and alternate_result.category == initial_result.category:
+        merged_flags.append("SECOND_PASS_CONFIRMED")
+        selected_result = ClassificationResult(
+            row_index=initial_result.row_index,
+            raw_category=initial_result.raw_category,
+            category=initial_result.category,
+            confidence=max(initial_result.confidence, alternate_result.confidence),
+            explanation=initial_result.explanation if len(initial_result.explanation) >= len(alternate_result.explanation) else alternate_result.explanation,
+            flags=initial_result.flags,
+            soft_signal_score=max(initial_result.soft_signal_score or 0.0, alternate_result.soft_signal_score or 0.0),
+            soft_signal_flags=sorted(set((initial_result.soft_signal_flags or []) + (alternate_result.soft_signal_flags or []))),
+            soft_signal_evidence=list(dict.fromkeys((initial_result.soft_signal_evidence or []) + (alternate_result.soft_signal_evidence or [])))[:MAX_SOFT_SIGNAL_EVIDENCE],
+            resolved_model_version=initial_result.resolved_model_version,
+            model_votes=model_votes,
+            consensus_tier=initial_result.consensus_tier,
+            minority_label=initial_result.minority_label,
+            drafted_text=drafted_text,
+            judge_score=initial_result.judge_score,
+            judge_verdict=initial_result.judge_verdict,
+            fallback_events=sorted(set(fallback_events + (alternate_result.fallback_events or []))),
+        )
+        judge_score, judge_verdict, judge_flags = run_judge(text=text, category=selected_result.category, flags=sorted(set(merged_flags)))
+    elif alternate_result and alternate_result.category != initial_result.category:
+        merged_flags.append("SECOND_PASS_DISAGREEMENT")
+        initial_judge_score, initial_judge_verdict, initial_judge_flags = run_judge(
+            text=text,
+            category=initial_result.category,
+            flags=sorted(set(merged_flags)),
+        )
+        alternate_judge_score, alternate_judge_verdict, alternate_judge_flags = run_judge(
+            text=text,
+            category=alternate_result.category,
+            flags=sorted(set(merged_flags)),
+        )
+        judge_flags = sorted(set(initial_judge_flags + alternate_judge_flags))
+        initial_rank = _judge_rank(initial_judge_verdict)
+        alternate_rank = _judge_rank(alternate_judge_verdict)
+        if alternate_rank > initial_rank or (
+            alternate_rank == initial_rank and (alternate_judge_score or 0.0) > (initial_judge_score or 0.0)
+        ):
+            selected_result = alternate_result
+            judge_score = alternate_judge_score
+            judge_verdict = alternate_judge_verdict
+            merged_flags.append("SECOND_PASS_CATEGORY_OVERRIDDEN")
+        else:
+            judge_score = initial_judge_score
+            judge_verdict = initial_judge_verdict
+        merged_flags.append("REVIEW_REQUIRED")
+        fallback_events.extend(alternate_result.fallback_events or [])
+    else:
+        judge_score, judge_verdict, judge_flags = run_judge(
+            text=text,
+            category=selected_result.category,
+            flags=sorted(set(merged_flags)),
+        )
+
+    if judge_verdict in {"REVIEW", "FAIL"}:
+        merged_flags.append("REVIEW_REQUIRED")
+    if judge_verdict == "FAIL":
+        merged_flags.append("SECOND_PASS_JUDGE_FAIL")
+    if judge_verdict == "REVIEW":
+        merged_flags.append("SECOND_PASS_JUDGE_REVIEW")
+    if "JUDGE_FALLBACK" in judge_flags:
+        fallback_events.append("JUDGE_ROUTE_FALLBACK")
+    if "JUDGE_UNAVAILABLE" in judge_flags:
+        fallback_events.append("JUDGE_UNAVAILABLE")
+
+    adjudicated = ClassificationResult(
+        row_index=selected_result.row_index,
+        raw_category=selected_result.raw_category,
+        category=selected_result.category,
+        confidence=selected_result.confidence,
+        explanation=selected_result.explanation,
+        flags=sorted(set(merged_flags + judge_flags + (selected_result.flags or []))),
+        soft_signal_score=selected_result.soft_signal_score,
+        soft_signal_flags=selected_result.soft_signal_flags,
+        soft_signal_evidence=selected_result.soft_signal_evidence,
+        resolved_model_version=selected_result.resolved_model_version,
+        model_votes=model_votes or None,
+        consensus_tier=selected_result.consensus_tier,
+        minority_label=selected_result.minority_label,
+        drafted_text=drafted_text,
+        judge_score=judge_score,
+        judge_verdict=judge_verdict,
+        fallback_events=sorted(set(fallback_events)),
+    )
+    return _apply_review_mode(adjudicated, ssot, review_mode)
+
+
 def _apply_review_mode(result: ClassificationResult, ssot: SSOT, review_mode: str) -> ClassificationResult:
     flags = list(result.flags)
     low_conf = result.confidence < ssot.policy.low_confidence_threshold
@@ -578,17 +775,9 @@ def classify_row(row: InputRow, ssot: SSOT, review_mode: str, model_name: str = 
                 resolved_model_version=primary_route.version,
                 fallback_events=["CLASSIFIER_FALLBACK_FAILED"],
             )
-    result.row_index = row.row_index
-    result.raw_category = result.raw_category or ""
-    result.drafted_text = drafted_text
-    result.flags = _sanitize_flags(result.flags + drafter_flags, text)
-    enforced_category, enforced_flags = _enforce_taxonomy(result.category, result.flags)
-    result.category = enforced_category
-    result.flags = enforced_flags
-    if not result.category:
-        result.category = "Not Antisemitic"
-        result.flags.append("EMPTY_CATEGORY_RECOVERED")
+    result.flags = result.flags + drafter_flags
     result.fallback_events = sorted(set((result.fallback_events or []) + fallback_events))
+    result = _normalize_backend_result(row=row, drafted_text=drafted_text, result=result, text=text)
     return _apply_review_mode(result, ssot, review_mode)
 
 
@@ -598,7 +787,7 @@ def classify_batch(
     max_workers: int,
     review_mode: str,
     model_name: str = "",
-    progress_callback: Callable[[int, int], None] | None = None,
+    progress_callback: Callable[[int, int, ClassificationResult], None] | None = None,
     progress_every: int = 100,
 ) -> Tuple[List[ClassificationResult], List[str]]:
     hashes = [stable_row_hash(r.item_number, r.post_text) for r in rows]
@@ -615,5 +804,16 @@ def classify_batch(
             results[idx] = future.result()
             completed += 1
             if progress_callback and (completed % progress_every == 0 or completed == total):
-                progress_callback(completed, total)
+                progress_callback(completed, total, results[idx])
+    candidate_indices = [idx for idx, result in enumerate(results) if _should_run_targeted_second_pass(result, ssot)]
+    if candidate_indices:
+        adjudication_workers = min(max_workers, max(1, len(candidate_indices)))
+        with ThreadPoolExecutor(max_workers=adjudication_workers) as pool:
+            future_to_idx = {
+                pool.submit(_adjudicate_targeted_row, rows[idx], results[idx], ssot, review_mode, model_name): idx
+                for idx in candidate_indices
+            }
+            for future in as_completed(future_to_idx):
+                idx = future_to_idx[future]
+                results[idx] = future.result()
     return results, hashes

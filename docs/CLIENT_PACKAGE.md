@@ -1,8 +1,8 @@
 # {spot} Client Package
 
-Document date: `2026-03-18`
-Workspace baseline: `0.4.0`
-Pipeline baseline: `mvp-0.4.0`
+Document date: `2026-05-03`
+Workspace baseline: `0.4.1`
+Pipeline baseline: `mvp-0.4.1`
 SSOT baseline: `0.2`
 
 ## Overview
@@ -26,7 +26,7 @@ The delivered `{spot}` package consists of:
 - local appliance runbook
 - supported browser appliance startup entrypoint
 - operator guidance
-- browser operator surface and monitoring/process-control interface
+- browser operator surface with queue intake, monitoring, and process-control interface
 - benchmark and acceptance support package
 - audit artefact structure for completed runs
 
@@ -177,7 +177,7 @@ Base delivery calculation:
 Current pre-delivery status:
 - browser operator workflow is implemented in the local appliance
 - browser smoke verification is available as deterministic integration coverage
-- fresh live acceptance evidence on the current `0.4.0` browser-enabled baseline is still required before first client delivery
+- fresh live acceptance evidence on the current `0.4.1` browser-enabled baseline is still required before first client delivery
 
 ## Reference Documents
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List, Set
 
-from openpyxl import load_workbook
+from openpyxl import Workbook, load_workbook
 from openpyxl.utils.cell import range_boundaries
 
 from .models import ClassificationResult, InputRow, SSOT
@@ -14,8 +14,9 @@ class InputFileError(RuntimeError):
 
 
 MAX_INPUT_FILE_BYTES = 25 * 1024 * 1024
-MAX_INPUT_ROWS = 50000
-MAX_POST_TEXT_LENGTH = 10000
+MAX_INPUT_ROWS = 100000
+MAX_POST_TEXT_LENGTH = 20000
+ORIGINAL_ROW_INDEX_COLUMN = "Original Row Index"
 
 
 ADDED_COLUMNS = [
@@ -79,6 +80,8 @@ def read_input_rows(path: Path, ssot: SSOT) -> List[InputRow]:
     except Exception:
         max_row = ws.max_row
 
+    original_row_index_idx = header_values.index(ORIGINAL_ROW_INDEX_COLUMN) if ORIGINAL_ROW_INDEX_COLUMN in header_values else None
+
     rows: List[InputRow] = []
     for idx, row in enumerate(ws.iter_rows(min_row=2, max_row=max_row, values_only=True), start=2):
         item_number = "" if row[0] is None else str(row[0]).strip()
@@ -92,7 +95,15 @@ def read_input_rows(path: Path, ssot: SSOT) -> List[InputRow]:
             )
         if "\x00" in post_text:
             raise InputFileError(f"Input row {idx} contains invalid null-byte content.")
-        rows.append(InputRow(row_index=idx, item_number=item_number, post_text=post_text))
+        original_row_index = idx
+        if original_row_index_idx is not None and original_row_index_idx < len(row):
+            raw_original_row_index = row[original_row_index_idx]
+            if raw_original_row_index not in {None, ""}:
+                try:
+                    original_row_index = int(raw_original_row_index)
+                except Exception as exc:  # noqa: BLE001
+                    raise InputFileError(f"Input row {idx} contains an invalid Original Row Index value.") from exc
+        rows.append(InputRow(row_index=original_row_index, item_number=item_number, post_text=post_text))
         if len(rows) > MAX_INPUT_ROWS:
             raise InputFileError(f"Input workbook exceeds the maximum supported row count of {MAX_INPUT_ROWS}.")
 
@@ -100,6 +111,76 @@ def read_input_rows(path: Path, ssot: SSOT) -> List[InputRow]:
         raise InputFileError("Input worksheet has no data rows.")
 
     return rows
+
+
+def ensure_output_columns(output_path: Path) -> None:
+    wb = load_workbook(output_path)
+    try:
+        ws = wb[wb.sheetnames[0]]
+        header = [str(v).strip() if v is not None else "" for v in next(ws.iter_rows(min_row=1, max_row=1, values_only=True))]
+        if all(column in header for column in ADDED_COLUMNS):
+            return
+        start_col = ws.max_column + 1
+        for offset, col_name in enumerate(ADDED_COLUMNS):
+            ws.cell(row=1, column=start_col + offset, value=col_name)
+        wb.save(output_path)
+    finally:
+        wb.close()
+
+
+def build_segment_input_workbook(input_path: Path, output_path: Path, row_start: int, row_end: int) -> None:
+    source = load_workbook(input_path, read_only=True, data_only=True)
+    try:
+        source_ws = source[source.sheetnames[0]]
+        header = [value for value in next(source_ws.iter_rows(min_row=1, max_row=1, values_only=True))]
+        workbook = Workbook(write_only=True)
+        worksheet = workbook.create_sheet(title=source_ws.title)
+        worksheet.append([*header[:3], ORIGINAL_ROW_INDEX_COLUMN])
+        data_row_index = 0
+        for excel_row_index, row in enumerate(source_ws.iter_rows(min_row=2, values_only=True), start=2):
+            item_number = "" if row[0] is None else str(row[0]).strip()
+            post_text = "" if row[1] is None else str(row[1]).strip()
+            category = "" if len(row) < 3 or row[2] is None else str(row[2]).strip()
+            if item_number == "" and post_text == "" and category == "":
+                continue
+            data_row_index += 1
+            if data_row_index < row_start or data_row_index > row_end:
+                continue
+            worksheet.append([row[0], row[1], row[2] if len(row) >= 3 else None, excel_row_index])
+        workbook.save(output_path)
+    finally:
+        source.close()
+
+
+def merge_segment_output(segment_output_path: Path, aggregate_output_path: Path) -> None:
+    ensure_output_columns(aggregate_output_path)
+    source = load_workbook(segment_output_path, read_only=True, data_only=True)
+    target = load_workbook(aggregate_output_path)
+    try:
+        source_ws = source[source.sheetnames[0]]
+        target_ws = target[target.sheetnames[0]]
+        source_header = [str(v).strip() if v is not None else "" for v in next(source_ws.iter_rows(min_row=1, max_row=1, values_only=True))]
+        target_header = [str(v).strip() if v is not None else "" for v in next(target_ws.iter_rows(min_row=1, max_row=1, values_only=True))]
+        if ORIGINAL_ROW_INDEX_COLUMN not in source_header:
+            raise InputFileError("Segment output is missing Original Row Index and cannot be merged.")
+        source_original_row_idx = source_header.index(ORIGINAL_ROW_INDEX_COLUMN)
+        source_output_indices = {name: source_header.index(name) for name in ADDED_COLUMNS if name in source_header}
+        target_output_columns = {name: target_header.index(name) + 1 for name in ADDED_COLUMNS if name in target_header}
+        missing_columns = [name for name in ADDED_COLUMNS if name not in target_output_columns]
+        if missing_columns:
+            raise InputFileError(f"Aggregate output is missing required output columns: {missing_columns}")
+        for row in source_ws.iter_rows(min_row=2, values_only=True):
+            raw_original_row = row[source_original_row_idx] if source_original_row_idx < len(row) else None
+            if raw_original_row in {None, ""}:
+                continue
+            target_row = int(raw_original_row)
+            for column_name, source_idx in source_output_indices.items():
+                value = row[source_idx] if source_idx < len(row) else None
+                target_ws.cell(row=target_row, column=target_output_columns[column_name], value=value)
+        target.save(aggregate_output_path)
+    finally:
+        source.close()
+        target.close()
 
 
 def write_output(
