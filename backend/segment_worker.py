@@ -21,11 +21,12 @@ from backend.services.ops_db_service import (
     claim_next_segment,
     complete_segment,
     fail_segment,
+    fetch_upload_rows_for_segment,
     reconcile_run_segments,
     reset_run_segments,
     update_segment_progress,
 )
-from src.excel_io import build_segment_input_workbook, ensure_output_columns, merge_segment_output
+from src.excel_io import build_segment_input_workbook_from_entries, ensure_output_columns, merge_segment_output, write_row_manifest
 from src.pipeline import _sha256_file
 
 
@@ -274,11 +275,63 @@ def _write_artifact_manifest(run_dir: Path) -> None:
         "processing_stats.json",
         "disagreement_report.json",
         "control.json",
+        "segment_assignment_manifest.jsonl",
     ]:
         path = run_dir / name
         if path.exists():
             manifest[name] = {"sha256": _sha256_file(path), "bytes": path.stat().st_size}
     _write_json(run_dir / "artifact_manifest.json", {"artifacts": manifest})
+
+
+def _append_segment_assignment_manifest(
+    *,
+    run_dir: Path,
+    run_id: str,
+    upload_id: str,
+    segment_id: str,
+    segment_index: int,
+    row_start: int,
+    row_end: int,
+    entries: list[dict],
+) -> None:
+    manifest_path = run_dir / "segment_assignment_manifest.jsonl"
+    existing_keys: set[tuple[int, str]] = set()
+    if manifest_path.exists():
+        for line in manifest_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                payload = json.loads(line)
+            except Exception:
+                continue
+            if not isinstance(payload, dict):
+                continue
+            try:
+                existing_keys.add((int(payload.get("row_index") or 0), str(payload.get("segment_id") or "")))
+            except Exception:
+                continue
+
+    with manifest_path.open("a", encoding="utf-8") as handle:
+        for entry in entries:
+            row_key = (int(entry.get("row_index") or 0), segment_id)
+            if row_key in existing_keys:
+                continue
+            handle.write(
+                json.dumps(
+                    {
+                        "run_id": run_id,
+                        "upload_id": upload_id,
+                        "segment_id": segment_id,
+                        "segment_index": segment_index,
+                        "segment_row_start": row_start,
+                        "segment_row_end": row_end,
+                        **entry,
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
 
 
 def _collect_segment_artifacts(segments_dir: Path) -> tuple[list[dict], list[dict], Path | None]:
@@ -354,9 +407,6 @@ def main() -> int:
     else:
         reset_run_segments(runs_dir=args.runs_dir, run_id=args.run_id)
         reconcile_message = "Waiting for queued segments"
-    if not args.output.exists():
-        shutil.copy2(args.input, args.output)
-    ensure_output_columns(args.output)
     summary = build_run_segment_summary(runs_dir=args.runs_dir, run_id=args.run_id)
     total_rows = int(summary.get("total_rows") or 0)
     completed_rows = int(summary.get("processed_rows") or 0)
@@ -416,7 +466,31 @@ def main() -> int:
                 segment_runs_dir=segment_runs_dir,
                 segment_run_id=segment_run_id,
             )
-            build_segment_input_workbook(args.input, segment_input_path, int(segment["row_start"]), int(segment["row_end"]))
+            stored_rows = fetch_upload_rows_for_segment(
+                runs_dir=args.runs_dir,
+                upload_id=args.upload_id,
+                row_start=int(segment["row_start"]),
+                row_end=int(segment["row_end"]),
+            )
+            if len(stored_rows) != segment_row_count:
+                raise RuntimeError(
+                    f"Segment {segment_id} expected {segment_row_count} stored rows but found {len(stored_rows)}."
+                )
+            segment_manifest_entries = build_segment_input_workbook_from_entries(
+                segment_input_path,
+                stored_rows,
+            )
+            write_row_manifest(segment_dir / "row_manifest.jsonl", segment_manifest_entries)
+            _append_segment_assignment_manifest(
+                run_dir=run_dir,
+                run_id=args.run_id,
+                upload_id=args.upload_id,
+                segment_id=segment_id,
+                segment_index=segment_index,
+                row_start=int(segment["row_start"]),
+                row_end=int(segment["row_end"]),
+                entries=segment_manifest_entries,
+            )
             cmd = [
                 str(PYTHON_BIN),
                 "-m",
@@ -475,7 +549,7 @@ def main() -> int:
                         state="PROCESSING",
                         started_at=started_at,
                         total_rows=total_rows,
-                        processed_rows=completed_rows,
+                        processed_rows=aggregate_processed_rows,
                         message=f"Processing segment {segment_index} ({child_processed_rows}/{segment_row_count} rows in current segment)",
                     )
                     _write_processing_stats(
@@ -483,13 +557,13 @@ def main() -> int:
                         run_id=args.run_id,
                         started_at=started_at,
                         total_rows=total_rows,
-                        processed_rows=completed_rows,
-                        threat_rows=completed_threat_rows,
-                        review_required_rows=completed_review_required_rows,
-                        judged_rows=completed_judged_rows,
-                        second_pass_candidates=completed_second_pass_candidates,
-                        second_pass_completed=completed_second_pass_completed,
-                        second_pass_overrides=completed_second_pass_overrides,
+                        processed_rows=aggregate_processed_rows,
+                        threat_rows=aggregate_threat_rows,
+                        review_required_rows=aggregate_review_required_rows,
+                        judged_rows=aggregate_judged_rows,
+                        second_pass_candidates=aggregate_second_pass_candidates,
+                        second_pass_completed=aggregate_second_pass_completed,
+                        second_pass_overrides=aggregate_second_pass_overrides,
                     )
                     time.sleep(0.5)
                 return_code = CURRENT_CHILD.wait()
@@ -509,7 +583,6 @@ def main() -> int:
                 fail_segment(runs_dir=args.runs_dir, segment_id=segment_id, error_message=error_message, state="FAILED")
                 raise RuntimeError(f"Segment {segment_id} failed.")
 
-            merge_segment_output(segment_output_path, args.output)
             complete_segment(runs_dir=args.runs_dir, segment_id=segment_id)
 
             child_stats = _safe_read_json(segment_dir / "runs" / segment_run_id / "processing_stats.json") or {}
@@ -545,6 +618,15 @@ def main() -> int:
                 second_pass_completed=completed_second_pass_completed,
                 second_pass_overrides=completed_second_pass_overrides,
             )
+
+        if args.output.exists():
+            args.output.unlink()
+        shutil.copy2(args.input, args.output)
+        ensure_output_columns(args.output)
+        for segment_dir in sorted(path for path in segments_dir.iterdir() if path.is_dir()):
+            segment_output_path = segment_dir / "output.xlsx"
+            if segment_output_path.exists():
+                merge_segment_output(segment_output_path, args.output)
 
         segment_reports, disagreement_rows, first_policy_path = _collect_segment_artifacts(segments_dir)
         if first_policy_path and first_policy_path.exists():

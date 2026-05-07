@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 from typing import List, Set
 
@@ -113,6 +115,79 @@ def read_input_rows(path: Path, ssot: SSOT) -> List[InputRow]:
     return rows
 
 
+def stable_row_hash(item_number: str, post_text: str) -> str:
+    payload = json.dumps({"item_number": item_number, "post_text": post_text}, ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def build_row_manifest_entries(rows: List[InputRow]) -> List[dict]:
+    entries: List[dict] = []
+    for sequence_index, row in enumerate(rows, start=1):
+        text = row.post_text or ""
+        entries.append(
+            {
+                "sequence_index": sequence_index,
+                "row_index": int(row.row_index),
+                "item_number": row.item_number,
+                "row_hash": stable_row_hash(row.item_number, text),
+                "post_text_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+                "post_text_length": len(text),
+            }
+        )
+    return entries
+
+
+def build_stored_row_entries(rows: List[InputRow]) -> List[dict]:
+    entries: List[dict] = []
+    for sequence_index, row in enumerate(rows, start=1):
+        text = row.post_text or ""
+        entries.append(
+            {
+                "sequence_index": sequence_index,
+                "row_index": int(row.row_index),
+                "item_number": row.item_number,
+                "post_text": text,
+                "source_category": "",
+                "row_hash": stable_row_hash(row.item_number, text),
+                "post_text_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+                "post_text_length": len(text),
+            }
+        )
+    return entries
+
+
+def write_row_manifest(path: Path, entries: List[dict]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
+        for entry in entries:
+            handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+
+def build_segment_input_workbook_from_entries(output_path: Path, entries: List[dict]) -> List[dict]:
+    workbook = Workbook(write_only=True)
+    worksheet = workbook.create_sheet(title="Sheet")
+    worksheet.append(["Item number", "Post text", "Category", ORIGINAL_ROW_INDEX_COLUMN])
+    manifest_entries: List[dict] = []
+    for entry in entries:
+        item_number = str(entry.get("item_number") or "")
+        post_text_value = str(entry.get("post_text") or "")
+        source_category = entry.get("source_category")
+        row_index = int(entry["row_index"])
+        worksheet.append([item_number, post_text_value, source_category or None, row_index])
+        manifest_entries.append(
+            {
+                "sequence_index": int(entry["sequence_index"]),
+                "row_index": row_index,
+                "item_number": item_number,
+                "row_hash": str(entry["row_hash"]),
+                "post_text_sha256": str(entry["post_text_sha256"]),
+                "post_text_length": int(entry["post_text_length"]),
+            }
+        )
+    workbook.save(output_path)
+    return manifest_entries
+
+
 def ensure_output_columns(output_path: Path) -> None:
     wb = load_workbook(output_path)
     try:
@@ -128,8 +203,9 @@ def ensure_output_columns(output_path: Path) -> None:
         wb.close()
 
 
-def build_segment_input_workbook(input_path: Path, output_path: Path, row_start: int, row_end: int) -> None:
+def build_segment_input_workbook(input_path: Path, output_path: Path, row_start: int, row_end: int) -> List[dict]:
     source = load_workbook(input_path, read_only=True, data_only=True)
+    manifest_entries: List[dict] = []
     try:
         source_ws = source[source.sheetnames[0]]
         header = [value for value in next(source_ws.iter_rows(min_row=1, max_row=1, values_only=True))]
@@ -147,9 +223,22 @@ def build_segment_input_workbook(input_path: Path, output_path: Path, row_start:
             if data_row_index < row_start or data_row_index > row_end:
                 continue
             worksheet.append([row[0], row[1], row[2] if len(row) >= 3 else None, excel_row_index])
+            item_number = "" if row[0] is None else str(row[0]).strip()
+            post_text_value = "" if row[1] is None else str(row[1]).strip()
+            manifest_entries.append(
+                {
+                    "sequence_index": data_row_index,
+                    "row_index": excel_row_index,
+                    "item_number": item_number,
+                    "row_hash": stable_row_hash(item_number, post_text_value),
+                    "post_text_sha256": hashlib.sha256(post_text_value.encode("utf-8")).hexdigest(),
+                    "post_text_length": len(post_text_value),
+                }
+            )
         workbook.save(output_path)
     finally:
         source.close()
+    return manifest_entries
 
 
 def merge_segment_output(segment_output_path: Path, aggregate_output_path: Path) -> None:

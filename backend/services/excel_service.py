@@ -5,8 +5,8 @@ import re
 import time
 from pathlib import Path
 
-from backend.services.ops_db_service import build_upload_queue_summary, record_upload
-from src.excel_io import InputFileError, MAX_INPUT_ROWS, MAX_POST_TEXT_LENGTH, read_input_rows
+from backend.services.ops_db_service import build_upload_queue_summary, record_upload, replace_upload_rows
+from src.excel_io import InputFileError, MAX_INPUT_ROWS, MAX_POST_TEXT_LENGTH, build_row_manifest_entries, build_stored_row_entries, read_input_rows, write_row_manifest
 from src.ssot_loader import SSOTError, load_ssot
 
 
@@ -55,12 +55,15 @@ def intake_workbook(
     try:
         ssot = load_ssot(ssot_path)
         rows = read_input_rows(workbook_path, ssot)
+        row_manifest_path = intake_dir / "row_manifest.jsonl"
+        write_row_manifest(row_manifest_path, build_row_manifest_entries(rows))
         record["validation"] = {
             "accepted": True,
             "row_count": len(rows),
             "expected_columns": ssot.policy.expected_columns,
             "max_input_rows": MAX_INPUT_ROWS,
             "max_post_text_length": MAX_POST_TEXT_LENGTH,
+            "row_manifest_path": str(row_manifest_path),
         }
     except (InputFileError, SSOTError) as exc:
         record["status"] = "rejected"
@@ -82,6 +85,8 @@ def intake_workbook(
         encoding="utf-8",
     )
     record["queue_summary"] = record_upload(runs_dir=runs_dir, record=record)
+    if record["status"] == "accepted":
+        replace_upload_rows(runs_dir=runs_dir, upload_id=upload_id, rows=build_stored_row_entries(rows))
     return record
 
 

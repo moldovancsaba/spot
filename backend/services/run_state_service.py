@@ -19,6 +19,7 @@ ARTIFACT_NAMES = [
     "output.xlsx",
     "integrity_report.json",
     "artifact_manifest.json",
+    "segment_assignment_manifest.jsonl",
     "policy.json",
     "logs.txt",
     "progress.json",
@@ -378,6 +379,34 @@ def _resolve_run_state(*, run_id: str, existing_state: str | None, progress: dic
     return existing
 
 
+def _normalize_state_from_segments(*, state: str, segment_summary: dict | None) -> str:
+    resolved = str(state or "UNKNOWN").upper()
+    if resolved != "COMPLETED" or not isinstance(segment_summary, dict):
+        return resolved
+
+    total_segments = int(segment_summary.get("total_segments") or 0)
+    if total_segments <= 0:
+        return resolved
+
+    status_counts = segment_summary.get("segments_by_status") or {}
+    completed_segments = int(status_counts.get("COMPLETED") or 0)
+    queued_segments = int(status_counts.get("QUEUED") or 0)
+    processing_segments = int(status_counts.get("PROCESSING") or 0)
+    failed_segments = int(status_counts.get("FAILED") or 0)
+    blocked_segments = int(status_counts.get("BLOCKED") or 0)
+    cancelled_segments = int(status_counts.get("CANCELLED") or 0)
+
+    if completed_segments >= total_segments:
+        return resolved
+    if queued_segments > 0 or processing_segments > 0:
+        return "INTERRUPTED"
+    if failed_segments > 0 or blocked_segments > 0:
+        return "FAILED"
+    if cancelled_segments > 0:
+        return "INTERRUPTED"
+    return resolved
+
+
 def upsert_review_row(
     *,
     runs_dir: Path,
@@ -440,7 +469,9 @@ def refresh_run_record(*, runs_dir: Path, run_id: str, sync_review_rows: bool = 
     detected_review = int(processing_stats.get("review_required_rows_detected") or 0) if isinstance(processing_stats, dict) else 0
     total_review = max(len(rows), detected_review)
     reviewed = sum(1 for row in rows.values() if row.get("review_state") not in {None, "", "pending"})
+    segment_summary = build_run_segment_summary(runs_dir=runs_dir, run_id=run_id)
     record["state"] = _resolve_run_state(run_id=run_id, existing_state=record.get("state"), progress=progress, control=control)
+    record["state"] = _normalize_state_from_segments(state=record["state"], segment_summary=segment_summary)
     if record["state"] == "INTERRUPTED":
         reconciled = reconcile_run_segments(runs_dir=runs_dir, run_id=run_id, target_state="QUEUED")
         if reconciled:
@@ -453,7 +484,13 @@ def refresh_run_record(*, runs_dir: Path, run_id: str, sync_review_rows: bool = 
                 control.pop("shutdown_requested_at", None)
                 control.pop("shutdown_mode", None)
             record["state"] = _resolve_run_state(run_id=run_id, existing_state=record.get("state"), progress=progress, control=control)
+            segment_summary = build_run_segment_summary(runs_dir=runs_dir, run_id=run_id)
+            record["state"] = _normalize_state_from_segments(state=record["state"], segment_summary=segment_summary)
             record["control"] = control
+    if isinstance(progress, dict):
+        progress = dict(progress)
+        if str(progress.get("state") or "").upper() == "COMPLETED" and record["state"] != "COMPLETED":
+            progress["state"] = record["state"]
     record["progress"] = progress
     record["processing_stats"] = processing_stats if isinstance(processing_stats, dict) else _fallback_processing_stats(record, progress)
     record["control"] = control
@@ -613,6 +650,7 @@ def build_artifact_center(*, runs_dir: Path, run_id: str) -> dict | None:
             "output.xlsx": "Governed output workbook",
             "integrity_report.json": "Integrity and distribution audit report",
             "artifact_manifest.json": "Artifact hash manifest",
+            "segment_assignment_manifest.jsonl": "Row-to-segment assignment ledger for audit and recovery",
             "policy.json": "Resolved run policy and route metadata",
             "logs.txt": "Execution log for the run lifecycle",
             "progress.json": "Lifecycle progress record",

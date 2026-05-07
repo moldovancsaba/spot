@@ -81,6 +81,21 @@ def _init_db(conn: sqlite3.Connection) -> None:
             FOREIGN KEY (run_id) REFERENCES runs(run_id)
         );
 
+        CREATE TABLE IF NOT EXISTS upload_rows (
+            upload_id TEXT NOT NULL,
+            sequence_index INTEGER NOT NULL,
+            row_index INTEGER NOT NULL,
+            item_number TEXT NOT NULL,
+            post_text TEXT NOT NULL,
+            source_category TEXT,
+            row_hash TEXT NOT NULL,
+            post_text_sha256 TEXT NOT NULL,
+            post_text_length INTEGER NOT NULL,
+            created_at INTEGER NOT NULL,
+            PRIMARY KEY (upload_id, sequence_index),
+            FOREIGN KEY (upload_id) REFERENCES uploads(upload_id)
+        );
+
         CREATE TABLE IF NOT EXISTS feedback_items (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             run_id TEXT,
@@ -102,6 +117,7 @@ def _init_db(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_segments_upload_id ON segments(upload_id);
         CREATE INDEX IF NOT EXISTS idx_segments_run_id ON segments(run_id);
         CREATE INDEX IF NOT EXISTS idx_runs_upload_id ON runs(upload_id);
+        CREATE INDEX IF NOT EXISTS idx_upload_rows_upload_sequence ON upload_rows(upload_id, sequence_index);
         """
     )
     _ensure_column(conn, "segments", "state", "TEXT NOT NULL DEFAULT 'READY'")
@@ -209,6 +225,34 @@ def _resolved_run_state(*, run_id: str, indexed_state: str | None, progress: dic
     return existing
 
 
+def _normalize_state_from_segments(*, state: str, segment_summary: dict | None) -> str:
+    resolved = str(state or "UNKNOWN").upper()
+    if resolved != "COMPLETED" or not isinstance(segment_summary, dict):
+        return resolved
+
+    total_segments = int(segment_summary.get("total_segments") or 0)
+    if total_segments <= 0:
+        return resolved
+
+    status_counts = segment_summary.get("segments_by_status") or {}
+    completed_segments = int(status_counts.get("COMPLETED") or 0)
+    queued_segments = int(status_counts.get("QUEUED") or 0)
+    processing_segments = int(status_counts.get("PROCESSING") or 0)
+    failed_segments = int(status_counts.get("FAILED") or 0)
+    blocked_segments = int(status_counts.get("BLOCKED") or 0)
+    cancelled_segments = int(status_counts.get("CANCELLED") or 0)
+
+    if completed_segments >= total_segments:
+        return resolved
+    if queued_segments > 0 or processing_segments > 0:
+        return "INTERRUPTED"
+    if failed_segments > 0 or blocked_segments > 0:
+        return "FAILED"
+    if cancelled_segments > 0:
+        return "INTERRUPTED"
+    return resolved
+
+
 def _resolved_run_snapshot(runs_dir: Path, run_id: str, indexed_run: sqlite3.Row | None) -> dict | None:
     if not indexed_run:
         return None
@@ -228,6 +272,8 @@ def _resolved_run_snapshot(runs_dir: Path, run_id: str, indexed_run: sqlite3.Row
         control.pop("shutdown_mode", None)
     processing_stats = _safe_read_json(run_dir / "processing_stats.json")
     state = _resolved_run_state(run_id=run_id, indexed_state=str(indexed_run["state"] or ""), progress=progress, control=control)
+    segment_summary = build_run_segment_summary(runs_dir=runs_dir, run_id=run_id)
+    state = _normalize_state_from_segments(state=state, segment_summary=segment_summary)
     processed_rows = int(progress.get("processed_rows") or 0) if isinstance(progress, dict) else int(indexed_run["processed_rows"] or 0)
     total_rows = (
         int(progress.get("total_rows"))
@@ -332,6 +378,50 @@ def record_upload(*, runs_dir: Path, record: dict, segment_size: int = DEFAULT_S
         _append_event(conn, "upload", record["upload_id"], "upload_recorded", record)
         conn.commit()
     return build_upload_queue_summary(runs_dir=runs_dir, upload_id=record["upload_id"])
+
+
+def replace_upload_rows(*, runs_dir: Path, upload_id: str, rows: list[dict]) -> None:
+    now = _now_ts()
+    with _connect(runs_dir) as conn:
+        conn.execute("DELETE FROM upload_rows WHERE upload_id = ?", (upload_id,))
+        for row in rows:
+            conn.execute(
+                """
+                INSERT INTO upload_rows (
+                    upload_id, sequence_index, row_index, item_number, post_text, source_category,
+                    row_hash, post_text_sha256, post_text_length, created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    upload_id,
+                    int(row["sequence_index"]),
+                    int(row["row_index"]),
+                    str(row.get("item_number") or ""),
+                    str(row.get("post_text") or ""),
+                    str(row.get("source_category") or ""),
+                    str(row["row_hash"]),
+                    str(row["post_text_sha256"]),
+                    int(row["post_text_length"]),
+                    now,
+                ),
+            )
+        conn.commit()
+
+
+def fetch_upload_rows_for_segment(*, runs_dir: Path, upload_id: str, row_start: int, row_end: int) -> list[dict]:
+    with _connect(runs_dir) as conn:
+        rows = conn.execute(
+            """
+            SELECT upload_id, sequence_index, row_index, item_number, post_text, source_category,
+                   row_hash, post_text_sha256, post_text_length
+            FROM upload_rows
+            WHERE upload_id = ? AND sequence_index BETWEEN ? AND ?
+            ORDER BY sequence_index ASC
+            """,
+            (upload_id, row_start, row_end),
+        ).fetchall()
+    return [dict(row) for row in rows]
 
 
 def register_run(*, runs_dir: Path, run_id: str, upload_id: str | None, language: str, review_mode: str, state: str) -> None:
@@ -732,7 +822,19 @@ def build_upload_queue_summary(*, runs_dir: Path, upload_id: str) -> dict:
         )
         total_segment_rows = sum(int(segment["row_count"] or 0) for segment in segments)
         resolved_run = _resolved_run_snapshot(runs_dir, str(run["run_id"]), run) if run else None
-        row_progress_pct = round((segment_processed_rows / total_segment_rows) * 100, 2) if total_segment_rows else (resolved_run or {}).get("row_progress_percentage", _row_progress_percentage(run))
+        run_processed_rows = int(
+            ((resolved_run or {}).get("processing_stats") or {}).get("processed_rows")
+            or ((resolved_run or {}).get("progress") or {}).get("processed_rows")
+            or ((resolved_run or {}).get("processed_rows") or 0)
+            or (run["processed_rows"] if run else 0)
+            or 0
+        )
+        effective_processed_rows = max(segment_processed_rows, run_processed_rows)
+        row_progress_pct = (
+            round((effective_processed_rows / total_segment_rows) * 100, 2)
+            if total_segment_rows
+            else (resolved_run or {}).get("row_progress_percentage", _row_progress_percentage(run))
+        )
         eta_seconds = (resolved_run or {}).get("estimated_remaining_seconds", _estimate_remaining_seconds(run))
         processing_stats = (resolved_run or {}).get("processing_stats") or _read_processing_stats(runs_dir, str(run["run_id"]) if run else None) or _fallback_processing_stats(run)
         return {

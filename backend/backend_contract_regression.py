@@ -20,8 +20,11 @@ from openpyxl import Workbook
 
 import backend.main as main_module
 from backend.services import auth_service
+from backend.services.excel_service import intake_workbook
+from backend.services.ops_db_service import fetch_upload_rows_for_segment
 from backend.services.run_state_service import create_run_record
 from backend.services import run_state_service
+from src.excel_io import build_segment_input_workbook_from_entries
 
 
 def _build_workbook_bytes() -> bytes:
@@ -173,6 +176,55 @@ class BackendContractRegressionTests(unittest.TestCase):
         archived = list(history_root.glob(f"{run_id}-*"))
         self.assertEqual(len(archived), 1)
         self.assertEqual((archived[0] / "marker.txt").read_text(encoding="utf-8"), "keep me")
+
+    def test_intake_writes_row_manifest_for_accepted_upload(self) -> None:
+        upload_id = "manifest-upload"
+        record = intake_workbook(
+            runs_dir=self.runs_dir,
+            ssot_path=PROJECT_ROOT / "ssot/ssot.json",
+            upload_id=upload_id,
+            filename="manifest.xlsx",
+            content=(PROJECT_ROOT / "samples" / "sample_germany.xlsx").read_bytes(),
+        )
+        self.assertEqual(record["status"], "accepted")
+        manifest_path = Path(record["validation"]["row_manifest_path"])
+        self.assertTrue(manifest_path.exists())
+        lines = [json.loads(line) for line in manifest_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        self.assertGreaterEqual(len(lines), 1)
+        self.assertEqual(lines[0]["sequence_index"], 1)
+        self.assertEqual(lines[0]["row_index"], 2)
+        self.assertTrue(str(lines[0]["item_number"]).strip())
+        self.assertTrue(lines[0]["row_hash"])
+        self.assertTrue(lines[0]["post_text_sha256"])
+        stored_rows = fetch_upload_rows_for_segment(runs_dir=self.runs_dir, upload_id=upload_id, row_start=1, row_end=1)
+        self.assertEqual(len(stored_rows), 1)
+        self.assertEqual(stored_rows[0]["row_index"], 2)
+        self.assertEqual(stored_rows[0]["item_number"], lines[0]["item_number"])
+        self.assertEqual(stored_rows[0]["row_hash"], lines[0]["row_hash"])
+
+    def test_segment_input_workbook_from_entries_returns_row_manifest_entries(self) -> None:
+        segment_path = self.runs_dir / "segment-input.xlsx"
+        manifest_entries = build_segment_input_workbook_from_entries(
+            segment_path,
+            [
+                {
+                    "sequence_index": 1,
+                    "row_index": 2,
+                    "item_number": "1",
+                    "post_text": "Synthetic contract test row",
+                    "source_category": "",
+                    "row_hash": "hash-1",
+                    "post_text_sha256": "sha-1",
+                    "post_text_length": 27,
+                }
+            ],
+        )
+        self.assertTrue(segment_path.exists())
+        self.assertEqual(len(manifest_entries), 1)
+        self.assertEqual(manifest_entries[0]["sequence_index"], 1)
+        self.assertEqual(manifest_entries[0]["row_index"], 2)
+        self.assertEqual(manifest_entries[0]["item_number"], "1")
+        self.assertEqual(manifest_entries[0]["row_hash"], "hash-1")
 
     def test_production_payload_restrictions_block_arbitrary_paths(self) -> None:
         main_module.DEFAULT_PRODUCTION_MODE = True
