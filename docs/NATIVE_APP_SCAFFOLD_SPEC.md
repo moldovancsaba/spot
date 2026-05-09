@@ -2,7 +2,7 @@
 
 Historical note:
 - this scaffold spec was written during the first native-shell bring-up phase
-- references to browser startup paths below are historical implementation context, not the current delivery contract
+- references to browser-era review routing or startup paths below are historical implementation context, not the current delivery contract
 
 Document date: `2026-05-05`
 Target baseline: `0.5.0`
@@ -53,12 +53,12 @@ Stage 1 scope:
 - preflight visibility
 - runtime health visibility
 - current run visibility
-- review-workspace entrypoint
-- artifacts/logs entrypoints
+- native review workspace
+- native artifact and log access
 
 Stage 1 non-goals:
 
-- reimplementing the browser review UI in SwiftUI
+- reimplementing the Python classification runtime in Swift
 - moving classification logic into Swift
 - changing the SSOT or audit model
 - broadening `{spot}` beyond the current `.xlsx` contract
@@ -104,7 +104,7 @@ These are non-negotiable implementation rules for `spot.app`:
 7. The install path must remain full-bundle verified replacement only.
 8. The runtime must write to operator-local writable directories, never inside the installed app bundle.
 9. Native launch verification must fail closed when preflight or runtime readiness fails.
-10. The native shell must treat browser review/auth surfaces as protected operator UI, not public local web pages.
+10. The native shell must treat operator review and auth flows as native-first protected UI, not public local web pages.
 
 ## Directory Shape
 
@@ -232,7 +232,7 @@ Required bundled runtime content in phase 1:
 - `src/`
 - `ssot/`
 - `requirements.txt`
-- `start_browser_appliance.sh`
+- `VERSION`
 
 Bundle only what the runtime needs.
 
@@ -419,11 +419,14 @@ Security rules for launch:
 - never point `RUNS_DIR` or logs inside `/Applications/spot.app`
 - never launch with an unlocked arbitrary SSOT in explicit production mode
 
-Phase 1 launch strategy should prefer wrapping the existing supported entrypoint:
+Phase 1 launch strategy should prefer the current supported native path:
 
-- `bash start_browser_appliance.sh`
+- `cd /Users/moldovancsaba/Projects/spot/app/macos && swift build`
+- `cd /Users/moldovancsaba/Projects/spot/app/macos && bash build-bundle.sh`
+- `cd /Users/moldovancsaba/Projects/spot/app/macos && bash install-bundle.sh`
+- `open /Applications/spot.app`
 
-That keeps the native app aligned with current repo-supported runtime behavior.
+That keeps the app aligned with the current repo-supported native runtime behavior.
 
 ## Runtime Packaging Strategy
 
@@ -520,7 +523,7 @@ Show:
 9. create `docs/NATIVE_APP_BUILD_HANDOFF.md`
 10. add validation notes to active docs once the scaffold exists
 
-Do not start by porting the browser review UI into SwiftUI.
+Do not start by porting obsolete web-review concepts into SwiftUI.
 
 ## Native Security Checklist
 

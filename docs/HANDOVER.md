@@ -1,5 +1,10 @@
 # {spot} Handover Log
 
+Historical note:
+- this file is a chronological delivery log, not the active operating contract
+- older entries intentionally preserve the browser-phase and `app/spot-app` wording that was true when those entries were written
+- current operator and startup guidance lives in [`README.md`](/Users/moldovancsaba/Projects/spot/README.md), [`READMEDEV.md`](/Users/moldovancsaba/Projects/spot/READMEDEV.md), and [`docs/LOCAL_APPLIANCE_RUNBOOK.md`](/Users/moldovancsaba/Projects/spot/docs/LOCAL_APPLIANCE_RUNBOOK.md)
+
 ## 2026-05-07 Europe/Budapest - Codex (Repository Structure And Documentation Normalization)
 
 - Objective: normalize the active repository layout and maintainer-facing documentation around the current `0.5.0` baseline.
