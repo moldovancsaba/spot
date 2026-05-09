@@ -1,5 +1,9 @@
 # {spot} Native App Scaffold Spec
 
+Historical note:
+- this scaffold spec was written during the first native-shell bring-up phase
+- references to browser startup paths below are historical implementation context, not the current delivery contract
+
 Document date: `2026-05-05`
 Target baseline: `0.5.0`
 

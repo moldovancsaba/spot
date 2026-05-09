@@ -157,8 +157,8 @@ Exit gate:
 Production is not ready until all are true:
 - SSOT loads without exceptions
 - code compiles cleanly
-- supported browser startup path works on the target machine
-- browser smoke passes as integration verification
+- supported native app build/install path works on the target machine
+- native acceptance smoke passes as integration verification
 - MLX primary route completes a real classification run
 - output workbook contains current model/prompt/SSOT/pipeline metadata
 - fallback behavior is deterministic and flagged
@@ -166,7 +166,7 @@ Production is not ready until all are true:
 - client acceptance dataset reviewed
 
 Current status:
-- the runtime and browser operator workflow are implemented
+- the runtime and native operator workflow are implemented
 - the current repo still requires fresh live client-machine acceptance evidence and release cutover before first delivery
 
 ## Deliverables To Client

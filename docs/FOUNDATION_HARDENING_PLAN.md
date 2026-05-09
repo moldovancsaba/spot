@@ -182,8 +182,8 @@ Exit gate:
 8. A fresh acceptance-ready smoke package exists under the current baseline.
 
 Current status note:
-- the core runtime, browser operator baseline, startup path, and synthetic browser smoke are implemented
-- the remaining delivery gate is fresh live acceptance evidence and release cutover on the current browser-enabled baseline
+- the core runtime, native operator baseline, and native acceptance smoke are implemented
+- the remaining delivery gate is fresh live acceptance evidence and release cutover on the current native-only baseline
 
 ## Immediate Next Steps
 

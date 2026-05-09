@@ -230,7 +230,7 @@ Current security posture:
 
 ## 14. Monitoring and Operations
 
-{spot} provides monitoring and process control through the local backend UI and the native macOS supervisor shell.
+{spot} provides monitoring and process control through the native macOS supervisor shell and its loopback runtime contract.
 
 Operational capabilities include:
 - start classification run
@@ -255,16 +255,15 @@ Generated native build folders:
 - `app/macos/dist/`
 
 Those generated folders are disposable and intentionally untracked.
-- inspect run status and artefacts
 
 This makes the system operable beyond simple CLI-only use.
 
 Current implementation stage:
 - the core runtime and native macOS operator surface are implemented
-- the browser surface is currently delivered from the FastAPI backend rather than a separate frontend application
+- the browser UI surface has been removed from the active delivery path
 - release cutover and fresh client acceptance evidence on the `0.5.0` baseline remain pending
 
-## 15. Audit Artefacts
+## 16. Audit Artefacts
 
 Each run stores evidence such as:
 - `progress.json`

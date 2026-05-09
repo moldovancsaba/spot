@@ -115,9 +115,9 @@ Low-confidence rows must be flaggable.
 
 ## 11. Operator Surface
 
-- A local browser operator surface may exist over the runtime
+- A native macOS operator surface exists over the runtime
 - That operator surface does not broaden the product boundary beyond local `.xlsx` classification
-- The browser surface is an operational interface, not a second source of product truth
+- The native surface is an operational interface, not a second source of product truth
 - Core runtime policy remains governed by this SSOT and `ssot/ssot.json`
 
 ## 12. Auditability

@@ -202,7 +202,9 @@ Current pre-delivery status:
 Supported local startup:
 
 ```bash
-cd /Users/moldovancsaba/Projects/spot
-chmod +x start_browser_appliance.sh
-bash start_browser_appliance.sh
+cd /Users/moldovancsaba/Projects/spot/app/macos
+swift build
+bash build-bundle.sh
+bash install-bundle.sh
+open /Applications/spot.app
 ```

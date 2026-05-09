@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Consolidated `{spot}` into a native-only macOS delivery baseline.
+- Removed the server-rendered browser operator UI and browser appliance startup path from the active runtime.
+- Added native acceptance smoke coverage at `app/macos/native_acceptance_smoke.py`.
+- Rebuilt active operator, acceptance, benchmark, and production docs around the native macOS surface.
+
 ## 0.5.0 - 2026-05-07
 
 - Renamed the native macOS app source root from `app/spot-app` to `app/macos`.
