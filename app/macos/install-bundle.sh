@@ -6,7 +6,7 @@ BUNDLE_DIR="$PROJECT_DIR/dist"
 APP_NAME="spot"
 SOURCE_BUNDLE="$BUNDLE_DIR/$APP_NAME.app"
 TARGET_BUNDLE="/Applications/$APP_NAME.app"
-STAGING_ROOT="${TMPDIR:-/tmp}spot-app-install"
+STAGING_ROOT="${TMPDIR:-/tmp}spot-macos-install"
 STAGED_BUNDLE="$STAGING_ROOT/$APP_NAME.app"
 
 require_bundle_file() {

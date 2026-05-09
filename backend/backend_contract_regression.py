@@ -20,11 +20,16 @@ from openpyxl import Workbook
 
 import backend.main as main_module
 from backend.services import auth_service
-from backend.services.excel_service import intake_workbook
-from backend.services.ops_db_service import fetch_upload_rows_for_segment
-from backend.services.run_state_service import create_run_record
+from backend.services.excel_service import ensure_upload_rows_materialized, intake_workbook
+from backend.services.artifact_manifest_service import build_artifact_manifest
+from backend.services.ops_db_service import fetch_run_row, fetch_upload_rows_for_segment, start_run_attempt
+from backend.services.run_state_service import build_review_queue, create_run_record
 from backend.services import run_state_service
-from src.excel_io import build_segment_input_workbook_from_entries
+from src.excel_io import build_segment_input_workbook_from_entries, read_input_rows
+from src.classifier import stable_row_hash
+from src.models import ClassificationResult
+from src.pipeline import _append_result_checkpoint, run_classification
+from src.ssot_loader import load_ssot
 
 
 def _build_workbook_bytes() -> bytes:
@@ -155,6 +160,10 @@ class BackendContractRegressionTests(unittest.TestCase):
             json={"review_state": "reviewed", "review_decision": "confirm", "reviewer_note": "done"},
         )
         self.assertEqual(reviewed.status_code, 200, reviewed.text)
+        stored_row = fetch_run_row(runs_dir=self.runs_dir, run_id=run_id, row_index=2)
+        self.assertIsNotNone(stored_row)
+        self.assertEqual((stored_row or {}).get("review_state"), "reviewed")
+        self.assertEqual((stored_row or {}).get("review_decision"), "confirm")
 
         allowed = self.client.post(
             f"/runs/{run_id}/signoff",
@@ -225,6 +234,48 @@ class BackendContractRegressionTests(unittest.TestCase):
         self.assertEqual(manifest_entries[0]["row_index"], 2)
         self.assertEqual(manifest_entries[0]["item_number"], "1")
         self.assertEqual(manifest_entries[0]["row_hash"], "hash-1")
+
+    def test_ensure_upload_rows_materialized_backfills_legacy_upload(self) -> None:
+        upload_id = "legacy-upload"
+        upload_dir = self.runs_dir / "uploads" / upload_id
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        workbook_path = upload_dir / "legacy.xlsx"
+        workbook_path.write_bytes((PROJECT_ROOT / "samples" / "sample_germany.xlsx").read_bytes())
+        expected_count = len(read_input_rows(workbook_path, load_ssot(PROJECT_ROOT / "ssot/ssot.json")))
+        upload_record = {
+            "upload_id": upload_id,
+            "filename": "legacy.xlsx",
+            "stored_path": str(workbook_path),
+            "bytes": workbook_path.stat().st_size,
+            "status": "accepted",
+            "created_at": 1771000000,
+            "validation": {"accepted": True, "row_count": expected_count},
+        }
+        from backend.services.ops_db_service import record_upload
+
+        (upload_dir / "upload.json").write_text(json.dumps(upload_record), encoding="utf-8")
+        record_upload(runs_dir=self.runs_dir, record=upload_record)
+        self.assertEqual(
+            fetch_upload_rows_for_segment(runs_dir=self.runs_dir, upload_id=upload_id, row_start=1, row_end=5),
+            [],
+        )
+
+        count = ensure_upload_rows_materialized(
+            runs_dir=self.runs_dir,
+            ssot_path=PROJECT_ROOT / "ssot/ssot.json",
+            upload_id=upload_id,
+        )
+
+        self.assertEqual(count, expected_count)
+        stored_rows = fetch_upload_rows_for_segment(runs_dir=self.runs_dir, upload_id=upload_id, row_start=1, row_end=5)
+        self.assertEqual(len(stored_rows), 5)
+        self.assertEqual(stored_rows[0]["sequence_index"], 1)
+        self.assertEqual(stored_rows[0]["row_index"], 2)
+        manifest_path = upload_dir / "row_manifest.jsonl"
+        self.assertTrue(manifest_path.exists())
+        manifest_lines = [json.loads(line) for line in manifest_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        self.assertEqual(len(manifest_lines), expected_count)
+        self.assertEqual(manifest_lines[0]["row_index"], 2)
 
     def test_production_payload_restrictions_block_arbitrary_paths(self) -> None:
         main_module.DEFAULT_PRODUCTION_MODE = True
@@ -417,6 +468,223 @@ class BackendContractRegressionTests(unittest.TestCase):
         payload = response.json()
         self.assertFalse(payload["running"])
         self.assertIsNone(payload["pid"])
+
+    def test_retry_upload_run_resumes_existing_state(self) -> None:
+        self._login_admin()
+        run_id = "retry-upload-run"
+        run_path = self.runs_dir / run_id
+        run_path.mkdir(parents=True, exist_ok=True)
+        create_run_record(
+            runs_dir=self.runs_dir,
+            run_id=run_id,
+            input_path="samples/sample_germany.xlsx",
+            output_path=str(run_path / "output.xlsx"),
+            upload_id="upload-1",
+            language="de",
+            review_mode="partial",
+            start_payload={"upload_id": "upload-1", "language": "de", "review_mode": "partial"},
+        )
+        (run_path / "progress.json").write_text(
+            json.dumps({"run_id": run_id, "state": "FAILED", "processed_rows": 10, "total_rows": 100, "progress_percentage": 10.0}),
+            encoding="utf-8",
+        )
+        (run_path / "control.json").write_text(
+            json.dumps({"run_id": run_id, "pid": None, "paused": False, "output": str(run_path / "output.xlsx")}),
+            encoding="utf-8",
+        )
+        with patch.object(
+            main_module,
+            "_start_classify_run",
+            return_value={"status": "restarted", "run_id": run_id, "pid": 12345},
+        ) as mocked_start:
+            response = self.client.post(f"/runs/{run_id}/retry")
+        self.assertEqual(response.status_code, 200, response.text)
+        mocked_start.assert_called_once()
+        self.assertTrue(bool(mocked_start.call_args.kwargs.get("resume_existing")))
+
+    def test_run_classification_resumes_from_checkpoint(self) -> None:
+        workbook_path = self.runs_dir / "resume-input.xlsx"
+        wb = Workbook()
+        ws = wb.active
+        ws.append(["Item number", "Post text", "Category"])
+        ws.append(["1", "First resume row", ""])
+        ws.append(["2", "Second resume row", ""])
+        wb.save(workbook_path)
+        wb.close()
+
+        run_id = "resume-pipeline-run"
+        run_dir = self.runs_dir / run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+        checkpoint_path = run_dir / "result_checkpoint.jsonl"
+        first_hash = stable_row_hash("1", "First resume row")
+        first_result = ClassificationResult(
+            row_index=2,
+            raw_category="Not Antisemitic",
+            category="Not Antisemitic",
+            confidence=0.91,
+            explanation="Checkpointed result.",
+            flags=[],
+            resolved_model_version="synthetic-model",
+        )
+        _append_result_checkpoint(checkpoint_path, result_index=0, row_hash=first_hash, result=first_result)
+
+        def _fake_classify_batch(rows, ssot, max_workers, review_mode, model_name="", progress_callback=None, row_completion_callback=None, progress_every=100):
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0].row_index, 3)
+            second_hash = stable_row_hash(rows[0].item_number, rows[0].post_text)
+            second_result = ClassificationResult(
+                row_index=3,
+                raw_category="Anti-Israel",
+                category="Anti-Israel",
+                confidence=0.88,
+                explanation="Resumed row result.",
+                flags=["REVIEW_REQUIRED"],
+                resolved_model_version="synthetic-model",
+            )
+            if row_completion_callback:
+                row_completion_callback(1, 1, 0, second_result, second_hash)
+            return [second_result], [second_hash]
+
+        with patch("src.pipeline.classify_batch", side_effect=_fake_classify_batch):
+            run_classification(
+                input_path=workbook_path,
+                output_path=run_dir / "output.xlsx",
+                run_id=run_id,
+                run_language="de",
+                review_mode="partial",
+                ssot_path=PROJECT_ROOT / "ssot/ssot.json",
+                runs_dir=self.runs_dir,
+                max_workers=1,
+                progress_every=1,
+                resume_existing=True,
+            )
+
+        progress = json.loads((run_dir / "progress.json").read_text(encoding="utf-8"))
+        self.assertEqual(progress["state"], "COMPLETED")
+        self.assertEqual(progress["total_rows"], 2)
+        checkpoint_lines = [json.loads(line) for line in checkpoint_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        self.assertEqual(len(checkpoint_lines), 2)
+
+    def test_run_classification_persists_canonical_rows_during_execution(self) -> None:
+        workbook_path = self.runs_dir / "canonical-input.xlsx"
+        wb = Workbook()
+        ws = wb.active
+        ws.append(["Item number", "Post text", "Category"])
+        ws.append(["1", "Canonical execution row", ""])
+        wb.save(workbook_path)
+        wb.close()
+
+        run_id = "canonical-runtime-run"
+        run_dir = self.runs_dir / run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+        create_run_record(
+            runs_dir=self.runs_dir,
+            run_id=run_id,
+            input_path=str(workbook_path),
+            output_path=str(run_dir / "output.xlsx"),
+            upload_id=None,
+            language="de",
+            review_mode="partial",
+            start_payload={"language": "de", "review_mode": "partial"},
+        )
+        attempt = start_run_attempt(runs_dir=self.runs_dir, run_id=run_id, attempt_type="start")
+
+        def _fake_classify_batch(rows, ssot, max_workers, review_mode, model_name="", progress_callback=None, row_completion_callback=None, progress_every=100):
+            result = ClassificationResult(
+                row_index=2,
+                raw_category="Anti-Israel",
+                category="Anti-Israel",
+                confidence=0.82,
+                explanation="Canonical runtime persistence.",
+                flags=["REVIEW_REQUIRED"],
+                resolved_model_version="synthetic-model",
+            )
+            row_hash = stable_row_hash(rows[0].item_number, rows[0].post_text)
+            if row_completion_callback:
+                row_completion_callback(1, 1, 0, result, row_hash)
+            return [result], [row_hash]
+
+        with patch("src.pipeline.classify_batch", side_effect=_fake_classify_batch):
+            run_classification(
+                input_path=workbook_path,
+                output_path=run_dir / "output.xlsx",
+                run_id=run_id,
+                run_language="de",
+                review_mode="partial",
+                ssot_path=PROJECT_ROOT / "ssot/ssot.json",
+                runs_dir=self.runs_dir,
+                max_workers=1,
+                progress_every=1,
+                canonical_runs_dir=self.runs_dir,
+                canonical_run_id=run_id,
+                canonical_attempt_id=str(attempt["attempt_id"]),
+            )
+
+        stored_row = fetch_run_row(runs_dir=self.runs_dir, run_id=run_id, row_index=2)
+        self.assertIsNotNone(stored_row)
+        self.assertEqual((stored_row or {}).get("assigned_category"), "Anti-Israel")
+        self.assertEqual((stored_row or {}).get("attempt_id"), attempt["attempt_id"])
+        self.assertTrue((stored_row or {}).get("review_required"))
+
+    def test_review_queue_reads_live_checkpoint_rows(self) -> None:
+        upload_id = "live-review-upload"
+        record = intake_workbook(
+            runs_dir=self.runs_dir,
+            ssot_path=PROJECT_ROOT / "ssot/ssot.json",
+            upload_id=upload_id,
+            filename="live-review.xlsx",
+            content=(PROJECT_ROOT / "samples" / "sample_germany.xlsx").read_bytes(),
+        )
+        self.assertEqual(record["status"], "accepted")
+        run_id = "live-review-run"
+        run_path = self.runs_dir / run_id
+        run_path.mkdir(parents=True, exist_ok=True)
+        create_run_record(
+            runs_dir=self.runs_dir,
+            run_id=run_id,
+            input_path=str(Path(record["stored_path"])),
+            output_path=str(run_path / "output.xlsx"),
+            upload_id=upload_id,
+            language="de",
+            review_mode="partial",
+            start_payload={"upload_id": upload_id, "language": "de", "review_mode": "partial"},
+        )
+        checkpoint_dir = run_path / "_segments" / f"{upload_id}-seg-00001" / "runs" / f"{run_id}-segment-00001"
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        _append_result_checkpoint(
+            checkpoint_dir / "result_checkpoint.jsonl",
+            result_index=0,
+            row_hash=stable_row_hash("1", "There are a lot of cultural barbarians in Germany now who hate us as Germans and abuse us as zombies or white bread. We are all pigs. That is racist, isn't it?"),
+            result=ClassificationResult(
+                row_index=2,
+                raw_category="Anti-Israel",
+                category="Anti-Israel",
+                confidence=0.77,
+                explanation="Checkpointed flagged row.",
+                flags=["REVIEW_REQUIRED"],
+                resolved_model_version="synthetic-model",
+            ),
+        )
+        queue = build_review_queue(runs_dir=self.runs_dir, run_id=run_id)
+        self.assertIsNotNone(queue)
+        rows = queue["rows"]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["row_index"], 2)
+        self.assertEqual(rows[0]["review_state"], "pending")
+        self.assertTrue(rows[0]["post_text"])
+
+    def test_artifact_manifest_catalog_includes_review_and_control_artifacts(self) -> None:
+        run_dir = self.runs_dir / "artifact-manifest-run"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        for name in ["progress.json", "processing_stats.json", "review_state.json", "signoff.json", "action_log.jsonl", "control.json"]:
+            (run_dir / name).write_text("{}", encoding="utf-8")
+        manifest = build_artifact_manifest(run_dir=run_dir, sha256_file=lambda path: f"sha-{path.name}")
+        artifacts = manifest["artifacts"]
+        self.assertIn("review_state.json", artifacts)
+        self.assertIn("signoff.json", artifacts)
+        self.assertIn("action_log.jsonl", artifacts)
+        self.assertIn("control.json", artifacts)
+        self.assertIn("processing_stats.json", artifacts)
 
 
 if __name__ == "__main__":

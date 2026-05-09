@@ -152,89 +152,96 @@ struct SpotWorkspaceView: View {
         .clipShape(RoundedRectangle(cornerRadius: 24))
     }
 
-    private var missionRow: some View {
-        HStack(alignment: .top, spacing: 20) {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("MISSION CONTROL")
-                    .font(.headline)
-                    .tracking(1.5)
-                    .foregroundStyle(.teal)
-                Text("Processing status, operator controls, throughput, and queue pressure for the currently active local workload.")
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
+    private var missionMetricColumns: [GridItem] {
+        Array(repeating: GridItem(.flexible(minimum: 160), spacing: 14), count: 6)
+    }
 
-                HStack(spacing: 14) {
-                    Button("Pause Processing") { Task { await service.performRunOperation("pause") } }
-                        .disabled(!service.canPauseActiveRun)
-                    Button("Resume Processing") { Task { await service.performRunOperation("resume") } }
-                        .disabled(!service.canResumeActiveRun)
-                    Button("Stop Run") { Task { await service.performRunOperation("cancel") } }
-                        .tint(.orange)
-                        .disabled(!service.canCancelActiveRun)
-                    Button("Retry Run") { Task { await service.performRunOperation("retry") } }
-                        .disabled(!service.canRetrySelectedRun)
-                    Button("Recover Run") { Task { await service.performRunOperation("recover") } }
-                        .disabled(!service.canRecoverSelectedRun)
-                }
+    private var missionHeader: some View {
+        GeometryReader { geometry in
+            let totalSpacing = CGFloat(14 * 5)
+            let cardWidth = max((geometry.size.width - totalSpacing) / 6, 160)
+            let leftWidth = cardWidth * 4 + 14 * 3
+            let rightWidth = cardWidth * 2 + 14
 
-                LazyVGrid(columns: fourColumns, spacing: 14) {
-                    metricCard("RUN STATE", stateStackValue, stateStackSubline, icon: "gauge.with.dots.needle", series: service.metricHistorySeries(.progressPercent), tint: stateTint(service.activeRunSummary.runState))
-                    metricCard("PROCESSED ROWS", formattedInt(activeStats?.processedRows ?? service.activeRunProcessedRows), processedRowsSubline, icon: "list.bullet.clipboard", series: service.metricHistorySeries(.processedRows))
-                    metricCard("TOTAL ROWS", formattedInt(activeStats?.totalRows ?? service.activeRunTotalRows), "Rows accepted for the active run", icon: "square.stack.3d.up", series: service.metricHistorySeries(.totalRows))
-                    metricCard("ROW PROGRESS", formattedPercent(activeProgressPercent), rowProgressSubline, icon: "chart.line.uptrend.xyaxis", series: service.metricHistorySeries(.progressPercent))
-                    metricCard("ROWS REMAINING", formattedInt(activeRowsRemaining), "Rows not yet classified", icon: "hourglass.bottomhalf.filled", series: service.metricHistorySeries(.rowsRemaining))
-                    metricCard("AVERAGE SECONDS PER ROW", formattedDecimal(activeStats?.avgSecondsPerRow), avgSecondsDeltaText, icon: "timer", series: service.metricHistorySeries(.avgSecondsPerRow), tint: avgSecondsTint)
-                    metricCard("ELAPSED PROCESSING TIME", formattedDuration(activeStats?.elapsedSeconds), "Wall-clock time since run start", icon: "clock.arrow.circlepath", series: service.metricHistorySeries(.elapsedSeconds))
-                    metricCard("REVIEW-REQUIRED ROWS", formattedInt(activeReviewRequiredRows), reviewRateDeltaText, icon: "flag.badge.ellipsis", series: service.metricHistorySeries(.reviewRequiredRows), tint: reviewRateTint)
-                }
+            HStack(alignment: .top, spacing: 14) {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("MISSION CONTROL")
+                        .font(.headline)
+                        .tracking(1.5)
+                        .foregroundStyle(.teal)
+                    Text("Processing status, operator controls, throughput, and queue pressure for the currently active local workload.")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
 
-                HStack(spacing: 12) {
-                    miniChip("Judge-Lane Rows: \(formattedInt(activeStats?.judgedRows))")
-                    miniChip("Threat Rows: \(formattedInt(activeStats?.threatRowsDetected))")
-                    miniChip("Threat Rate: \(formattedPercent(activeThreatRatePercent))")
-                    miniChip("Projected Threats: \(formattedInt(activeStats?.projectedThreatRows))")
+                    HStack(spacing: 14) {
+                        Button("Pause Processing") { Task { await service.performRunOperation("pause") } }
+                            .disabled(!service.canPauseActiveRun)
+                        Button("Resume Processing") { Task { await service.performRunOperation("resume") } }
+                            .disabled(!service.canResumeActiveRun)
+                        Button("Stop Run") { Task { await service.performRunOperation("cancel") } }
+                            .tint(.orange)
+                            .disabled(!service.canCancelActiveRun)
+                        Button("Retry Run") { Task { await service.performRunOperation("retry") } }
+                            .disabled(!service.canRetrySelectedRun)
+                        Button("Recover Run") { Task { await service.performRunOperation("recover") } }
+                            .disabled(!service.canRecoverSelectedRun)
+                    }
                 }
+                .frame(width: leftWidth, alignment: .leading)
 
-                if let warning = reviewInflationWarning {
-                    Text(warning)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(14)
-                        .background(Color.orange.opacity(0.12))
-                        .clipShape(RoundedRectangle(cornerRadius: 18))
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("OPERATIONAL SNAPSHOT")
+                        .font(.headline)
+                        .tracking(1.5)
+                        .foregroundStyle(.teal)
+                    Text("A compact readout of intake health, review load, and current queue pressure. This surface should stay readable while a run is in motion.")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
                 }
+                .frame(width: rightWidth, alignment: .leading)
             }
-            .padding(20)
-            .background(Color(NSColor.windowBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 28))
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+        .frame(height: 166, alignment: .topLeading)
+    }
 
-            VStack(alignment: .leading, spacing: 16) {
-                Text("OPERATIONAL SNAPSHOT")
-                    .font(.headline)
-                    .tracking(1.5)
-                    .foregroundStyle(.teal)
-                Text("A compact readout of intake health, review load, and current queue pressure. This surface should stay readable while a run is in motion.")
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
+    private var missionRow: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            missionHeader
 
-                LazyVGrid(columns: twoColumns, spacing: 14) {
-                    metricCard("RUN RECORDS", "\(service.availableRuns.count)", "Latest: \(service.availableRuns.first?.runID ?? "none")", icon: "tray.full", series: service.metricHistorySeries(.runRecords))
-                    metricCard("ACCEPTED WORKBOOKS", acceptedUploadCount, "Validated intake records", icon: "checklist", series: service.metricHistorySeries(.acceptedUploads))
-                    metricCard("PENDING REVIEW ROWS", "\(service.pendingReviewCount)", "Rows awaiting reviewer action", icon: "exclamationmark.bubble", series: service.metricHistorySeries(.pendingReviewRows))
-                    metricCard("SEGMENT QUEUE", overviewSegmentCount, overviewSegmentHealth, icon: "square.3.layers.3d.down.right", series: service.metricHistorySeries(.segmentQueue))
-                }
+            LazyVGrid(columns: missionMetricColumns, alignment: .leading, spacing: 14) {
+                metricCard("RUN STATE", stateStackValue, stateStackSubline, icon: "gauge.with.dots.needle", series: service.metricHistorySeries(.progressPercent), tint: stateTint(service.activeRunSummary.runState))
+                metricCard("PROCESSED ROWS", formattedInt(activeStats?.processedRows ?? service.activeRunProcessedRows), processedRowsSubline, icon: "list.bullet.clipboard", series: service.metricHistorySeries(.processedRows))
+                metricCard("TOTAL ROWS", formattedInt(activeStats?.totalRows ?? service.activeRunTotalRows), "Rows accepted for the active run", icon: "square.stack.3d.up", series: service.metricHistorySeries(.totalRows))
+                metricCard("ROW PROGRESS", formattedPercent(activeProgressPercent), rowProgressSubline, icon: "chart.line.uptrend.xyaxis", series: service.metricHistorySeries(.progressPercent))
+                metricCard("RUN RECORDS", "\(service.availableRuns.count)", "Latest: \(service.availableRuns.first?.runID ?? "none")", icon: "tray.full", series: service.metricHistorySeries(.runRecords))
+                metricCard("ACCEPTED WORKBOOKS", acceptedUploadCount, "Validated intake records", icon: "checklist", series: service.metricHistorySeries(.acceptedUploads))
+                metricCard("ROWS REMAINING", formattedInt(activeRowsRemaining), "Rows not yet classified", icon: "hourglass.bottomhalf.filled", series: service.metricHistorySeries(.rowsRemaining))
+                metricCard("AVERAGE SECONDS PER ROW", formattedDecimal(activeStats?.avgSecondsPerRow), avgSecondsDeltaText, icon: "timer", series: service.metricHistorySeries(.avgSecondsPerRow), tint: avgSecondsTint)
+                metricCard("ELAPSED PROCESSING TIME", formattedDuration(activeStats?.elapsedSeconds), "Wall-clock time since run start", icon: "clock.arrow.circlepath", series: service.metricHistorySeries(.elapsedSeconds))
+                metricCard("REVIEW-REQUIRED ROWS", formattedInt(activeReviewRequiredRows), reviewRateDeltaText, icon: "flag.badge.ellipsis", series: service.metricHistorySeries(.reviewRequiredRows), tint: reviewRateTint)
+                metricCard("PENDING REVIEW ROWS", "\(service.pendingReviewCount)", "Rows awaiting reviewer action", icon: "exclamationmark.bubble", series: service.metricHistorySeries(.pendingReviewRows))
+                metricCard("SEGMENT QUEUE", overviewSegmentCount, overviewSegmentHealth, icon: "square.3.layers.3d.down.right", series: service.metricHistorySeries(.segmentQueue))
+            }
 
-                Text(overviewNarrative)
+            HStack(spacing: 12) {
+                miniChip("Judge-Lane Rows: \(formattedInt(activeStats?.judgedRows))")
+                miniChip("Threat Rows: \(formattedInt(activeStats?.threatRowsDetected))")
+                miniChip("Threat Rate: \(formattedPercent(activeThreatRatePercent))")
+                miniChip("Projected Threats: \(formattedInt(activeStats?.projectedThreatRows))")
+            }
+
+            if let warning = reviewInflationWarning {
+                Text(warning)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(16)
-                    .background(Color(NSColor.controlBackgroundColor))
+                    .padding(14)
+                    .background(Color.orange.opacity(0.12))
                     .clipShape(RoundedRectangle(cornerRadius: 18))
             }
-            .padding(20)
-            .background(Color(NSColor.windowBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 28))
-            .frame(maxWidth: 560, alignment: .leading)
         }
+        .padding(20)
+        .background(Color(NSColor.windowBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 28))
     }
 
     private var intakeAndQueueRow: some View {
@@ -677,10 +684,6 @@ struct SpotWorkspaceView: View {
             baseline: service.historicalBaseline.reviewRequiredRate,
             suffix: "review rate vs all-time avg"
         )
-    }
-
-    private var fourColumns: [GridItem] {
-        Array(repeating: GridItem(.flexible(minimum: 140), spacing: 14), count: 4)
     }
 
     private var twoColumns: [GridItem] {

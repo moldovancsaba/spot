@@ -1,5 +1,33 @@
 # {spot} Handover Log
 
+## 2026-05-07 Europe/Budapest - Codex (Repository Structure And Documentation Normalization)
+
+- Objective: normalize the active repository layout and maintainer-facing documentation around the current `0.5.0` baseline.
+- Changes:
+  - renamed the native app source root from `app/spot-app` to `app/macos`
+  - aligned version markers to `0.5.0` across the active workspace surfaces
+  - documented that `app/macos/.build/` and `app/macos/dist/` are generated, disposable, and intentionally untracked
+  - refreshed active maintainer docs so the current baseline describes the native supervisor layer explicitly without rewriting historical delivery records
+- Files touched:
+  - `.gitignore`
+  - `VERSION`
+  - `src/__init__.py`
+  - `backend/main.py`
+  - `README.md`
+  - `READMEDEV.md`
+  - `README_BRIEF.md`
+  - `docs/LOCAL_APPLIANCE_RUNBOOK.md`
+  - `docs/CLIENT_PACKAGE.md`
+  - `docs/PROJECT_MANAGEMENT.md`
+  - `docs/BROWSER_OPERATOR_CONTRACT.md`
+  - `docs/NATIVE_APP_BUILD_HANDOFF.md`
+  - `docs/NATIVE_APP_SCAFFOLD_SPEC.md`
+  - `app/macos/README.md`
+  - `app/macos/install-bundle.sh`
+- Historical note:
+  - older entries below still reference `app/spot-app` because they describe the repo state at the time they were written
+  - do not rewrite those entries as if the historical path never existed
+
 ## 2026-05-06 Europe/Budapest - Codex (Native Supervisor Lifecycle And Resume Contract)
 
 - Objective: make `spot.app` behave like a supervised local appliance instead of a native shell with a loosely managed backend.

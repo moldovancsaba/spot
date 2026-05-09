@@ -77,22 +77,21 @@ python3 -m src.cli bootstrap \
   --progress-every 10
 ```
 
-Browser appliance workflow:
-- supported startup entrypoint: `bash start_browser_appliance.sh`
-- the script runs preflight first unless `SPOT_RUN_PREFLIGHT=0`
-- backend binds to `127.0.0.1:8765`
-- supported browser URL: `http://127.0.0.1:8765/app`
+Native app workflow:
+- supported startup path: build and launch `/Applications/spot.app` from `app/macos`
+- the native app supervises the loopback backend on `127.0.0.1:8765`
+- the supported operator surface is the native SwiftUI workspace only
 
-Browser verification workflow:
-- repo-native smoke command: `.venv/bin/python backend/browser_operator_smoke.py`
-- this validates auth, upload intake, run detail, review, artifacts, sign-off, recovery, and page renders
-- this is integration smoke only, not live client acceptance evidence
+Native verification workflow:
+- native app validation lives under `app/macos`
+- use `swift build`, `bash build-bundle.sh`, and `bash install-bundle.sh`
+- backend regressions still validate the API/runtime contract behind the native shell
 
 Minimum validation:
 
 ```bash
 git status --short --branch
-python3 -m py_compile src/*.py src/ensemble/*.py src/evaluation/*.py backend/main.py backend/models/*.py backend/routes/*.py backend/services/*.py backend/browser_operator_smoke.py backend/backend_contract_regression.py backend/ops_queue_regression.py backend/segment_worker.py src/benchmark.py src/targeted_adjudication_regression.py
+python3 -m py_compile src/*.py src/ensemble/*.py src/evaluation/*.py backend/main.py backend/models/*.py backend/routes/*.py backend/services/*.py backend/backend_contract_regression.py backend/ops_queue_regression.py backend/segment_worker.py src/benchmark.py src/targeted_adjudication_regression.py
 .venv/bin/python backend/backend_contract_regression.py
 .venv/bin/python backend/ops_queue_regression.py
 .venv/bin/python src/targeted_adjudication_regression.py

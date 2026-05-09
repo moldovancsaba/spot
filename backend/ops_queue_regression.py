@@ -15,15 +15,21 @@ from backend.segment_worker import _reset_segment_attempt_artifacts
 from backend.services import auth_service
 from backend.services.ops_db_service import (
     build_operations_overview,
+    build_run_segment_summary,
+    build_upload_queue_summary,
     claim_next_segment,
     complete_segment,
+    fetch_run_row,
     reconcile_run_segments,
     record_upload,
     register_run,
+    resume_run_segments,
+    upsert_run_rows,
     update_run_snapshot,
     update_segment_progress,
 )
 from backend.services.run_state_service import create_run_record
+from backend.services.run_state_service import sync_review_rows_from_output
 from fastapi.testclient import TestClient
 
 
@@ -198,10 +204,10 @@ class OpsQueueRegressionTests(unittest.TestCase):
         self.assertEqual(reconciled, 1)
         overview = build_operations_overview(runs_dir=self.runs_dir)
         self.assertEqual(overview["segments_by_status"]["QUEUED"], 3)
-        self.assertEqual(overview["processed_rows"], 0)
-        self.assertEqual(overview["progress_percentage"], 0.0)
+        self.assertEqual(overview["processed_rows"], 125)
+        self.assertEqual(overview["progress_percentage"], 10.42)
         summary = next(item for item in overview["recent_uploads"] if item["upload_id"] == accepted_upload_id)
-        self.assertEqual(summary["row_progress_percentage"], 0.0)
+        self.assertEqual(summary["row_progress_percentage"], 10.42)
         self.assertEqual(summary["segment_progress_percentage"], 0.0)
 
     def test_segment_attempt_reset_clears_stale_child_artifacts(self) -> None:
@@ -224,6 +230,62 @@ class OpsQueueRegressionTests(unittest.TestCase):
         self.assertFalse((segment_dir / "output.xlsx").exists())
         self.assertFalse((segment_dir / "worker.log").exists())
         self.assertFalse(child_run_dir.exists())
+
+    def test_segment_attempt_reset_preserves_child_run_when_resuming(self) -> None:
+        segment_dir = self.runs_dir / "run-y" / "_segments" / "seg-00001"
+        segment_runs_dir = segment_dir / "runs"
+        child_run_dir = segment_runs_dir / "run-y-segment-00001"
+        child_run_dir.mkdir(parents=True, exist_ok=True)
+
+        (segment_dir / "output.xlsx").write_text("stale-output", encoding="utf-8")
+        (segment_dir / "worker.log").write_text("stale-log", encoding="utf-8")
+        (child_run_dir / "progress.json").write_text(json.dumps({"processed_rows": 30}), encoding="utf-8")
+
+        _reset_segment_attempt_artifacts(
+            segment_dir=segment_dir,
+            segment_runs_dir=segment_runs_dir,
+            segment_run_id="run-y-segment-00001",
+            preserve_child_run=True,
+        )
+
+        self.assertFalse((segment_dir / "output.xlsx").exists())
+        self.assertFalse((segment_dir / "worker.log").exists())
+        self.assertTrue(child_run_dir.exists())
+
+    def test_resume_run_segments_requeues_failed_work_without_dropping_progress(self) -> None:
+        accepted_upload_id = "upload-resume"
+        upload_dir = self.runs_dir / "uploads" / accepted_upload_id
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        record = {
+            "upload_id": accepted_upload_id,
+            "filename": "resume.xlsx",
+            "stored_path": str(upload_dir / "resume.xlsx"),
+            "bytes": 1024,
+            "status": "accepted",
+            "created_at": 1770000100,
+            "validation": {"accepted": True, "row_count": 1200},
+        }
+        (upload_dir / "upload.json").write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+        record_upload(runs_dir=self.runs_dir, record=record)
+        register_run(
+            runs_dir=self.runs_dir,
+            run_id="resume-run",
+            upload_id=accepted_upload_id,
+            language="de",
+            review_mode="partial",
+            state="FAILED",
+        )
+        first_segment = claim_next_segment(runs_dir=self.runs_dir, run_id="resume-run", worker_id="worker-a")
+        self.assertIsNotNone(first_segment)
+        update_segment_progress(runs_dir=self.runs_dir, segment_id=str(first_segment["segment_id"]), processed_rows=125)
+        from backend.services.ops_db_service import fail_segment
+
+        fail_segment(runs_dir=self.runs_dir, segment_id=str(first_segment["segment_id"]), error_message="synthetic")
+        resumed = resume_run_segments(runs_dir=self.runs_dir, run_id="resume-run")
+        self.assertEqual(resumed, 3)
+        overview = build_operations_overview(runs_dir=self.runs_dir)
+        self.assertEqual(overview["processed_rows"], 125)
+        self.assertEqual(overview["segments_by_status"]["QUEUED"], 3)
 
     def test_operations_overview_does_not_count_stale_starting_run_as_active(self) -> None:
         accepted_upload_id = "upload-stale-starting"
@@ -267,6 +329,234 @@ class OpsQueueRegressionTests(unittest.TestCase):
         self.assertEqual(overview["active_uploads"], 0)
         summary = next(item for item in overview["recent_uploads"] if item["upload_id"] == accepted_upload_id)
         self.assertEqual((summary.get("run") or {}).get("state"), "INTERRUPTED")
+
+    def test_sync_review_rows_from_checkpoints_surfaces_live_rows(self) -> None:
+        accepted_upload_id = "upload-live-review"
+        upload_dir = self.runs_dir / "uploads" / accepted_upload_id
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        record = {
+            "upload_id": accepted_upload_id,
+            "filename": "live-review.xlsx",
+            "stored_path": str(upload_dir / "live-review.xlsx"),
+            "bytes": 1024,
+            "status": "accepted",
+            "created_at": 1770000300,
+            "validation": {"accepted": True, "row_count": 2},
+        }
+        (upload_dir / "upload.json").write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+        record_upload(runs_dir=self.runs_dir, record=record)
+        from backend.services.ops_db_service import replace_upload_rows
+
+        replace_upload_rows(
+            runs_dir=self.runs_dir,
+            upload_id=accepted_upload_id,
+            rows=[
+                {
+                    "sequence_index": 1,
+                    "row_index": 2,
+                    "item_number": "1",
+                    "post_text": "Checkpoint review row",
+                    "source_category": "",
+                    "row_hash": "hash-1",
+                    "post_text_sha256": "sha-1",
+                    "post_text_length": 21,
+                }
+            ],
+        )
+        run_id = "live-review-run"
+        run_dir = self.runs_dir / run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+        create_run_record(
+            runs_dir=self.runs_dir,
+            run_id=run_id,
+            input_path=str(upload_dir / "live-review.xlsx"),
+            output_path=str(run_dir / "output.xlsx"),
+            upload_id=accepted_upload_id,
+            language="de",
+            review_mode="partial",
+            start_payload={"upload_id": accepted_upload_id, "language": "de", "review_mode": "partial"},
+        )
+        checkpoint_dir = run_dir / "_segments" / f"{accepted_upload_id}-seg-00001" / "runs" / f"{run_id}-segment-00001"
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        (checkpoint_dir / "result_checkpoint.jsonl").write_text(
+            json.dumps(
+                {
+                    "result_index": 0,
+                    "row_hash": "hash-1",
+                    "result": {
+                        "row_index": 2,
+                        "raw_category": "Anti-Israel",
+                        "category": "Anti-Israel",
+                        "confidence": 0.88,
+                        "explanation": "Live checkpointed row.",
+                        "flags": ["REVIEW_REQUIRED"],
+                        "soft_signal_score": 0.0,
+                        "soft_signal_flags": [],
+                        "soft_signal_evidence": [],
+                        "resolved_model_version": "synthetic-model",
+                        "model_votes": {},
+                        "consensus_tier": None,
+                        "minority_label": None,
+                        "drafted_text": None,
+                        "judge_score": None,
+                        "judge_verdict": None,
+                        "fallback_events": [],
+                    },
+                },
+                ensure_ascii=False,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        state = sync_review_rows_from_output(runs_dir=self.runs_dir, run_id=run_id)
+        self.assertEqual(len(state.get("rows", {})), 1)
+        row = state["rows"]["2"]
+        self.assertEqual(row["assigned_category"], "Anti-Israel")
+        self.assertEqual(row["post_text"], "Checkpoint review row")
+        stored = fetch_run_row(runs_dir=self.runs_dir, run_id=run_id, row_index=2)
+        self.assertIsNotNone(stored)
+        self.assertEqual((stored or {}).get("assigned_category"), "Anti-Israel")
+        self.assertTrue((stored or {}).get("review_required"))
+
+    def test_upload_queue_summary_prefers_canonical_run_rows_for_live_progress(self) -> None:
+        accepted_upload_id = "upload-canonical-progress"
+        upload_dir = self.runs_dir / "uploads" / accepted_upload_id
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        record = {
+            "upload_id": accepted_upload_id,
+            "filename": "canonical-progress.xlsx",
+            "stored_path": str(upload_dir / "canonical-progress.xlsx"),
+            "bytes": 1024,
+            "status": "accepted",
+            "created_at": 1770000400,
+            "validation": {"accepted": True, "row_count": 2},
+        }
+        (upload_dir / "upload.json").write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+        record_upload(runs_dir=self.runs_dir, record=record)
+        from backend.services.ops_db_service import replace_upload_rows
+
+        replace_upload_rows(
+            runs_dir=self.runs_dir,
+            upload_id=accepted_upload_id,
+            rows=[
+                {
+                    "sequence_index": 1,
+                    "row_index": 2,
+                    "item_number": "1",
+                    "post_text": "Canonical progress row",
+                    "source_category": "",
+                    "row_hash": "hash-progress-1",
+                    "post_text_sha256": "sha-progress-1",
+                    "post_text_length": 22,
+                },
+                {
+                    "sequence_index": 2,
+                    "row_index": 3,
+                    "item_number": "2",
+                    "post_text": "Canonical progress row 2",
+                    "source_category": "",
+                    "row_hash": "hash-progress-2",
+                    "post_text_sha256": "sha-progress-2",
+                    "post_text_length": 24,
+                },
+            ],
+        )
+        run_id = "canonical-progress-run"
+        run_dir = self.runs_dir / run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+        create_run_record(
+            runs_dir=self.runs_dir,
+            run_id=run_id,
+            input_path=str(upload_dir / "canonical-progress.xlsx"),
+            output_path=str(run_dir / "output.xlsx"),
+            upload_id=accepted_upload_id,
+            language="de",
+            review_mode="partial",
+            start_payload={"upload_id": accepted_upload_id, "language": "de", "review_mode": "partial"},
+        )
+        register_run(
+            runs_dir=self.runs_dir,
+            run_id=run_id,
+            upload_id=accepted_upload_id,
+            language="de",
+            review_mode="partial",
+            state="PROCESSING",
+        )
+        upsert_run_rows(
+            runs_dir=self.runs_dir,
+            run_id=run_id,
+            upload_id=accepted_upload_id,
+            rows=[
+                {
+                    "row_index": 2,
+                    "assigned_category": "Anti-Israel",
+                    "confidence_score": 0.9,
+                    "explanation": "Committed canonical row.",
+                    "flags": ["REVIEW_REQUIRED"],
+                    "review_required": True,
+                }
+            ],
+        )
+
+        summary = build_upload_queue_summary(runs_dir=self.runs_dir, upload_id=accepted_upload_id)
+        self.assertEqual(summary["processed_rows"], 1)
+        self.assertEqual(summary["processing_stats"]["processed_rows"], 1)
+        self.assertEqual(summary["processing_stats"]["review_required_rows_detected"], 1)
+
+    def test_run_detail_read_does_not_reconcile_segments_on_interrupt(self) -> None:
+        self._login_admin()
+        accepted_upload_id = "upload-read-no-reconcile"
+        upload_dir = self.runs_dir / "uploads" / accepted_upload_id
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        record = {
+            "upload_id": accepted_upload_id,
+            "filename": "read-no-reconcile.xlsx",
+            "stored_path": str(upload_dir / "read-no-reconcile.xlsx"),
+            "bytes": 1024,
+            "status": "accepted",
+            "created_at": 1770000500,
+            "validation": {"accepted": True, "row_count": 1200},
+        }
+        (upload_dir / "upload.json").write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+        record_upload(runs_dir=self.runs_dir, record=record)
+
+        run_id = "interrupt-read-run"
+        run_dir = self.runs_dir / run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+        create_run_record(
+            runs_dir=self.runs_dir,
+            run_id=run_id,
+            input_path=str(upload_dir / "read-no-reconcile.xlsx"),
+            output_path=str(run_dir / "output.xlsx"),
+            upload_id=accepted_upload_id,
+            language="de",
+            review_mode="partial",
+            start_payload={"upload_id": accepted_upload_id, "language": "de", "review_mode": "partial"},
+        )
+        register_run(
+            runs_dir=self.runs_dir,
+            run_id=run_id,
+            upload_id=accepted_upload_id,
+            language="de",
+            review_mode="partial",
+            state="PROCESSING",
+        )
+        first_segment = claim_next_segment(runs_dir=self.runs_dir, run_id=run_id, worker_id="worker-a")
+        self.assertIsNotNone(first_segment)
+        (run_dir / "progress.json").write_text(
+            json.dumps({"run_id": run_id, "state": "PROCESSING", "processed_rows": 0, "total_rows": 1200, "progress_percentage": 0.0}),
+            encoding="utf-8",
+        )
+        (run_dir / "control.json").write_text(json.dumps({"run_id": run_id, "pid": None, "paused": False}), encoding="utf-8")
+
+        response = self.client.get(f"/runs/{run_id}/detail")
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["state"], "INTERRUPTED")
+        self.assertEqual(payload["segment_summary"]["segments_by_status"]["QUEUED"], 3)
+
+        raw_summary = build_run_segment_summary(runs_dir=self.runs_dir, run_id=run_id)
+        self.assertEqual(raw_summary["segments_by_status"]["PROCESSING"], 1)
 
 
 if __name__ == "__main__":

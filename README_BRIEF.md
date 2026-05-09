@@ -2,10 +2,10 @@
 
 `{spot}` stands for `Smart Platform for Observing Threats`.
 
-Current workspace implementation baseline: `0.4.1`
-Pipeline baseline: `mvp-0.4.1`
+Current workspace implementation baseline: `0.5.0`
+Pipeline baseline: `mvp-0.5.0`
 SSOT baseline: `0.2`
-Date: `2026-05-03`
+Date: `2026-05-07`
 
 ## 1. What {spot} Is
 
@@ -230,7 +230,7 @@ Current security posture:
 
 ## 14. Monitoring and Operations
 
-{spot} provides monitoring and process control through the local backend UI.
+{spot} provides monitoring and process control through the local backend UI and the native macOS supervisor shell.
 
 Operational capabilities include:
 - start classification run
@@ -238,14 +238,31 @@ Operational capabilities include:
 - resume run
 - stop run
 - monitor progress
+- recover interrupted runs
+- supervise the local backend through `spot.app`
+
+## 15. Source Layout
+
+Maintainer-facing source layout:
+- native app: [`app/macos/`](/Users/moldovancsaba/Projects/spot/app/macos)
+- backend: [`backend/`](/Users/moldovancsaba/Projects/spot/backend)
+- pipeline and CLI: [`src/`](/Users/moldovancsaba/Projects/spot/src)
+- SSOT: [`ssot/`](/Users/moldovancsaba/Projects/spot/ssot)
+- active docs: [`docs/`](/Users/moldovancsaba/Projects/spot/docs)
+
+Generated native build folders:
+- `app/macos/.build/`
+- `app/macos/dist/`
+
+Those generated folders are disposable and intentionally untracked.
 - inspect run status and artefacts
 
 This makes the system operable beyond simple CLI-only use.
 
 Current implementation stage:
-- the core runtime and browser operator surface are implemented
+- the core runtime and native macOS operator surface are implemented
 - the browser surface is currently delivered from the FastAPI backend rather than a separate frontend application
-- release cutover and fresh client acceptance evidence on the `0.4.1` baseline remain pending
+- release cutover and fresh client acceptance evidence on the `0.5.0` baseline remain pending
 
 ## 15. Audit Artefacts
 

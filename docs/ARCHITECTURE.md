@@ -2,8 +2,8 @@
 
 `{spot}` stands for `Smart Platform for Observing Threats`.
 
-Current workspace implementation: `0.4.1`
-Pipeline version: `mvp-0.4.1`
+Current workspace implementation: `0.5.0`
+Pipeline version: `mvp-0.5.0`
 SSOT version: `0.2`
 
 ## System Boundary
@@ -11,8 +11,8 @@ SSOT version: `0.2`
 {spot} is a local, deterministic `.xlsx` classification system.
 It processes text already present in Excel rows and produces governed Excel outputs plus audit artifacts.
 
-The current product phase adds a browser operator surface over this runtime. That browser surface does not change the system boundary: `{spot}` remains `.xlsx`-only, local-first, and auditable.
-The current browser operator surface is implemented directly in the FastAPI backend as local server-rendered pages with a queue-backed local operations index. It is an operational layer over the core runtime, not a separate product architecture.
+The current product phase exposes a native macOS operator workspace over this runtime. That native shell does not change the system boundary: `{spot}` remains `.xlsx`-only, local-first, and auditable.
+The native workspace is implemented in SwiftUI and supervises the loopback FastAPI backend as a local runtime contract, not as a second product surface.
 
 ## Main Components
 
@@ -23,11 +23,9 @@ The current browser operator surface is implemented directly in the FastAPI back
 - SSOT loader and validation: [`src/ssot_loader.py`](/Users/moldovancsaba/Projects/spot/src/ssot_loader.py)
 - Excel ingestion/output: [`src/excel_io.py`](/Users/moldovancsaba/Projects/spot/src/excel_io.py)
 - Evaluation runner: [`src/evaluation/evaluate.py`](/Users/moldovancsaba/Projects/spot/src/evaluation/evaluate.py)
+- Native app supervisor and operator workspace: [`app/macos/`](/Users/moldovancsaba/Projects/spot/app/macos)
 - Monitoring backend: [`backend/main.py`](/Users/moldovancsaba/Projects/spot/backend/main.py)
 - Local operations index: [`backend/services/ops_db_service.py`](/Users/moldovancsaba/Projects/spot/backend/services/ops_db_service.py)
-
-Browser operator contract:
-- [`docs/BROWSER_OPERATOR_CONTRACT.md`](/Users/moldovancsaba/Projects/spot/docs/BROWSER_OPERATOR_CONTRACT.md)
 
 ## Data Flow
 
@@ -40,7 +38,7 @@ Browser operator contract:
 7. Apply review policy
 8. Write output workbook
 9. Persist integrity, policy, progress, logs, and queue snapshots
-10. Surface upload, run, review, and segment status through the local browser operator dashboard
+10. Surface upload, run, review, and segment status through the native macOS operator workspace
 
 ## Runtime Paths
 

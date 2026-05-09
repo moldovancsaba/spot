@@ -1,5 +1,9 @@
 # {spot} Browser Phase Execution Plan
 
+Historical note:
+- this execution plan is preserved for browser-phase history only
+- it is no longer the active implementation plan
+
 This document breaks the browser operator phase into deliverable units under the active project-board stack.
 
 Primary contract:

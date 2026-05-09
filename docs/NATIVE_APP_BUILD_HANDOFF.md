@@ -4,11 +4,15 @@ This document is the exact handoff path for how `{spot}` builds and ships its na
 
 Use it when another agent needs the native app boundary without reverse-engineering the repo.
 
+Maintenance note:
+- native app source root is `app/macos`
+- generated build output under `app/macos/.build/` and `app/macos/dist/` is disposable and should not be treated as source
+
 ## Canonical Path
 
 - document: `/Users/moldovancsaba/Projects/spot/docs/NATIVE_APP_BUILD_HANDOFF.md`
-- app root: `/Users/moldovancsaba/Projects/spot/app/spot-app`
-- packaged bundle output: `/Users/moldovancsaba/Projects/spot/app/spot-app/dist/spot.app`
+- app root: `/Users/moldovancsaba/Projects/spot/app/macos`
+- packaged bundle output: `/Users/moldovancsaba/Projects/spot/app/macos/dist/spot.app`
 - installed app target: `/Applications/spot.app`
 
 ## What The Native App Is
@@ -30,14 +34,14 @@ The native shell is the operator-facing entrypoint. The Python classification ru
 
 These files define the native app build and launch contract:
 
-- package manifest: `/Users/moldovancsaba/Projects/spot/app/spot-app/Package.swift`
-- app metadata: `/Users/moldovancsaba/Projects/spot/app/spot-app/Info.plist`
-- icon build script: `/Users/moldovancsaba/Projects/spot/app/spot-app/build-icon.sh`
-- bundle build script: `/Users/moldovancsaba/Projects/spot/app/spot-app/build-bundle.sh`
-- bundle install script: `/Users/moldovancsaba/Projects/spot/app/spot-app/install-bundle.sh`
+- package manifest: `/Users/moldovancsaba/Projects/spot/app/macos/Package.swift`
+- app metadata: `/Users/moldovancsaba/Projects/spot/app/macos/Info.plist`
+- icon build script: `/Users/moldovancsaba/Projects/spot/app/macos/build-icon.sh`
+- bundle build script: `/Users/moldovancsaba/Projects/spot/app/macos/build-bundle.sh`
+- bundle install script: `/Users/moldovancsaba/Projects/spot/app/macos/install-bundle.sh`
 - dev build-and-launch script: `/Users/moldovancsaba/Projects/spot/script/build_and_run.sh`
-- app entrypoint: `/Users/moldovancsaba/Projects/spot/app/spot-app/Sources/SpotApp.swift`
-- runtime supervisor and health probing: `/Users/moldovancsaba/Projects/spot/app/spot-app/Sources/SpotCoreService.swift`
+- app entrypoint: `/Users/moldovancsaba/Projects/spot/app/macos/Sources/SpotApp.swift`
+- runtime supervisor and health probing: `/Users/moldovancsaba/Projects/spot/app/macos/Sources/SpotCoreService.swift`
 
 If any of those files change, this document must be reviewed.
 
@@ -60,7 +64,7 @@ The native workspace currently builds one executable:
 
 ### Bundle assembly
 
-`app/spot-app/build-bundle.sh` is the canonical bundle assembly script.
+`app/macos/build-bundle.sh` is the canonical bundle assembly script.
 
 It performs these steps in order:
 
@@ -83,7 +87,7 @@ It performs these steps in order:
 
 The bundle builder assumes:
 
-- the `{spot}` repo root is two levels above `app/spot-app`
+- the `{spot}` repo root is two levels above `app/macos`
 - the runtime assets live in the same repo
 - Python is not bundled in phase 1
 
@@ -121,7 +125,7 @@ Expected permissions:
 
 ## Install Contract
 
-`app/spot-app/install-bundle.sh` is the only accepted install or update path for `/Applications/spot.app`.
+`app/macos/install-bundle.sh` is the only accepted install or update path for `/Applications/spot.app`.
 
 The install script enforces this sequence:
 
@@ -153,7 +157,7 @@ It does four important things beyond just opening the app:
 1. kills previous native and bundled backend processes
 2. writes `~/Library/Application Support/spot/native-runtime.env`
 3. tightens local permissions on config and writable runtime directories
-4. builds the bundle by calling `app/spot-app/build-bundle.sh`
+4. builds the bundle by calling `app/macos/build-bundle.sh`
 5. opens the generated bundle with `open -n`
 
 If called with `--verify`, it also:
@@ -164,7 +168,7 @@ If called with `--verify`, it also:
 
 ## Runtime Ownership
 
-The native app entrypoint lives in `app/spot-app/Sources/SpotApp.swift`.
+The native app entrypoint lives in `app/macos/Sources/SpotApp.swift`.
 
 The app creates a `SpotCoreService`, starts monitoring immediately, refreshes health on launch, and exposes workspace and control-center surfaces.
 
@@ -209,14 +213,14 @@ The preferred bundled health probe is:
 ### Build only
 
 ```bash
-cd /Users/moldovancsaba/Projects/spot/app/spot-app
+cd /Users/moldovancsaba/Projects/spot/app/macos
 ./build-bundle.sh
 ```
 
 ### Install into `/Applications`
 
 ```bash
-cd /Users/moldovancsaba/Projects/spot/app/spot-app
+cd /Users/moldovancsaba/Projects/spot/app/macos
 ./install-bundle.sh
 ```
 
@@ -230,7 +234,7 @@ bash ./script/build_and_run.sh --verify
 ## Validation Checklist
 
 ```bash
-cd /Users/moldovancsaba/Projects/spot/app/spot-app
+cd /Users/moldovancsaba/Projects/spot/app/macos
 swift package dump-package >/dev/null
 bash -n ./build-icon.sh
 bash -n ./build-bundle.sh

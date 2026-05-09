@@ -1,5 +1,9 @@
 # {spot} Browser Productionization Contract
 
+Historical note:
+- this document is retained as an archive of the former browser productionization phase
+- the active delivery baseline is now native-only and no longer uses the browser UI surface
+
 This document is the implementation contract for GitHub issue `#12`.
 
 Current contract milestone: `{spot} v0.4.3 Browser Productionization`

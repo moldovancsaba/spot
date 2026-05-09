@@ -24,8 +24,11 @@ from backend.services.ops_db_service import (
     fetch_upload_rows_for_segment,
     reconcile_run_segments,
     reset_run_segments,
+    summarize_run_rows,
     update_segment_progress,
 )
+from backend.services.excel_service import ensure_upload_rows_materialized
+from backend.services.artifact_manifest_service import write_artifact_manifest
 from src.excel_io import build_segment_input_workbook_from_entries, ensure_output_columns, merge_segment_output, write_row_manifest
 from src.pipeline import _sha256_file
 
@@ -49,6 +52,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--progress-every", default="25")
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--resume-existing", action="store_true")
+    parser.add_argument("--attempt-id", default=None)
     return parser
 
 
@@ -265,22 +269,7 @@ def _write_disagreement_report(run_dir: Path, collected_rows: list[dict]) -> Non
 
 
 def _write_artifact_manifest(run_dir: Path) -> None:
-    manifest = {}
-    for name in [
-        "progress.json",
-        "policy.json",
-        "integrity_report.json",
-        "output.xlsx",
-        "logs.txt",
-        "processing_stats.json",
-        "disagreement_report.json",
-        "control.json",
-        "segment_assignment_manifest.jsonl",
-    ]:
-        path = run_dir / name
-        if path.exists():
-            manifest[name] = {"sha256": _sha256_file(path), "bytes": path.stat().st_size}
-    _write_json(run_dir / "artifact_manifest.json", {"artifacts": manifest})
+    write_artifact_manifest(run_dir=run_dir, sha256_file=_sha256_file)
 
 
 def _append_segment_assignment_manifest(
@@ -361,7 +350,13 @@ def _segment_run_id(run_id: str, segment_index: int) -> str:
     return f"{run_id}-segment-{segment_index:05d}"
 
 
-def _reset_segment_attempt_artifacts(*, segment_dir: Path, segment_runs_dir: Path, segment_run_id: str) -> None:
+def _reset_segment_attempt_artifacts(
+    *,
+    segment_dir: Path,
+    segment_runs_dir: Path,
+    segment_run_id: str,
+    preserve_child_run: bool = False,
+) -> None:
     segment_output_path = segment_dir / "output.xlsx"
     segment_log_path = segment_dir / "worker.log"
     child_run_dir = segment_runs_dir / segment_run_id
@@ -370,7 +365,7 @@ def _reset_segment_attempt_artifacts(*, segment_dir: Path, segment_runs_dir: Pat
         segment_output_path.unlink()
     if segment_log_path.exists():
         segment_log_path.unlink()
-    if child_run_dir.exists():
+    if child_run_dir.exists() and not preserve_child_run:
         shutil.rmtree(child_run_dir, ignore_errors=True)
 
 
@@ -409,15 +404,14 @@ def main() -> int:
         reconcile_message = "Waiting for queued segments"
     summary = build_run_segment_summary(runs_dir=args.runs_dir, run_id=args.run_id)
     total_rows = int(summary.get("total_rows") or 0)
-    completed_rows = int(summary.get("processed_rows") or 0)
-    existing_processing_stats = _safe_read_json(run_dir / "processing_stats.json") if args.resume_existing else None
-    if existing_processing_stats:
-        completed_threat_rows = int(existing_processing_stats.get("threat_rows_detected") or 0)
-        completed_review_required_rows = int(existing_processing_stats.get("review_required_rows_detected") or 0)
-        completed_judged_rows = int(existing_processing_stats.get("judged_rows") or 0)
-        completed_second_pass_candidates = int(existing_processing_stats.get("second_pass_candidates") or 0)
-        completed_second_pass_completed = int(existing_processing_stats.get("second_pass_completed") or 0)
-        completed_second_pass_overrides = int(existing_processing_stats.get("second_pass_overrides") or 0)
+    canonical_summary = summarize_run_rows(runs_dir=args.runs_dir, run_id=args.run_id)
+    completed_rows = int(canonical_summary.get("processed_rows") or summary.get("processed_rows") or 0)
+    completed_threat_rows = int(canonical_summary.get("threat_rows_detected") or 0)
+    completed_review_required_rows = int(canonical_summary.get("review_required_rows_detected") or 0)
+    completed_judged_rows = int(canonical_summary.get("judged_rows") or 0)
+    completed_second_pass_candidates = int(canonical_summary.get("second_pass_candidates") or 0)
+    completed_second_pass_completed = int(canonical_summary.get("second_pass_completed") or 0)
+    completed_second_pass_overrides = int(canonical_summary.get("second_pass_overrides") or 0)
     _append_log(run_dir, f"[STARTING] Segment worker booted for {args.run_id}")
     _write_progress(
         run_dir=run_dir,
@@ -460,11 +454,26 @@ def main() -> int:
             segment_runs_dir = segment_dir / "runs"
             segment_run_id = _segment_run_id(args.run_id, segment_index)
             segment_log_path = segment_dir / "worker.log"
+            child_run_dir = segment_runs_dir / segment_run_id
+            checkpoint_path = child_run_dir / "result_checkpoint.jsonl"
+            resume_segment_attempt = bool(args.resume_existing and checkpoint_path.exists())
+            resumed_segment_summary = (
+                summarize_run_rows(
+                    runs_dir=args.runs_dir,
+                    run_id=args.run_id,
+                    row_index_min=int(segment["row_start"]),
+                    row_index_max=int(segment["row_end"]),
+                )
+                if resume_segment_attempt
+                else {}
+            )
+            resumed_segment_rows = min(int((resumed_segment_summary or {}).get("processed_rows") or 0), segment_row_count)
 
             _reset_segment_attempt_artifacts(
                 segment_dir=segment_dir,
                 segment_runs_dir=segment_runs_dir,
                 segment_run_id=segment_run_id,
+                preserve_child_run=resume_segment_attempt,
             )
             stored_rows = fetch_upload_rows_for_segment(
                 runs_dir=args.runs_dir,
@@ -473,9 +482,26 @@ def main() -> int:
                 row_end=int(segment["row_end"]),
             )
             if len(stored_rows) != segment_row_count:
-                raise RuntimeError(
-                    f"Segment {segment_id} expected {segment_row_count} stored rows but found {len(stored_rows)}."
+                materialized_count = ensure_upload_rows_materialized(
+                    runs_dir=args.runs_dir,
+                    ssot_path=args.ssot,
+                    upload_id=args.upload_id,
+                    fallback_input_path=args.input,
                 )
+                _append_log(
+                    run_dir,
+                    f"[BACKFILL] Rebuilt {materialized_count} stored upload rows for legacy upload {args.upload_id}",
+                )
+                stored_rows = fetch_upload_rows_for_segment(
+                    runs_dir=args.runs_dir,
+                    upload_id=args.upload_id,
+                    row_start=int(segment["row_start"]),
+                    row_end=int(segment["row_end"]),
+                )
+                if len(stored_rows) != segment_row_count:
+                    raise RuntimeError(
+                        f"Segment {segment_id} expected {segment_row_count} stored rows but found {len(stored_rows)}."
+                    )
             segment_manifest_entries = build_segment_input_workbook_from_entries(
                 segment_input_path,
                 stored_rows,
@@ -514,9 +540,19 @@ def main() -> int:
                 str(args.max_workers),
                 "--progress-every",
                 str(args.progress_every),
+                "--canonical-runs-dir",
+                str(args.runs_dir),
+                "--canonical-run-id",
+                args.run_id,
+                "--canonical-upload-id",
+                args.upload_id,
             ]
+            if args.attempt_id:
+                cmd.extend(["--canonical-attempt-id", str(args.attempt_id)])
             if args.limit is not None:
                 cmd.extend(["--limit", str(args.limit)])
+            if resume_segment_attempt:
+                cmd.append("--resume-existing")
             with segment_log_path.open("w", encoding="utf-8") as log_handle:
                 CURRENT_CHILD = subprocess.Popen(
                     cmd,
@@ -525,24 +561,33 @@ def main() -> int:
                     stderr=log_handle,
                     text=True,
                 )
-                _append_log(run_dir, f"[PROCESSING] Claimed {segment_id} ({segment_row_count} rows)")
-                child_progress_path = segment_runs_dir / segment_run_id / "progress.json"
-                child_stats_path = segment_runs_dir / segment_run_id / "processing_stats.json"
+                if resume_segment_attempt:
+                    _append_log(
+                        run_dir,
+                        f"[PROCESSING] Resumed {segment_id} from checkpoint ({resumed_segment_rows}/{segment_row_count} rows)",
+                    )
+                else:
+                    _append_log(run_dir, f"[PROCESSING] Claimed {segment_id} ({segment_row_count} rows)")
                 while CURRENT_CHILD.poll() is None:
                     if STOP_REQUESTED:
                         CURRENT_CHILD.terminate()
                         break
-                    child_progress = _safe_read_json(child_progress_path) or {}
-                    child_stats = _safe_read_json(child_stats_path) or {}
-                    child_processed_rows = min(int(child_progress.get("processed_rows") or 0), segment_row_count)
+                    canonical_segment_summary = summarize_run_rows(
+                        runs_dir=args.runs_dir,
+                        run_id=args.run_id,
+                        row_index_min=int(segment["row_start"]),
+                        row_index_max=int(segment["row_end"]),
+                    )
+                    canonical_run_summary = summarize_run_rows(runs_dir=args.runs_dir, run_id=args.run_id)
+                    child_processed_rows = min(int(canonical_segment_summary.get("processed_rows") or 0), segment_row_count)
                     update_segment_progress(runs_dir=args.runs_dir, segment_id=segment_id, processed_rows=child_processed_rows)
-                    aggregate_processed_rows = completed_rows + child_processed_rows
-                    aggregate_threat_rows = completed_threat_rows + int(child_stats.get("threat_rows_detected") or 0)
-                    aggregate_review_required_rows = completed_review_required_rows + int(child_stats.get("review_required_rows_detected") or 0)
-                    aggregate_judged_rows = completed_judged_rows + int(child_stats.get("judged_rows") or 0)
-                    aggregate_second_pass_candidates = completed_second_pass_candidates + int(child_stats.get("second_pass_candidates") or 0)
-                    aggregate_second_pass_completed = completed_second_pass_completed + int(child_stats.get("second_pass_completed") or 0)
-                    aggregate_second_pass_overrides = completed_second_pass_overrides + int(child_stats.get("second_pass_overrides") or 0)
+                    aggregate_processed_rows = int(canonical_run_summary.get("processed_rows") or 0)
+                    aggregate_threat_rows = int(canonical_run_summary.get("threat_rows_detected") or 0)
+                    aggregate_review_required_rows = int(canonical_run_summary.get("review_required_rows_detected") or 0)
+                    aggregate_judged_rows = int(canonical_run_summary.get("judged_rows") or 0)
+                    aggregate_second_pass_candidates = int(canonical_run_summary.get("second_pass_candidates") or 0)
+                    aggregate_second_pass_completed = int(canonical_run_summary.get("second_pass_completed") or 0)
+                    aggregate_second_pass_overrides = int(canonical_run_summary.get("second_pass_overrides") or 0)
                     _write_progress(
                         run_dir=run_dir,
                         run_id=args.run_id,
@@ -585,17 +630,14 @@ def main() -> int:
 
             complete_segment(runs_dir=args.runs_dir, segment_id=segment_id)
 
-            child_stats = _safe_read_json(segment_dir / "runs" / segment_run_id / "processing_stats.json") or {}
-            child_integrity = _safe_read_json(segment_dir / "runs" / segment_run_id / "integrity_report.json") or {}
-            child_policy_path = segment_dir / "runs" / segment_run_id / "policy.json"
-            child_disagreement = _safe_read_json(segment_dir / "runs" / segment_run_id / "disagreement_report.json") or {}
-            completed_rows += segment_row_count
-            completed_threat_rows += int(child_stats.get("threat_rows_detected") or 0)
-            completed_review_required_rows += int(child_stats.get("review_required_rows_detected") or 0)
-            completed_judged_rows += int(child_stats.get("judged_rows") or 0)
-            completed_second_pass_candidates += int(child_stats.get("second_pass_candidates") or 0)
-            completed_second_pass_completed += int(child_stats.get("second_pass_completed") or 0)
-            completed_second_pass_overrides += int(child_stats.get("second_pass_overrides") or 0)
+            canonical_run_summary = summarize_run_rows(runs_dir=args.runs_dir, run_id=args.run_id)
+            completed_rows = int(canonical_run_summary.get("processed_rows") or completed_rows)
+            completed_threat_rows = int(canonical_run_summary.get("threat_rows_detected") or 0)
+            completed_review_required_rows = int(canonical_run_summary.get("review_required_rows_detected") or 0)
+            completed_judged_rows = int(canonical_run_summary.get("judged_rows") or 0)
+            completed_second_pass_candidates = int(canonical_run_summary.get("second_pass_candidates") or 0)
+            completed_second_pass_completed = int(canonical_run_summary.get("second_pass_completed") or 0)
+            completed_second_pass_overrides = int(canonical_run_summary.get("second_pass_overrides") or 0)
             _write_progress(
                 run_dir=run_dir,
                 run_id=args.run_id,
@@ -633,7 +675,6 @@ def main() -> int:
             _copy_parent_policy(first_policy_path, run_dir, args.run_id)
         _write_integrity_report(run_dir, args.run_id, total_rows, segment_reports)
         _write_disagreement_report(run_dir, disagreement_rows)
-        _write_artifact_manifest(run_dir)
         completed_at = _now_iso()
         _write_progress(
             run_dir=run_dir,
@@ -646,6 +687,7 @@ def main() -> int:
             message="All queued segments completed",
         )
         _append_log(run_dir, f"[COMPLETED] {completed_rows}/{total_rows} rows processed")
+        _write_artifact_manifest(run_dir)
         return 0
     except KeyboardInterrupt:
         shutdown_mode = _shutdown_mode(run_dir)

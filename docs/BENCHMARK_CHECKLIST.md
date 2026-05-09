@@ -1,7 +1,7 @@
 # {spot} Benchmark Checklist
 
 Document date: `2026-05-03`
-Workspace baseline: `0.4.1`
+Workspace baseline: `0.5.0`
 SSOT: `0.2`
 
 ## Purpose
@@ -13,8 +13,8 @@ This checklist is used to benchmark `{spot}` on the target Apple Silicon product
 - target machine is provisioned
 - local runtime bootstrap completed
 - preflight passes
-- supported browser startup path is available: `bash start_browser_appliance.sh`
-- browser smoke verification passes: `.venv/bin/python backend/browser_operator_smoke.py`
+- supported native app build/install path is available under `app/macos`
+- native acceptance smoke passes: `.venv/bin/python app/macos/native_acceptance_smoke.py`
 - benchmark workbook satisfies runtime input guardrails: `.xlsx`, <= `25 MiB`, <= `100000` rows, <= `20000` characters per `Post text` cell
 - Apertus MLX model weights are available locally
 - Ollama fallback and support models are available locally
@@ -37,18 +37,18 @@ Record before execution:
 - row count
 - language
 
-## Browser Baseline Verification
+## Native Baseline Verification
 
 Run before benchmark execution:
-- start `{spot}` with `bash start_browser_appliance.sh`
-- open `http://127.0.0.1:8765/app`
-- run `.venv/bin/python backend/browser_operator_smoke.py`
+- build and install `/Applications/spot.app`
+- launch `/Applications/spot.app`
+- run `.venv/bin/python app/macos/native_acceptance_smoke.py`
 
 Validate:
-- browser dashboard loads on loopback
-- local auth succeeds
+- native workspace launches
+- local auth succeeds when enabled
 - upload intake path is responsive
-- run detail, review, and artifact routes render
+- review, artifact, and recovery seams respond through the native-supported runtime contract
 
 ## Benchmark Run 1: Primary Path
 

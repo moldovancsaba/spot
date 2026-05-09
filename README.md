@@ -3,16 +3,19 @@
 
 AI-assisted antisemitism classification system with SSOT-governed, auditable local processing.
 
-Current workspace implementation: `0.4.1`
-Pipeline version: `mvp-0.4.1`
+Current workspace implementation: `0.5.0`
+Pipeline version: `mvp-0.5.0`
 Authoritative SSOT version: `0.2`
 Latest shipped release notes in repo: [`docs/RELEASE_NOTES_0.3.1.md`](/Users/moldovancsaba/Projects/spot/docs/RELEASE_NOTES_0.3.1.md)
+
+Maintenance note:
+- native macOS app source lives under [`app/macos/`](/Users/moldovancsaba/Projects/spot/app/macos)
+- generated native app outputs live under `app/macos/.build/` and `app/macos/dist/` and are intentionally not source-controlled
+- this repository currently has no declared open-source license file; do not assume one exists
 
 Documentation map:
 - [README Brief](/Users/moldovancsaba/Projects/spot/README_BRIEF.md)
 - [Architecture](/Users/moldovancsaba/Projects/spot/docs/ARCHITECTURE.md)
-- [Browser Operator Contract](/Users/moldovancsaba/Projects/spot/docs/BROWSER_OPERATOR_CONTRACT.md)
-- [Browser Productionization Contract](/Users/moldovancsaba/Projects/spot/docs/BROWSER_PRODUCTIONIZATION_CONTRACT.md)
 - [Production Plan](/Users/moldovancsaba/Projects/spot/docs/PRODUCTION_PLAN.md)
 - [Client Package](/Users/moldovancsaba/Projects/spot/docs/CLIENT_PACKAGE.md)
 - [Local Appliance Runbook](/Users/moldovancsaba/Projects/spot/docs/LOCAL_APPLIANCE_RUNBOOK.md)
@@ -45,16 +48,13 @@ It enforces a strict closed-set taxonomy, produces explainable metadata, and wri
 - Multi-label classification
 - Taxonomy CRUD or schema CRUD
 
-Current next-phase product contract:
-- browser operator experience remains scoped to local `.xlsx` upload, run monitoring, review, annotation, and artifact retrieval
-- the implementation contract for that phase is [`docs/BROWSER_OPERATOR_CONTRACT.md`](/Users/moldovancsaba/Projects/spot/docs/BROWSER_OPERATOR_CONTRACT.md)
-
 Current implementation stage:
 - core deterministic runtime is implemented
-- local browser operator workflow is implemented
-- queue-backed local browser operations dashboard is implemented
+- native macOS operator workflow is implemented
+- native macOS supervisor shell is implemented
+- queue-backed local operations dashboard is implemented
 - productionization verification is in progress
-- live client acceptance on the current browser-enabled baseline is still pending
+- live client acceptance on the current workspace baseline is still pending
 
 ## Canonical Taxonomy
 
@@ -122,6 +122,15 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+Native macOS build entrypoints:
+
+```bash
+cd /Users/moldovancsaba/Projects/spot/app/macos
+swift package dump-package >/dev/null
+bash -n ./build-bundle.sh
+bash -n ./install-bundle.sh
+```
+
 Run deterministic classification:
 
 ```bash
@@ -174,11 +183,14 @@ Run single-vs-ensemble evaluation:
   --progress-every 10
 ```
 
-Start the supported local browser appliance on port `8765`:
+Build and install the supported native macOS app:
 
 ```bash
-chmod +x start_browser_appliance.sh
-bash start_browser_appliance.sh
+cd /Users/moldovancsaba/Projects/spot/app/macos
+swift build
+bash build-bundle.sh
+bash install-bundle.sh
+open /Applications/spot.app
 ```
 
 Browser-intake foundation endpoints:
@@ -210,7 +222,16 @@ Browser run-operation endpoints:
 - `POST /classify/stop/{run_id}`
 - `GET /classify/status/{run_id}`
 
-Current browser operator surface:
+## Repo Layout
+
+- [`app/macos/`](/Users/moldovancsaba/Projects/spot/app/macos): native macOS shell, bundle scripts, SwiftUI sources
+- [`backend/`](/Users/moldovancsaba/Projects/spot/backend): FastAPI appliance backend and queue/runtime services
+- [`src/`](/Users/moldovancsaba/Projects/spot/src): classification pipeline, CLI, evaluation, benchmarking
+- [`ssot/`](/Users/moldovancsaba/Projects/spot/ssot): governed taxonomy and runtime contract
+- [`docs/`](/Users/moldovancsaba/Projects/spot/docs): active operational, architecture, and handover documentation
+- [`script/`](/Users/moldovancsaba/Projects/spot/script): dev wrappers such as native build-and-run
+
+Current native operator surface:
 
 - queue one or more `.xlsx` workbooks into local intake
 - segment accepted workbooks into queue-backed local operations records
@@ -219,7 +240,7 @@ Current browser operator surface:
 - pause, resume, or stop the active run from the dashboard
 - review flagged rows and retrieve audit artifacts locally
 
-Browser auth and permission endpoints:
+Auth and permission endpoints:
 
 - `GET /auth/config`
 - `GET /auth/session`
@@ -234,33 +255,14 @@ Local browser auth defaults:
 - role gates currently distinguish `operator`, `reviewer`, `acceptance_lead`, and `admin`
 - upload, run start, run recovery actions, review updates, sign-off, and artifact downloads are permission-gated
 
-Browser productionization verification command:
-
-```bash
-.venv/bin/python backend/browser_operator_smoke.py
-```
-
-The startup script runs local preflight by default before binding the browser appliance. Set `SPOT_RUN_PREFLIGHT=0` only when you intentionally need a faster dev restart.
-
 Current verification boundary:
-- `backend/browser_operator_smoke.py` is deterministic integration smoke for browser seams
+- backend regressions validate the runtime/API contract behind the native shell
 - it does not replace a live client acceptance run on the target machine
 - the historical `0.3.2` acceptance record is archived in [`docs/ACCEPTANCE_EVIDENCE_2026-03-18.md`](/Users/moldovancsaba/Projects/spot/docs/ACCEPTANCE_EVIDENCE_2026-03-18.md)
 
-Browser app shell:
-
-- operator dashboard: [http://127.0.0.1:8765/app](http://127.0.0.1:8765/app)
-- root path also resolves to the dashboard: [http://127.0.0.1:8765/](http://127.0.0.1:8765/)
-- dedicated run detail page: `http://127.0.0.1:8765/runs/<run_id>/view`
-- dedicated review queue page: `http://127.0.0.1:8765/runs/<run_id>/review`
-- dedicated row inspector page: `http://127.0.0.1:8765/runs/<run_id>/review-rows/<row_index>/view`
-- dedicated artifact center page: `http://127.0.0.1:8765/runs/<run_id>/artifacts/view`
-
 ## Monitoring URLs
 
-- Operator dashboard: [http://127.0.0.1:8765/app](http://127.0.0.1:8765/app)
-- Classify monitor: [http://127.0.0.1:8765/classify-monitor](http://127.0.0.1:8765/classify-monitor)
-- Eval monitor: [http://127.0.0.1:8765/agent-eval](http://127.0.0.1:8765/agent-eval)
+- Backend health: [http://127.0.0.1:8765/api/health](http://127.0.0.1:8765/api/health)
 
 ## Runtime Configuration
 

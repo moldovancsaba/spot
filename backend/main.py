@@ -2,11 +2,11 @@ from pathlib import Path
 import json
 import os
 import signal
+import shutil
 import subprocess
 import sys
 import threading
 import time
-import shutil
 import uuid
 import urllib.parse
 import urllib.request
@@ -22,9 +22,16 @@ from backend.services.auth_service import (
     local_access_code,
 )
 from backend.services.request_auth import require_permission, session_payload
-from backend.routes.ui import router as ui_router
 from backend.services.excel_service import intake_workbook, list_upload_records, read_upload_record
-from backend.services.ops_db_service import build_run_segment_summary, build_operations_overview, reset_run_segments
+from backend.services.run_lifecycle_service import discover_run_process_pid, pid_alive, pid_command
+from backend.services.ops_db_service import (
+    build_operations_overview,
+    build_run_segment_summary,
+    reconcile_run_segments,
+    reset_run_segments,
+    resume_run_segments,
+    start_run_attempt,
+)
 from backend.services.run_state_service import (
     append_action,
     build_artifact_center,
@@ -36,7 +43,6 @@ from backend.services.run_state_service import (
     read_action_log,
     read_review_state,
     read_run_record,
-    reconcile_run_segments,
     refresh_run_record,
     run_dir,
     run_history_dir,
@@ -47,22 +53,18 @@ from backend.services.run_state_service import (
 )
 from src.excel_io import MAX_INPUT_FILE_BYTES
 from src.defaults import (
-    DEFAULT_ENSEMBLE_MODELS,
     DEFAULT_INPUT_PATH,
     DEFAULT_LANGUAGE,
-    DEFAULT_LIMIT,
     DEFAULT_LOCKED_SSOT_PATH,
     DEFAULT_MAX_WORKERS,
     DEFAULT_OLLAMA_URL,
     DEFAULT_PRODUCTION_MODE,
-    DEFAULT_PROGRESS_EVERY,
     DEFAULT_REVIEW_MODE,
-    DEFAULT_SINGLE_MODEL,
     DEFAULT_SSOT_PATH,
 )
 from src.lanes import load_lane_config
 
-app = FastAPI(title="{spot} Classification Backend", version="0.4.1")
+app = FastAPI(title="{spot} Classification Backend", version="0.5.0")
 RUNS_DIR = Path(os.getenv("RUNS_DIR", str(Path(__file__).resolve().parent.parent / "runs")))
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 PYTHON_BIN = Path(os.getenv("SPOT_NATIVE_PYTHON_BIN") or sys.executable)
@@ -78,7 +80,7 @@ def api_health():
         "status": "online",
         "launch": {"ready": True},
         "service": "{spot} Classification Backend",
-        "version": "0.4.1",
+        "version": "0.5.0",
         "auth_enabled": auth_enabled(),
         "host": "127.0.0.1",
         "port": 8765,
@@ -412,41 +414,27 @@ def _read_control(run_id: str) -> dict | None:
 
 
 def _pid_alive(pid: int | None) -> bool:
-    if not pid:
-        return False
-    try:
-        os.kill(pid, 0)
-        return True
-    except OSError:
-        return False
+    return pid_alive(pid)
 
 
 def _pid_command(pid: int | None) -> str:
-    if not pid:
-        return ""
-    try:
-        return subprocess.check_output(
-            ["ps", "-p", str(int(pid)), "-o", "command="],
-            text=True,
-            stderr=subprocess.DEVNULL,
-        ).strip()
-    except Exception:
-        return ""
+    return pid_command(pid)
 
 
-def _pid_matches_run(pid: int | None, run_id: str) -> bool:
-    command = _pid_command(pid)
-    if not command or run_id not in command:
-        return False
-    return "backend/segment_worker.py" in command or "src.cli classify" in command
+def _discover_classify_pid(run_id: str) -> int | None:
+    return discover_run_process_pid(run_id)
 
 
 def _resolve_run_process_pid(run_id: str, pid: int | None) -> int | None:
-    if pid and _pid_alive(pid) and _pid_matches_run(pid, run_id):
-        return int(pid)
+    if pid and _pid_alive(pid):
+        command = _pid_command(pid)
+        if command and run_id in command and ("backend/segment_worker.py" in command or "src.cli classify" in command):
+            return int(pid)
     discovered = _discover_classify_pid(run_id)
-    if discovered and _pid_alive(discovered) and _pid_matches_run(discovered, run_id):
-        return int(discovered)
+    if discovered and _pid_alive(discovered):
+        command = _pid_command(discovered)
+        if command and run_id in command and ("backend/segment_worker.py" in command or "src.cli classify" in command):
+            return int(discovered)
     return None
 
 
@@ -467,27 +455,6 @@ def _wait_for_pid_exit(pid: int | None, timeout_seconds: float = 5.0) -> bool:
             return True
         time.sleep(0.1)
     return not _pid_alive(pid)
-
-
-def _discover_classify_pid(run_id: str) -> int | None:
-    try:
-        out = subprocess.check_output(["ps", "aux"], text=True, stderr=subprocess.DEVNULL)
-    except Exception:
-        return None
-    needle = f"--run-id {run_id}"
-    for line in out.splitlines():
-        if needle not in line:
-            continue
-        if "backend/segment_worker.py" not in line and "src.cli classify" not in line:
-            continue
-        parts = line.split()
-        if len(parts) < 2:
-            continue
-        try:
-            return int(parts[1])
-        except ValueError:
-            continue
-    return None
 
 
 def _assert_production_mode_allows_eval() -> None:
@@ -636,68 +603,6 @@ def startup_native_supervisor_watchdog() -> None:
     _SUPERVISOR_WATCHDOG_STARTED = True
 
 
-@app.post("/agent-eval/start/{evaluation_run_id}")
-def start_agent_eval(evaluation_run_id: str, payload: dict | None = Body(default=None)):
-    _assert_production_mode_allows_eval()
-    subprocess.run(["pkill", "-f", f"evaluation-run-id {evaluation_run_id}"], check=False)
-    single = RUNS_DIR / f"{evaluation_run_id}-single"
-    ensemble = RUNS_DIR / f"{evaluation_run_id}-ensemble"
-    eval_dir = RUNS_DIR / evaluation_run_id
-    for p in [single, ensemble, eval_dir]:
-        if p.exists():
-            shutil.rmtree(p, ignore_errors=True)
-
-    log_path = RUNS_DIR / f"{evaluation_run_id}-ui.log"
-    payload = payload or {}
-    input_path = str(payload.get("input", DEFAULT_INPUT_PATH))
-    ssot_path = str(payload.get("ssot", DEFAULT_SSOT_PATH))
-    language = str(payload.get("language", DEFAULT_LANGUAGE))
-    review_mode = str(payload.get("review_mode", DEFAULT_REVIEW_MODE))
-    single_model = str(payload.get("single_model", DEFAULT_SINGLE_MODEL))
-    ensemble_models = str(payload.get("ensemble_models", DEFAULT_ENSEMBLE_MODELS))
-    max_workers = str(payload.get("max_workers", DEFAULT_MAX_WORKERS))
-    limit = str(payload.get("limit", DEFAULT_LIMIT))
-    progress_every = str(payload.get("progress_every", DEFAULT_PROGRESS_EVERY))
-
-    cmd = [
-        str(PYTHON_BIN),
-        "-m",
-        "src.cli",
-        "evaluate",
-        "--input",
-        input_path,
-        "--ssot",
-        ssot_path,
-        "--runs-dir",
-        "runs",
-        "--evaluation-run-id",
-        evaluation_run_id,
-        "--language",
-        language,
-        "--review-mode",
-        review_mode,
-        "--single-model",
-        single_model,
-        "--ensemble-models",
-        ensemble_models,
-        "--max-workers",
-        max_workers,
-        "--limit",
-        limit,
-        "--progress-every",
-        progress_every,
-    ]
-    log = log_path.open("w", encoding="utf-8")
-    proc = subprocess.Popen(
-        cmd,
-        cwd=PROJECT_ROOT,
-        stdout=log,
-        stderr=log,
-        start_new_session=True,
-    )
-    return {"status": "started", "evaluation_run_id": evaluation_run_id, "pid": proc.pid}
-
-
 @app.post("/classify/start/{run_id}")
 def classify_start(run_id: str, request: Request, payload: dict | None = Body(default=None)):
     session = require_permission(request, "start_run")
@@ -737,10 +642,12 @@ def _start_classify_run(*, run_id: str, payload: dict, actor: str, resume_existi
     max_workers = str(payload.get("max_workers", DEFAULT_MAX_WORKERS))
     progress_every = str(payload.get("progress_every", DEFAULT_PROGRESS_EVERY))
     limit = payload.get("limit", None)
+    source_state = None
     if resume_existing:
         existing_record = read_run_record(runs_dir=RUNS_DIR, run_id=run_id)
         if not existing_record:
             raise HTTPException(status_code=404, detail="run not found")
+        source_state = str(existing_record.get("state") or "") or None
         existing_record["input_path"] = input_path
         existing_record["output_path"] = output_path
         existing_record["upload_id"] = str(payload.get("upload_id")) if payload.get("upload_id") is not None else existing_record.get("upload_id")
@@ -761,8 +668,17 @@ def _start_classify_run(*, run_id: str, payload: dict, actor: str, resume_existi
             review_mode=review_mode,
             start_payload=payload,
         )
+    attempt = start_run_attempt(
+        runs_dir=RUNS_DIR,
+        run_id=run_id,
+        attempt_type="resume" if resume_existing else "start",
+        source_state=source_state,
+    )
+    attempt_id = str(attempt.get("attempt_id") or "")
     if payload.get("upload_id"):
-        if not resume_existing:
+        if resume_existing:
+            resume_run_segments(runs_dir=RUNS_DIR, run_id=run_id)
+        else:
             reset_run_segments(runs_dir=RUNS_DIR, run_id=run_id)
         cmd = [
             str(PYTHON_BIN),
@@ -787,6 +703,8 @@ def _start_classify_run(*, run_id: str, payload: dict, actor: str, resume_existi
             max_workers,
             "--progress-every",
             progress_every,
+            "--attempt-id",
+            attempt_id,
         ]
         if resume_existing:
             cmd.append("--resume-existing")
@@ -815,7 +733,15 @@ def _start_classify_run(*, run_id: str, payload: dict, actor: str, resume_existi
             max_workers,
             "--progress-every",
             progress_every,
+            "--canonical-runs-dir",
+            str(RUNS_DIR),
+            "--canonical-run-id",
+            run_id,
+            "--canonical-attempt-id",
+            attempt_id,
         ]
+        if payload.get("upload_id"):
+            cmd.extend(["--canonical-upload-id", str(payload.get("upload_id"))])
         log_path = RUNS_DIR / f"{run_id}-classify-ui.log"
     if limit is not None:
         cmd.extend(["--limit", str(limit)])
@@ -835,6 +761,7 @@ def _start_classify_run(*, run_id: str, payload: dict, actor: str, resume_existi
             "pid": proc.pid,
             "paused": False,
             "started_at": int(time.time()),
+            "attempt_id": attempt_id,
             "input": input_path,
             "upload_id": payload.get("upload_id"),
             "output": output_path,
@@ -845,13 +772,20 @@ def _start_classify_run(*, run_id: str, payload: dict, actor: str, resume_existi
         run_id=run_id,
         action="classify_recovered" if resume_existing else "classify_started",
         actor=actor,
-        payload={"pid": proc.pid, "upload_id": payload.get("upload_id"), "language": language, "review_mode": review_mode},
+        payload={
+            "pid": proc.pid,
+            "attempt_id": attempt_id,
+            "upload_id": payload.get("upload_id"),
+            "language": language,
+            "review_mode": review_mode,
+        },
     )
     refresh_run_record(runs_dir=RUNS_DIR, run_id=run_id)
     return {
         "status": "restarted" if resume_existing else "started",
         "run_id": run_id,
         "pid": proc.pid,
+        "attempt_id": attempt_id,
         "input": input_path,
         "upload_id": payload.get("upload_id"),
         "output": output_path,
@@ -961,7 +895,12 @@ def run_retry(run_id: str, request: Request):
         action="classify_retry_requested",
         payload={"source_state": record.get("state")},
     )
-    return _start_classify_run(run_id=run_id, payload=payload, actor=str(session.get("actor_name", "local-operator")))
+    return _start_classify_run(
+        run_id=run_id,
+        payload=payload,
+        actor=str(session.get("actor_name", "local-operator")),
+        resume_existing=bool(record.get("upload_id")),
+    )
 
 
 @app.post("/runs/{run_id}/recover")
@@ -1058,6 +997,32 @@ def run_heal(run_id: str, request: Request):
 @app.get("/classify/status/{run_id}")
 def classify_status(run_id: str, request: Request):
     require_permission(request, "view")
+    record = refresh_run_record(runs_dir=RUNS_DIR, run_id=run_id, sync_review_rows=False)
+    if record:
+        progress = record.get("progress") if isinstance(record.get("progress"), dict) else None
+        control = record.get("control") if isinstance(record.get("control"), dict) else {}
+        pid = _resolve_run_process_pid(run_id, control.get("pid") if control else None)
+        running = pid is not None
+        paused = bool(control.get("paused")) if control else False
+        output_path = record.get("output_path") or control.get("output")
+        output_exists = bool(output_path and Path(str(output_path)).exists())
+        effective_state = str(record.get("state") or "UNKNOWN")
+        if paused and running:
+            effective_state = "PAUSED"
+        elif running and effective_state in {"NOT_STARTED", "UNKNOWN"}:
+            effective_state = "STARTING"
+        return {
+            "run_id": run_id,
+            "timestamp": int(time.time()),
+            "effective_state": effective_state,
+            "running": running,
+            "paused": paused,
+            "pid": pid,
+            "progress": progress,
+            "control": control,
+            "output_exists": output_exists,
+        }
+
     progress = _safe_read_json(RUNS_DIR / run_id / "progress.json")
     control = _read_control(run_id)
     pid = _resolve_run_process_pid(run_id, control.get("pid") if control else None)
@@ -1083,39 +1048,3 @@ def classify_status(run_id: str, request: Request):
         "control": control,
         "output_exists": output_exists,
     }
-
-
-@app.get("/agent-eval/status/{evaluation_run_id}")
-def agent_eval_status(evaluation_run_id: str, request: Request):
-    require_permission(request, "view")
-    single = _safe_read_json(RUNS_DIR / f"{evaluation_run_id}-single" / "progress.json")
-    ensemble = _safe_read_json(RUNS_DIR / f"{evaluation_run_id}-ensemble" / "progress.json")
-    report = _safe_read_json(RUNS_DIR / evaluation_run_id / "evaluation_report.json")
-
-    overall = {"state": "NOT_STARTED", "progress_percentage": 0.0}
-    if single and single.get("state") == "COMPLETED" and ensemble and ensemble.get("state") == "COMPLETED":
-        overall = {"state": "COMPLETED", "progress_percentage": 100.0}
-    elif single and single.get("state") == "PROCESSING":
-        done = single.get("processed_rows") or 0
-        total = single.get("total_rows") or 1
-        overall = {"state": "SINGLE_PROCESSING", "progress_percentage": round(50.0 * (done / total), 2)}
-    elif single and single.get("state") == "COMPLETED" and ensemble:
-        if ensemble.get("state") == "PROCESSING":
-            done = ensemble.get("processed_rows") or 0
-            total = ensemble.get("total_rows") or 1
-            overall = {"state": "ENSEMBLE_PROCESSING", "progress_percentage": round(50.0 + 50.0 * (done / total), 2)}
-        elif ensemble.get("state") == "VALIDATING":
-            overall = {"state": "ENSEMBLE_VALIDATING", "progress_percentage": 55.0}
-    elif single and single.get("state") == "VALIDATING":
-        overall = {"state": "SINGLE_VALIDATING", "progress_percentage": 5.0}
-
-    return {
-        "evaluation_run_id": evaluation_run_id,
-        "timestamp": int(time.time()),
-        "overall": overall,
-        "single": single,
-        "ensemble": ensemble,
-        "report": report,
-    }
-
-app.include_router(ui_router)

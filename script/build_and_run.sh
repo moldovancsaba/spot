@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP_DIR="$ROOT_DIR/app/spot-app"
+APP_DIR="$ROOT_DIR/app/macos"
 APP_BUNDLE="$APP_DIR/dist/spot.app"
 CONFIG_DIR="${HOME}/Library/Application Support/spot"
 CONFIG_FILE="$CONFIG_DIR/native-runtime.env"
@@ -32,9 +32,9 @@ pkill -x "spot" >/dev/null 2>&1 || true
 pkill -f "launch-bundled-appliance.sh|uvicorn backend.main:app" >/dev/null 2>&1 || true
 
 cd "$APP_DIR"
-bash ./build-bundle.sh >/tmp/spot-app-build-path.txt
+bash ./build-bundle.sh >/tmp/spot-macos-build-path.txt
 
-APP_PATH="$(tail -n 1 /tmp/spot-app-build-path.txt)"
+APP_PATH="$(tail -n 1 /tmp/spot-macos-build-path.txt)"
 if [[ ! -d "$APP_PATH" ]]; then
   echo "spot.app bundle was not created."
   exit 1

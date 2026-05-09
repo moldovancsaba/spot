@@ -1,35 +1,36 @@
 from __future__ import annotations
 
 import json
-import os
-import subprocess
 import time
 from pathlib import Path
 from zipfile import BadZipFile
 
-from backend.services.ops_db_service import build_run_segment_summary, reconcile_run_segments, register_run, update_run_snapshot
+from backend.services.ops_db_service import (
+    build_run_segment_summary,
+    fetch_run_row,
+    fetch_run_rows,
+    fetch_upload_rows_by_row_indices,
+    latest_run_attempt,
+    register_run,
+    update_latest_run_attempt_status,
+    update_run_row_review,
+    update_run_snapshot,
+    upsert_run_rows,
+)
+from backend.services.artifact_manifest_service import RUN_ARTIFACT_NAMES
+from backend.services.run_lifecycle_service import (
+    discover_run_process_pid,
+    normalize_state_from_segments,
+)
 from openpyxl import load_workbook
+from src.excel_io import ORIGINAL_ROW_INDEX_COLUMN
 
 
 RUN_RECORD = "run_record.json"
 REVIEW_STATE = "review_state.json"
 SIGNOFF = "signoff.json"
 ACTION_LOG = "action_log.jsonl"
-ARTIFACT_NAMES = [
-    "output.xlsx",
-    "integrity_report.json",
-    "artifact_manifest.json",
-    "segment_assignment_manifest.jsonl",
-    "policy.json",
-    "logs.txt",
-    "progress.json",
-    "processing_stats.json",
-    "review_state.json",
-    "signoff.json",
-    "action_log.jsonl",
-    "disagreement_report.json",
-    "control.json",
-]
+ARTIFACT_NAMES = RUN_ARTIFACT_NAMES
 RUN_HISTORY_DIRNAME = "_history"
 
 
@@ -227,18 +228,110 @@ def write_review_state(*, runs_dir: Path, run_id: str, state: dict) -> dict:
     return state
 
 
-def sync_review_rows_from_output(*, runs_dir: Path, run_id: str) -> dict:
-    path = run_dir(runs_dir, run_id) / "output.xlsx"
-    state = read_review_state(runs_dir=runs_dir, run_id=run_id)
-    existing_rows = state.setdefault("rows", {})
-    if not path.exists():
-        return state
+def _project_review_state_from_run_rows(*, runs_dir: Path, run_id: str) -> dict:
+    rows = fetch_run_rows(runs_dir=runs_dir, run_id=run_id, review_required_only=True)
+    projected_rows: dict[str, dict] = {}
+    for row in rows:
+        row_index = int(row.get("row_index") or 0)
+        if row_index <= 0:
+            continue
+        projected_rows[str(row_index)] = {
+            "row_index": row_index,
+            "item_number": str(row.get("item_number") or ""),
+            "post_text": str(row.get("post_text") or ""),
+            "assigned_category": str(row.get("assigned_category") or ""),
+            "confidence_score": row.get("confidence_score"),
+            "explanation": str(row.get("explanation") or ""),
+            "flags": list(row.get("flags") or []),
+            "fallback_events": list(row.get("fallback_events") or []),
+            "soft_signal_score": row.get("soft_signal_score"),
+            "soft_signal_flags": list(row.get("soft_signal_flags") or []),
+            "soft_signal_evidence": list(row.get("soft_signal_evidence") or []),
+            "review_required": True,
+            "review_state": str(row.get("review_state") or "pending"),
+            "review_decision": row.get("review_decision"),
+            "reviewer_note": str(row.get("reviewer_note") or ""),
+            "updated_at": int(row.get("updated_at") or time.time()),
+        }
+    state = {"run_id": run_id, "rows": projected_rows}
+    write_review_state(runs_dir=runs_dir, run_id=run_id, state=state)
+    return state
 
-    try:
-        wb = load_workbook(path, read_only=True, data_only=True)
-    except (BadZipFile, OSError, ValueError):
-        # A run may create output.xlsx before the workbook zip is fully written.
-        return state
+
+def _sync_review_rows_from_checkpoints(*, runs_dir: Path, run_id: str, state: dict) -> dict:
+    run_path = run_dir(runs_dir, run_id)
+    record = read_run_record(runs_dir=runs_dir, run_id=run_id) or {}
+    upload_id = str(record.get("upload_id")) if record.get("upload_id") else None
+    attempt = latest_run_attempt(runs_dir=runs_dir, run_id=run_id)
+    attempt_id = str(attempt.get("attempt_id") or "") if isinstance(attempt, dict) else ""
+    checkpoint_paths = sorted(run_path.glob("_segments/*/runs/*/result_checkpoint.jsonl"))
+    if not checkpoint_paths:
+        return _project_review_state_from_run_rows(runs_dir=runs_dir, run_id=run_id)
+
+    checkpoint_rows: list[dict] = []
+    for checkpoint_path in checkpoint_paths:
+        for line in checkpoint_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                payload = json.loads(line)
+            except Exception:
+                continue
+            if not isinstance(payload, dict):
+                continue
+            result = payload.get("result")
+            if not isinstance(result, dict):
+                continue
+            flags = [str(item) for item in result.get("flags", []) if str(item)]
+            if "REVIEW_REQUIRED" not in flags:
+                continue
+            try:
+                row_index = int(result.get("row_index") or 0)
+            except Exception:
+                continue
+            if row_index <= 0:
+                continue
+            checkpoint_rows.append({
+                "row_index": row_index,
+                "row_hash": str(payload.get("row_hash") or ""),
+                "assigned_category": str(result.get("category") or ""),
+                "confidence_score": result.get("confidence"),
+                "explanation": str(result.get("explanation") or ""),
+                "flags": flags,
+                "fallback_events": [str(item) for item in result.get("fallback_events", []) if str(item)],
+                "soft_signal_score": result.get("soft_signal_score"),
+                "soft_signal_flags": [str(item) for item in result.get("soft_signal_flags", []) if str(item)],
+                "soft_signal_evidence": [str(item).strip() for item in result.get("soft_signal_evidence", []) if str(item).strip()],
+                "judge_score": result.get("judge_score"),
+                "judge_verdict": result.get("judge_verdict"),
+                "consensus_tier": result.get("consensus_tier"),
+                "minority_label": result.get("minority_label"),
+                "model_votes": result.get("model_votes"),
+                "drafted_text": result.get("drafted_text"),
+                "review_required": True,
+            })
+
+    if not checkpoint_rows:
+        return _project_review_state_from_run_rows(runs_dir=runs_dir, run_id=run_id)
+
+    upsert_run_rows(
+        runs_dir=runs_dir,
+        run_id=run_id,
+        upload_id=upload_id,
+        attempt_id=attempt_id or None,
+        rows=checkpoint_rows,
+    )
+    return _project_review_state_from_run_rows(runs_dir=runs_dir, run_id=run_id)
+
+
+def _sync_run_rows_from_output(*, runs_dir: Path, run_id: str, output_path: Path) -> None:
+    record = read_run_record(runs_dir=runs_dir, run_id=run_id) or {}
+    upload_id = str(record.get("upload_id")) if record.get("upload_id") else None
+    attempt = latest_run_attempt(runs_dir=runs_dir, run_id=run_id)
+    attempt_id = str(attempt.get("attempt_id") or "") if isinstance(attempt, dict) else ""
+
+    wb = load_workbook(output_path, read_only=True, data_only=True)
     try:
         ws = wb[wb.sheetnames[0]]
         header = [str(v).strip() if v is not None else "" for v in next(ws.iter_rows(min_row=1, max_row=1, values_only=True))]
@@ -254,17 +347,17 @@ def sync_review_rows_from_output(*, runs_dir: Path, run_id: str) -> dict:
             "Review Required",
         ]
         if any(name not in header_idx for name in required):
-            return state
+            return
 
-        rows: dict[str, dict] = {}
-        for row_index, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
-            item_number = "" if row[header_idx["Item number"]] is None else str(row[header_idx["Item number"]]).strip()
-            post_text = "" if row[header_idx["Post text"]] is None else str(row[header_idx["Post text"]]).strip()
-            assigned = "" if row[header_idx["Assigned Category"]] is None else str(row[header_idx["Assigned Category"]]).strip()
-            explanation = "" if row[header_idx["Explanation / Reasoning"]] is None else str(row[header_idx["Explanation / Reasoning"]]).strip()
+        rows: list[dict] = []
+        for sheet_row_index, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+            original_row_index = row[header_idx[ORIGINAL_ROW_INDEX_COLUMN]] if ORIGINAL_ROW_INDEX_COLUMN in header_idx else None
+            try:
+                row_index = int(original_row_index or sheet_row_index)
+            except Exception:
+                row_index = sheet_row_index
             flags = "" if row[header_idx["Flags"]] is None else str(row[header_idx["Flags"]]).strip()
             fallback_events = "" if row[header_idx["Fallback Events"]] is None else str(row[header_idx["Fallback Events"]]).strip()
-            soft_signal_score = row[header_idx["Soft Signal Score"]] if "Soft Signal Score" in header_idx else None
             soft_signal_flags = (
                 "" if "Soft Signal Flags" not in header_idx or row[header_idx["Soft Signal Flags"]] is None else str(row[header_idx["Soft Signal Flags"]]).strip()
             )
@@ -273,78 +366,74 @@ def sync_review_rows_from_output(*, runs_dir: Path, run_id: str) -> dict:
                 if "Soft Signal Evidence" not in header_idx or row[header_idx["Soft Signal Evidence"]] is None
                 else str(row[header_idx["Soft Signal Evidence"]]).strip()
             )
+            model_votes = (
+                ""
+                if "Model Votes" not in header_idx or row[header_idx["Model Votes"]] is None
+                else str(row[header_idx["Model Votes"]]).strip()
+            )
             review_required = "" if row[header_idx["Review Required"]] is None else str(row[header_idx["Review Required"]]).strip()
-            if review_required != "YES":
-                continue
-            key = str(row_index)
-            existing = existing_rows.get(key, {})
-            rows[key] = {
-                "row_index": row_index,
-                "item_number": item_number,
-                "post_text": post_text,
-                "assigned_category": assigned,
-                "confidence_score": row[header_idx["Confidence Score"]],
-                "explanation": explanation,
-                "flags": [part for part in flags.split(";") if part],
-                "fallback_events": [part for part in fallback_events.split(";") if part],
-                "soft_signal_score": soft_signal_score,
-                "soft_signal_flags": [part for part in soft_signal_flags.split(";") if part],
-                "soft_signal_evidence": [part.strip() for part in soft_signal_evidence.split("|") if part.strip()],
-                "review_required": True,
-                "review_state": existing.get("review_state", "pending"),
-                "review_decision": existing.get("review_decision"),
-                "reviewer_note": existing.get("reviewer_note", ""),
-                "updated_at": int(time.time()),
-            }
-        state["rows"] = rows
-        write_review_state(runs_dir=runs_dir, run_id=run_id, state=state)
+            rows.append(
+                {
+                    "row_index": row_index,
+                    "item_number": "" if row[header_idx["Item number"]] is None else str(row[header_idx["Item number"]]).strip(),
+                    "post_text": "" if row[header_idx["Post text"]] is None else str(row[header_idx["Post text"]]).strip(),
+                    "row_hash": "" if "Row Hash" not in header_idx or row[header_idx["Row Hash"]] is None else str(row[header_idx["Row Hash"]]).strip(),
+                    "assigned_category": "" if row[header_idx["Assigned Category"]] is None else str(row[header_idx["Assigned Category"]]).strip(),
+                    "confidence_score": row[header_idx["Confidence Score"]],
+                    "explanation": "" if row[header_idx["Explanation / Reasoning"]] is None else str(row[header_idx["Explanation / Reasoning"]]).strip(),
+                    "flags": [part for part in flags.split(";") if part],
+                    "fallback_events": [part for part in fallback_events.split(";") if part],
+                    "soft_signal_score": row[header_idx["Soft Signal Score"]] if "Soft Signal Score" in header_idx else None,
+                    "soft_signal_flags": [part for part in soft_signal_flags.split(";") if part],
+                    "soft_signal_evidence": [part.strip() for part in soft_signal_evidence.split("|") if part.strip()],
+                    "judge_score": row[header_idx["Judge Score"]] if "Judge Score" in header_idx else None,
+                    "judge_verdict": "" if "Judge Verdict" not in header_idx or row[header_idx["Judge Verdict"]] is None else str(row[header_idx["Judge Verdict"]]).strip(),
+                    "consensus_tier": "" if "Consensus Tier" not in header_idx or row[header_idx["Consensus Tier"]] is None else str(row[header_idx["Consensus Tier"]]).strip(),
+                    "minority_label": "" if "Minority Report" not in header_idx or row[header_idx["Minority Report"]] is None else str(row[header_idx["Minority Report"]]).strip(),
+                    "model_votes": [part.strip() for part in model_votes.split("|") if part.strip()],
+                    "review_required": review_required == "YES",
+                }
+            )
+        if rows:
+            upsert_run_rows(
+                runs_dir=runs_dir,
+                run_id=run_id,
+                upload_id=upload_id,
+                attempt_id=attempt_id or None,
+                rows=rows,
+            )
     finally:
         wb.close()
-    return state
+
+
+def sync_review_rows_from_output(*, runs_dir: Path, run_id: str) -> dict:
+    path = run_dir(runs_dir, run_id) / "output.xlsx"
+    state = _sync_review_rows_from_checkpoints(runs_dir=runs_dir, run_id=run_id, state=read_review_state(runs_dir=runs_dir, run_id=run_id))
+    if not path.exists():
+        return state
+
+    try:
+        _sync_run_rows_from_output(runs_dir=runs_dir, run_id=run_id, output_path=path)
+    except (BadZipFile, OSError, ValueError):
+        # A run may create output.xlsx before the workbook zip is fully written.
+        return state
+    return _project_review_state_from_run_rows(runs_dir=runs_dir, run_id=run_id)
 
 
 def _pid_alive(pid: int | None) -> bool:
-    if not pid:
-        return False
-    try:
-        os.kill(int(pid), 0)
-        return True
-    except Exception:
-        return False
+    from backend.services.run_lifecycle_service import pid_alive as lifecycle_pid_alive
+
+    return lifecycle_pid_alive(pid)
 
 
 def _pid_command(pid: int | None) -> str:
-    if not pid:
-        return ""
-    try:
-        return subprocess.check_output(
-            ["ps", "-p", str(int(pid)), "-o", "command="],
-            text=True,
-            stderr=subprocess.DEVNULL,
-        ).strip()
-    except Exception:
-        return ""
+    from backend.services.run_lifecycle_service import pid_command as lifecycle_pid_command
+
+    return lifecycle_pid_command(pid)
 
 
 def _discover_run_process_pid(run_id: str) -> int | None:
-    try:
-        out = subprocess.check_output(["ps", "aux"], text=True, stderr=subprocess.DEVNULL)
-    except Exception:
-        return None
-    needle = f"--run-id {run_id}"
-    for line in out.splitlines():
-        if needle not in line:
-            continue
-        if "backend/segment_worker.py" not in line and "src.cli classify" not in line:
-            continue
-        parts = line.split()
-        if len(parts) < 2:
-            continue
-        try:
-            return int(parts[1])
-        except ValueError:
-            continue
-    return None
+    return discover_run_process_pid(run_id)
 
 
 def _run_process_alive(run_id: str, pid: int | None) -> bool:
@@ -359,8 +448,7 @@ def _run_process_alive(run_id: str, pid: int | None) -> bool:
 def _resolve_run_state(*, run_id: str, existing_state: str | None, progress: dict | list | None, control: dict | list | None) -> str:
     progress_state = str(progress.get("state")) if isinstance(progress, dict) and progress.get("state") else ""
     control_dict = control if isinstance(control, dict) else {}
-    pid = control_dict.get("pid")
-    running = _run_process_alive(run_id, pid)
+    running = _run_process_alive(run_id, control_dict.get("pid"))
     paused = bool(control_dict.get("paused"))
     cancelled = bool(control_dict.get("cancelled") or control_dict.get("stopped_at"))
     nonterminal = {"STARTING", "PENDING", "VALIDATING", "PROCESSING", "WRITING", "PAUSED"}
@@ -379,34 +467,6 @@ def _resolve_run_state(*, run_id: str, existing_state: str | None, progress: dic
     return existing
 
 
-def _normalize_state_from_segments(*, state: str, segment_summary: dict | None) -> str:
-    resolved = str(state or "UNKNOWN").upper()
-    if resolved != "COMPLETED" or not isinstance(segment_summary, dict):
-        return resolved
-
-    total_segments = int(segment_summary.get("total_segments") or 0)
-    if total_segments <= 0:
-        return resolved
-
-    status_counts = segment_summary.get("segments_by_status") or {}
-    completed_segments = int(status_counts.get("COMPLETED") or 0)
-    queued_segments = int(status_counts.get("QUEUED") or 0)
-    processing_segments = int(status_counts.get("PROCESSING") or 0)
-    failed_segments = int(status_counts.get("FAILED") or 0)
-    blocked_segments = int(status_counts.get("BLOCKED") or 0)
-    cancelled_segments = int(status_counts.get("CANCELLED") or 0)
-
-    if completed_segments >= total_segments:
-        return resolved
-    if queued_segments > 0 or processing_segments > 0:
-        return "INTERRUPTED"
-    if failed_segments > 0 or blocked_segments > 0:
-        return "FAILED"
-    if cancelled_segments > 0:
-        return "INTERRUPTED"
-    return resolved
-
-
 def upsert_review_row(
     *,
     runs_dir: Path,
@@ -417,19 +477,16 @@ def upsert_review_row(
     reviewer_note: str | None,
     actor: str,
 ) -> dict:
-    state = read_review_state(runs_dir=runs_dir, run_id=run_id)
-    rows = state.setdefault("rows", {})
-    key = str(row_index)
-    existing = rows.get(key, {"row_index": row_index, "review_required": True})
-    if review_state_value is not None:
-        existing["review_state"] = review_state_value
-    if review_decision is not None:
-        existing["review_decision"] = review_decision
-    if reviewer_note is not None:
-        existing["reviewer_note"] = reviewer_note
-    existing["updated_at"] = int(time.time())
-    rows[key] = existing
-    write_review_state(runs_dir=runs_dir, run_id=run_id, state=state)
+    update_run_row_review(
+        runs_dir=runs_dir,
+        run_id=run_id,
+        row_index=row_index,
+        review_state=review_state_value,
+        review_decision=review_decision,
+        reviewer_note=reviewer_note,
+    )
+    state = _project_review_state_from_run_rows(runs_dir=runs_dir, run_id=run_id)
+    existing = state.get("rows", {}).get(str(row_index), {"row_index": row_index, "review_required": True})
     append_action(
         runs_dir=runs_dir,
         run_id=run_id,
@@ -469,24 +526,9 @@ def refresh_run_record(*, runs_dir: Path, run_id: str, sync_review_rows: bool = 
     detected_review = int(processing_stats.get("review_required_rows_detected") or 0) if isinstance(processing_stats, dict) else 0
     total_review = max(len(rows), detected_review)
     reviewed = sum(1 for row in rows.values() if row.get("review_state") not in {None, "", "pending"})
-    segment_summary = build_run_segment_summary(runs_dir=runs_dir, run_id=run_id)
     record["state"] = _resolve_run_state(run_id=run_id, existing_state=record.get("state"), progress=progress, control=control)
-    record["state"] = _normalize_state_from_segments(state=record["state"], segment_summary=segment_summary)
-    if record["state"] == "INTERRUPTED":
-        reconciled = reconcile_run_segments(runs_dir=runs_dir, run_id=run_id, target_state="QUEUED")
-        if reconciled:
-            control = safe_read_json(run_dir(runs_dir, run_id) / "control.json")
-            control = control if isinstance(control, dict) else {}
-            rediscovered_pid = _discover_run_process_pid(run_id)
-            if rediscovered_pid:
-                control["pid"] = rediscovered_pid
-                control.pop("shutdown_requested", None)
-                control.pop("shutdown_requested_at", None)
-                control.pop("shutdown_mode", None)
-            record["state"] = _resolve_run_state(run_id=run_id, existing_state=record.get("state"), progress=progress, control=control)
-            segment_summary = build_run_segment_summary(runs_dir=runs_dir, run_id=run_id)
-            record["state"] = _normalize_state_from_segments(state=record["state"], segment_summary=segment_summary)
-            record["control"] = control
+    segment_summary = build_run_segment_summary(runs_dir=runs_dir, run_id=run_id, effective_run_state=record["state"])
+    record["state"] = normalize_state_from_segments(state=record["state"], segment_summary=segment_summary)
     if isinstance(progress, dict):
         progress = dict(progress)
         if str(progress.get("state") or "").upper() == "COMPLETED" and record["state"] != "COMPLETED":
@@ -510,6 +552,11 @@ def refresh_run_record(*, runs_dir: Path, run_id: str, sync_review_rows: bool = 
         state=str(record.get("state", "UNKNOWN")),
         progress=progress if isinstance(progress, dict) else None,
         created_at=int(record.get("created_at")) if record.get("created_at") else None,
+    )
+    update_latest_run_attempt_status(
+        runs_dir=runs_dir,
+        run_id=run_id,
+        status=str(record.get("state", "UNKNOWN")),
     )
     return persisted
 
@@ -535,7 +582,7 @@ def build_run_detail(*, runs_dir: Path, run_id: str) -> dict | None:
     progress = record.get("progress") or {}
     processing_stats = record.get("processing_stats") or {}
     signoff = record.get("signoff")
-    review_state = read_review_state(runs_dir=runs_dir, run_id=run_id)
+    review_state = sync_review_rows_from_output(runs_dir=runs_dir, run_id=run_id)
     review_rows = sorted(review_state.get("rows", {}).values(), key=lambda row: row.get("row_index", 0))
     review_required_target = max(
         len(review_rows),
@@ -554,7 +601,7 @@ def build_run_detail(*, runs_dir: Path, run_id: str) -> dict | None:
         running = _run_process_alive(run_id, pid)
 
     state = str(record.get("state", "UNKNOWN"))
-    segment_summary = build_run_segment_summary(runs_dir=runs_dir, run_id=run_id)
+    segment_summary = build_run_segment_summary(runs_dir=runs_dir, run_id=run_id, effective_run_state=state)
     pending_segments = int(segment_summary.get("segments_by_status", {}).get("QUEUED", 0))
     processing_segments = int(segment_summary.get("segments_by_status", {}).get("PROCESSING", 0))
     failed_segments = int(segment_summary.get("segments_by_status", {}).get("FAILED", 0))
@@ -726,7 +773,28 @@ def build_row_inspector(*, runs_dir: Path, run_id: str, row_index: int) -> dict 
     if not record:
         return None
     state = sync_review_rows_from_output(runs_dir=runs_dir, run_id=run_id)
-    row = state.get("rows", {}).get(str(row_index))
+    row = fetch_run_row(runs_dir=runs_dir, run_id=run_id, row_index=row_index)
+    if row:
+        row = {
+            "row_index": int(row.get("row_index") or row_index),
+            "item_number": str(row.get("item_number") or ""),
+            "post_text": str(row.get("post_text") or ""),
+            "assigned_category": str(row.get("assigned_category") or ""),
+            "confidence_score": row.get("confidence_score"),
+            "explanation": str(row.get("explanation") or ""),
+            "flags": list(row.get("flags") or []),
+            "fallback_events": list(row.get("fallback_events") or []),
+            "soft_signal_score": row.get("soft_signal_score"),
+            "soft_signal_flags": list(row.get("soft_signal_flags") or []),
+            "soft_signal_evidence": list(row.get("soft_signal_evidence") or []),
+            "review_required": bool(row.get("review_required")),
+            "review_state": str(row.get("review_state") or "pending"),
+            "review_decision": row.get("review_decision"),
+            "reviewer_note": str(row.get("reviewer_note") or ""),
+            "updated_at": int(row.get("updated_at") or time.time()),
+        }
+    else:
+        row = state.get("rows", {}).get(str(row_index))
     if not row:
         return None
     disagreement_path = run_dir(runs_dir, run_id) / "disagreement_report.json"

@@ -1,7 +1,7 @@
 # {spot} UAT Checklist
 
 Document date: `2026-05-03`
-Workspace baseline: `0.4.1`
+Workspace baseline: `0.5.0`
 SSOT: `0.2`
 
 ## Purpose
@@ -15,7 +15,7 @@ This checklist is used for structured user acceptance testing on the target loca
 - `{spot}` preflight passes
 - approved client-owned workbook is available
 - workbook satisfies runtime input guardrails: `.xlsx`, <= `25 MiB`, <= `100000` rows, <= `20000` characters per `Post text` cell
-- operator has access to the local browser dashboard and output location
+- operator has access to the native macOS app and output location
 - SSOT path is confirmed
 - production mode settings are confirmed
 
@@ -102,7 +102,7 @@ Record:
 
 Validate:
 - operator can run preflight
-- operator can start the supported browser appliance entrypoint
+- operator can build/install and launch the supported native app
 - operator can start and monitor a run
 - operator can retrieve outputs and artefacts
 - operator can identify the next action when a row requires review
@@ -112,19 +112,19 @@ Record:
 - actions completed without engineering help
 - any points of confusion
 
-## Test 7: Browser Workflow
+## Test 7: Native Operator Workflow
 
 Validate:
-- operator can sign in through the local browser flow
-- operator can upload an `.xlsx` workbook through the browser intake path
-- operator can open run detail, review queue, row inspector, and artifact center pages
+- operator can sign in through the local native flow when auth is enabled
+- operator can upload an `.xlsx` workbook through the supported native intake flow
+- operator can open review queue, row inspector, and artifact center views
 - operator can complete at least one review annotation and retrieve one output artefact
 
 Record:
-- browser URLs used
+- native app build and launch steps used
 - upload ID and run ID
-- pages confirmed by the operator
-- any browser workflow confusion or blocked actions
+- views confirmed by the operator
+- any native workflow confusion or blocked actions
 
 ## Acceptance Criteria
 

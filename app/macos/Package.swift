@@ -2,7 +2,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "spot-app",
+    name: "spot-macos",
     platforms: [
         .macOS(.v15)
     ],

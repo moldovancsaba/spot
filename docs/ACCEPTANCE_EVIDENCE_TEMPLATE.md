@@ -1,7 +1,7 @@
 # {spot} Acceptance Evidence Template
 
 Document date: `2026-05-03`
-Workspace baseline: `0.4.1`
+Workspace baseline: `0.5.0`
 SSOT: `0.2`
 
 ## Session Details
@@ -13,28 +13,26 @@ SSOT: `0.2`
 - macOS version: `<macOS version>`
 - Python version: `<python version>`
 - `{spot}` commit hash: `<git commit hash>`
-- Workspace baseline: `0.4.1`
+- Workspace baseline: `0.5.0`
 - Latest shipped release: `v0.3.1`
 - SSOT path: `/Users/moldovancsaba/Projects/spot/ssot/ssot.json`
 - Production mode: `SPOT_PRODUCTION_MODE=1` for bootstrap/preflight/runtime acceptance commands
-- Supported browser startup path: `bash start_browser_appliance.sh`
-- Browser smoke command: `.venv/bin/python backend/browser_operator_smoke.py`
+- Supported native build/install path: `cd app/macos && swift build && bash build-bundle.sh && bash install-bundle.sh`
+- Native acceptance smoke command: `.venv/bin/python app/macos/native_acceptance_smoke.py`
 - Operator: `<operator>`
 - Reviewer: `<reviewer>`
 - Historical acceptance record for the prior `0.3.2` session: [`docs/ACCEPTANCE_EVIDENCE_2026-03-18.md`](/Users/moldovancsaba/Projects/spot/docs/ACCEPTANCE_EVIDENCE_2026-03-18.md)
 
-## Browser Operator Workflow Record
+## Native Operator Workflow Record
 
-- Startup script executed: `<yes/no>`
+- Native app installed and launched: `<yes/no>`
 - Startup preflight result: `<passed/failed>`
-- Browser dashboard reachable at `http://127.0.0.1:8765/app`: `<yes/no>`
-- Browser smoke verification passed: `<yes/no>`
+- Native acceptance smoke verification passed: `<yes/no>`
 - Upload intake flow confirmed: `<yes/no>`
-- Run detail flow confirmed: `<yes/no>`
 - Review queue and row inspector confirmed: `<yes/no>`
-- Artifact download center confirmed: `<yes/no>`
+- Artifact center confirmed: `<yes/no>`
 - Local auth / permission boundary confirmed: `<yes/no>`
-- Notes: `<exact command outputs, browser-visible failure states, and whether the operator completed the workflow without engineering help>`
+- Notes: `<exact command outputs, native-visible failure states, and whether the operator completed the workflow without engineering help>`
 
 ## Benchmark Record
 

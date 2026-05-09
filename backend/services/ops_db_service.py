@@ -3,15 +3,22 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
-import subprocess
 import time
 from pathlib import Path
 from typing import Any
 
+from backend.services.run_lifecycle_service import (
+    DEFAULT_ACTIVE_RUN_STATES,
+    discover_run_process_pid,
+    effective_segment_state_for_run,
+    normalize_state_from_segments,
+    resolve_run_process_pid,
+    resolve_run_state,
+)
 
 DB_FILENAME = "spot_ops.sqlite3"
 DEFAULT_SEGMENT_SIZE = 500
-ACTIVE_RUN_STATES = {"STARTING", "PENDING", "VALIDATING", "PROCESSING", "WRITING", "PAUSED"}
+ACTIVE_RUN_STATES = DEFAULT_ACTIVE_RUN_STATES
 TERMINAL_SEGMENT_STATES = {"COMPLETED", "FAILED", "BLOCKED", "CANCELLED"}
 
 
@@ -96,6 +103,54 @@ def _init_db(conn: sqlite3.Connection) -> None:
             FOREIGN KEY (upload_id) REFERENCES uploads(upload_id)
         );
 
+        CREATE TABLE IF NOT EXISTS run_attempts (
+            attempt_id TEXT PRIMARY KEY,
+            run_id TEXT NOT NULL,
+            attempt_number INTEGER NOT NULL,
+            attempt_type TEXT NOT NULL,
+            source_state TEXT,
+            status TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            started_at INTEGER NOT NULL,
+            completed_at INTEGER,
+            FOREIGN KEY (run_id) REFERENCES runs(run_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS run_rows (
+            run_id TEXT NOT NULL,
+            row_index INTEGER NOT NULL,
+            upload_id TEXT,
+            attempt_id TEXT,
+            sequence_index INTEGER,
+            item_number TEXT NOT NULL DEFAULT '',
+            post_text TEXT NOT NULL DEFAULT '',
+            row_hash TEXT,
+            assigned_category TEXT,
+            confidence_score REAL,
+            explanation TEXT,
+            flags_json TEXT NOT NULL DEFAULT '[]',
+            fallback_events_json TEXT NOT NULL DEFAULT '[]',
+            soft_signal_score REAL,
+            soft_signal_flags_json TEXT NOT NULL DEFAULT '[]',
+            soft_signal_evidence_json TEXT NOT NULL DEFAULT '[]',
+            review_required INTEGER NOT NULL DEFAULT 0,
+            review_state TEXT,
+            review_decision TEXT,
+            reviewer_note TEXT NOT NULL DEFAULT '',
+            judge_score REAL,
+            judge_verdict TEXT,
+            consensus_tier TEXT,
+            minority_label TEXT,
+            model_votes_json TEXT,
+            drafted_text TEXT,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            PRIMARY KEY (run_id, row_index),
+            FOREIGN KEY (run_id) REFERENCES runs(run_id),
+            FOREIGN KEY (upload_id) REFERENCES uploads(upload_id),
+            FOREIGN KEY (attempt_id) REFERENCES run_attempts(attempt_id)
+        );
+
         CREATE TABLE IF NOT EXISTS feedback_items (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             run_id TEXT,
@@ -118,6 +173,9 @@ def _init_db(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_segments_run_id ON segments(run_id);
         CREATE INDEX IF NOT EXISTS idx_runs_upload_id ON runs(upload_id);
         CREATE INDEX IF NOT EXISTS idx_upload_rows_upload_sequence ON upload_rows(upload_id, sequence_index);
+        CREATE INDEX IF NOT EXISTS idx_run_attempts_run_id ON run_attempts(run_id, attempt_number);
+        CREATE INDEX IF NOT EXISTS idx_run_rows_run_id ON run_rows(run_id, row_index);
+        CREATE INDEX IF NOT EXISTS idx_run_rows_review_required ON run_rows(run_id, review_required, review_state);
         """
     )
     _ensure_column(conn, "segments", "state", "TEXT NOT NULL DEFAULT 'READY'")
@@ -141,6 +199,30 @@ def _now_ts() -> int:
     return int(time.time())
 
 
+def _json_dumps(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False, sort_keys=True)
+
+
+def _json_loads_list(value: str | None) -> list[Any]:
+    if not value:
+        return []
+    try:
+        payload = json.loads(value)
+    except Exception:
+        return []
+    return payload if isinstance(payload, list) else []
+
+
+def _json_loads_dict(value: str | None) -> dict[str, Any] | None:
+    if not value:
+        return None
+    try:
+        payload = json.loads(value)
+    except Exception:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
 def _safe_read_json(path: Path) -> dict | None:
     if not path.exists():
         return None
@@ -151,106 +233,14 @@ def _safe_read_json(path: Path) -> dict | None:
     return payload if isinstance(payload, dict) else None
 
 
-def _pid_alive(pid: int | None) -> bool:
-    if not pid:
-        return False
-    try:
-        os.kill(int(pid), 0)
-        return True
-    except Exception:
-        return False
-
-
-def _pid_command(pid: int | None) -> str:
-    if not pid:
-        return ""
-    try:
-        return subprocess.check_output(
-            ["ps", "-p", str(int(pid)), "-o", "command="],
-            text=True,
-            stderr=subprocess.DEVNULL,
-        ).strip()
-    except Exception:
-        return ""
-
-
-def _discover_run_process_pid(run_id: str) -> int | None:
-    try:
-        out = subprocess.check_output(["ps", "aux"], text=True, stderr=subprocess.DEVNULL)
-    except Exception:
-        return None
-    needle = f"--run-id {run_id}"
-    for line in out.splitlines():
-        if needle not in line:
-            continue
-        if "backend/segment_worker.py" not in line and "src.cli classify" not in line:
-            continue
-        parts = line.split()
-        if len(parts) < 2:
-            continue
-        try:
-            return int(parts[1])
-        except ValueError:
-            continue
-    return None
-
-
-def _run_process_alive(run_id: str, pid: int | None) -> bool:
-    if not _pid_alive(pid):
-        return False
-    command = _pid_command(pid)
-    if not command or run_id not in command:
-        return False
-    return "backend/segment_worker.py" in command or "src.cli classify" in command
-
-
 def _resolved_run_state(*, run_id: str, indexed_state: str | None, progress: dict | None, control: dict | None) -> str:
-    progress_state = str(progress.get("state") or "").upper() if isinstance(progress, dict) else ""
-    existing = str(indexed_state or "UNKNOWN").upper()
-    running = _run_process_alive(run_id, (control or {}).get("pid"))
-    paused = bool((control or {}).get("paused"))
-    cancelled = bool((control or {}).get("cancelled") or (control or {}).get("stopped_at"))
-    nonterminal = ACTIVE_RUN_STATES
-
-    if cancelled and not running:
-        return "CANCELLED"
-    if paused and running:
-        return "PAUSED"
-    if progress_state in nonterminal and not running:
-        return "INTERRUPTED"
-    if existing in nonterminal and not running:
-        return "INTERRUPTED"
-    if progress_state:
-        return progress_state
-    return existing
-
-
-def _normalize_state_from_segments(*, state: str, segment_summary: dict | None) -> str:
-    resolved = str(state or "UNKNOWN").upper()
-    if resolved != "COMPLETED" or not isinstance(segment_summary, dict):
-        return resolved
-
-    total_segments = int(segment_summary.get("total_segments") or 0)
-    if total_segments <= 0:
-        return resolved
-
-    status_counts = segment_summary.get("segments_by_status") or {}
-    completed_segments = int(status_counts.get("COMPLETED") or 0)
-    queued_segments = int(status_counts.get("QUEUED") or 0)
-    processing_segments = int(status_counts.get("PROCESSING") or 0)
-    failed_segments = int(status_counts.get("FAILED") or 0)
-    blocked_segments = int(status_counts.get("BLOCKED") or 0)
-    cancelled_segments = int(status_counts.get("CANCELLED") or 0)
-
-    if completed_segments >= total_segments:
-        return resolved
-    if queued_segments > 0 or processing_segments > 0:
-        return "INTERRUPTED"
-    if failed_segments > 0 or blocked_segments > 0:
-        return "FAILED"
-    if cancelled_segments > 0:
-        return "INTERRUPTED"
-    return resolved
+    return resolve_run_state(
+        run_id=run_id,
+        existing_state=indexed_state,
+        progress=progress,
+        control=control,
+        active_states=ACTIVE_RUN_STATES,
+    )
 
 
 def _resolved_run_snapshot(runs_dir: Path, run_id: str, indexed_run: sqlite3.Row | None) -> dict | None:
@@ -260,21 +250,25 @@ def _resolved_run_snapshot(runs_dir: Path, run_id: str, indexed_run: sqlite3.Row
     progress = _safe_read_json(run_dir / "progress.json")
     control = _safe_read_json(run_dir / "control.json")
     control = control if isinstance(control, dict) else {}
-    discovered_pid = _discover_run_process_pid(run_id)
+    discovered_pid = discover_run_process_pid(run_id)
     if discovered_pid and int(control.get("pid") or 0) != discovered_pid:
         control["pid"] = discovered_pid
         control.pop("shutdown_requested", None)
         control.pop("shutdown_requested_at", None)
         control.pop("shutdown_mode", None)
-    elif _run_process_alive(run_id, control.get("pid")):
+    elif resolve_run_process_pid(run_id, control.get("pid")) is not None:
         control.pop("shutdown_requested", None)
         control.pop("shutdown_requested_at", None)
         control.pop("shutdown_mode", None)
     processing_stats = _safe_read_json(run_dir / "processing_stats.json")
+    canonical_stats = summarize_run_rows(runs_dir=runs_dir, run_id=run_id)
     state = _resolved_run_state(run_id=run_id, indexed_state=str(indexed_run["state"] or ""), progress=progress, control=control)
-    segment_summary = build_run_segment_summary(runs_dir=runs_dir, run_id=run_id)
-    state = _normalize_state_from_segments(state=state, segment_summary=segment_summary)
-    processed_rows = int(progress.get("processed_rows") or 0) if isinstance(progress, dict) else int(indexed_run["processed_rows"] or 0)
+    segment_summary = build_run_segment_summary(runs_dir=runs_dir, run_id=run_id, effective_run_state=state)
+    state = normalize_state_from_segments(state=state, segment_summary=segment_summary)
+    processed_rows = max(
+        int((canonical_stats or {}).get("processed_rows") or 0),
+        int(progress.get("processed_rows") or 0) if isinstance(progress, dict) else int(indexed_run["processed_rows"] or 0),
+    )
     total_rows = (
         int(progress.get("total_rows"))
         if isinstance(progress, dict) and progress.get("total_rows") not in {None, ""}
@@ -293,7 +287,11 @@ def _resolved_run_snapshot(runs_dir: Path, run_id: str, indexed_run: sqlite3.Row
         "progress_percentage": progress_percentage,
         "row_progress_percentage": round((processed_rows / total_rows) * 100, 2) if total_rows else (100.0 if state == "COMPLETED" else 0.0),
         "estimated_remaining_seconds": _estimate_remaining_seconds(indexed_run if state in ACTIVE_RUN_STATES else None),
-        "processing_stats": processing_stats or _fallback_processing_stats(indexed_run),
+        "processing_stats": processing_stats or {
+            **(_fallback_processing_stats(indexed_run) or {}),
+            **canonical_stats,
+            "total_rows": total_rows,
+        },
     }
 
 
@@ -422,6 +420,353 @@ def fetch_upload_rows_for_segment(*, runs_dir: Path, upload_id: str, row_start: 
             (upload_id, row_start, row_end),
         ).fetchall()
     return [dict(row) for row in rows]
+
+
+def fetch_upload_rows_by_row_indices(*, runs_dir: Path, upload_id: str, row_indices: list[int]) -> dict[int, dict]:
+    normalized = sorted({int(item) for item in row_indices if int(item) > 0})
+    if not normalized:
+        return {}
+    placeholders = ",".join("?" for _ in normalized)
+    with _connect(runs_dir) as conn:
+        rows = conn.execute(
+            f"""
+            SELECT upload_id, sequence_index, row_index, item_number, post_text, source_category,
+                   row_hash, post_text_sha256, post_text_length
+            FROM upload_rows
+            WHERE upload_id = ? AND row_index IN ({placeholders})
+            ORDER BY row_index ASC
+            """,
+            (upload_id, *normalized),
+        ).fetchall()
+    return {int(row["row_index"]): dict(row) for row in rows}
+
+
+def start_run_attempt(
+    *,
+    runs_dir: Path,
+    run_id: str,
+    attempt_type: str,
+    source_state: str | None = None,
+    status: str = "STARTING",
+) -> dict[str, Any]:
+    now = _now_ts()
+    with _connect(runs_dir) as conn:
+        row = conn.execute(
+            "SELECT COALESCE(MAX(attempt_number), 0) AS max_attempt_number FROM run_attempts WHERE run_id = ?",
+            (run_id,),
+        ).fetchone()
+        attempt_number = int(row["max_attempt_number"] or 0) + 1
+        attempt_id = f"{run_id}-attempt-{attempt_number:05d}-{now}"
+        conn.execute(
+            """
+            INSERT INTO run_attempts (
+                attempt_id, run_id, attempt_number, attempt_type, source_state, status, created_at, started_at, completed_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)
+            """,
+            (attempt_id, run_id, attempt_number, attempt_type, source_state, status, now, now),
+        )
+        conn.commit()
+    return {
+        "attempt_id": attempt_id,
+        "run_id": run_id,
+        "attempt_number": attempt_number,
+        "attempt_type": attempt_type,
+        "source_state": source_state,
+        "status": status,
+        "started_at": now,
+    }
+
+
+def latest_run_attempt(*, runs_dir: Path, run_id: str) -> dict[str, Any] | None:
+    with _connect(runs_dir) as conn:
+        row = conn.execute(
+            """
+            SELECT attempt_id, run_id, attempt_number, attempt_type, source_state, status, created_at, started_at, completed_at
+            FROM run_attempts
+            WHERE run_id = ?
+            ORDER BY attempt_number DESC
+            LIMIT 1
+            """,
+            (run_id,),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def update_latest_run_attempt_status(*, runs_dir: Path, run_id: str, status: str) -> None:
+    now = _now_ts()
+    with _connect(runs_dir) as conn:
+        row = conn.execute(
+            "SELECT attempt_id FROM run_attempts WHERE run_id = ? ORDER BY attempt_number DESC LIMIT 1",
+            (run_id,),
+        ).fetchone()
+        if not row:
+            return
+        completed_at = now if status.upper() in {"COMPLETED", "FAILED", "CANCELLED", "INTERRUPTED"} else None
+        conn.execute(
+            """
+            UPDATE run_attempts
+            SET status = ?,
+                completed_at = COALESCE(?, completed_at)
+            WHERE attempt_id = ?
+            """,
+            (status, completed_at, row["attempt_id"]),
+        )
+        conn.commit()
+
+
+def _decode_run_row(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "run_id": str(row["run_id"]),
+        "row_index": int(row["row_index"]),
+        "upload_id": str(row["upload_id"]) if row["upload_id"] else None,
+        "attempt_id": str(row["attempt_id"]) if row["attempt_id"] else None,
+        "sequence_index": int(row["sequence_index"]) if row["sequence_index"] is not None else None,
+        "item_number": str(row["item_number"] or ""),
+        "post_text": str(row["post_text"] or ""),
+        "row_hash": str(row["row_hash"]) if row["row_hash"] else None,
+        "assigned_category": str(row["assigned_category"]) if row["assigned_category"] else "",
+        "confidence_score": float(row["confidence_score"]) if row["confidence_score"] is not None else None,
+        "explanation": str(row["explanation"]) if row["explanation"] else "",
+        "flags": [str(item) for item in _json_loads_list(row["flags_json"]) if str(item)],
+        "fallback_events": [str(item) for item in _json_loads_list(row["fallback_events_json"]) if str(item)],
+        "soft_signal_score": float(row["soft_signal_score"]) if row["soft_signal_score"] is not None else None,
+        "soft_signal_flags": [str(item) for item in _json_loads_list(row["soft_signal_flags_json"]) if str(item)],
+        "soft_signal_evidence": [str(item) for item in _json_loads_list(row["soft_signal_evidence_json"]) if str(item).strip()],
+        "review_required": bool(int(row["review_required"] or 0)),
+        "review_state": str(row["review_state"]) if row["review_state"] else "pending",
+        "review_decision": str(row["review_decision"]) if row["review_decision"] else None,
+        "reviewer_note": str(row["reviewer_note"] or ""),
+        "judge_score": float(row["judge_score"]) if row["judge_score"] is not None else None,
+        "judge_verdict": str(row["judge_verdict"]) if row["judge_verdict"] else None,
+        "consensus_tier": str(row["consensus_tier"]) if row["consensus_tier"] else None,
+        "minority_label": str(row["minority_label"]) if row["minority_label"] else None,
+        "model_votes": _json_loads_dict(row["model_votes_json"]),
+        "drafted_text": str(row["drafted_text"]) if row["drafted_text"] else None,
+        "updated_at": int(row["updated_at"] or 0),
+    }
+
+
+def upsert_run_rows(
+    *,
+    runs_dir: Path,
+    run_id: str,
+    upload_id: str | None,
+    rows: list[dict[str, Any]],
+    attempt_id: str | None = None,
+) -> int:
+    if not rows:
+        return 0
+    now = _now_ts()
+    normalized_row_indices = sorted({int(row.get("row_index") or 0) for row in rows if int(row.get("row_index") or 0) > 0})
+    upload_row_map = fetch_upload_rows_by_row_indices(runs_dir=runs_dir, upload_id=upload_id, row_indices=normalized_row_indices) if upload_id else {}
+    with _connect(runs_dir) as conn:
+        existing_rows = conn.execute(
+            f"""
+            SELECT run_id, row_index, review_state, review_decision, reviewer_note
+            FROM run_rows
+            WHERE run_id = ? AND row_index IN ({",".join("?" for _ in normalized_row_indices)})
+            """,
+            (run_id, *normalized_row_indices),
+        ).fetchall() if normalized_row_indices else []
+        existing_map = {int(row["row_index"]): dict(row) for row in existing_rows}
+        for row in rows:
+            row_index = int(row.get("row_index") or 0)
+            if row_index <= 0:
+                continue
+            source_row = upload_row_map.get(row_index, {})
+            existing = existing_map.get(row_index, {})
+            item_number = str(row.get("item_number") or source_row.get("item_number") or "")
+            post_text = str(row.get("post_text") or source_row.get("post_text") or "")
+            sequence_index = row.get("sequence_index", source_row.get("sequence_index"))
+            review_required = row.get("review_required")
+            if review_required is None:
+                review_required = "REVIEW_REQUIRED" in {str(flag) for flag in row.get("flags", [])}
+            reviewer_note = row.get("reviewer_note")
+            if reviewer_note is None:
+                reviewer_note = existing.get("reviewer_note") or ""
+            review_state = row.get("review_state")
+            if review_state is None:
+                review_state = existing.get("review_state") or ("pending" if review_required else None)
+            review_decision = row.get("review_decision")
+            if review_decision is None:
+                review_decision = existing.get("review_decision")
+            conn.execute(
+                """
+                INSERT INTO run_rows (
+                    run_id, row_index, upload_id, attempt_id, sequence_index, item_number, post_text, row_hash,
+                    assigned_category, confidence_score, explanation, flags_json, fallback_events_json,
+                    soft_signal_score, soft_signal_flags_json, soft_signal_evidence_json,
+                    review_required, review_state, review_decision, reviewer_note,
+                    judge_score, judge_verdict, consensus_tier, minority_label, model_votes_json, drafted_text,
+                    created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(run_id, row_index) DO UPDATE SET
+                    upload_id=COALESCE(excluded.upload_id, run_rows.upload_id),
+                    attempt_id=COALESCE(excluded.attempt_id, run_rows.attempt_id),
+                    sequence_index=COALESCE(excluded.sequence_index, run_rows.sequence_index),
+                    item_number=COALESCE(NULLIF(excluded.item_number, ''), run_rows.item_number),
+                    post_text=COALESCE(NULLIF(excluded.post_text, ''), run_rows.post_text),
+                    row_hash=COALESCE(excluded.row_hash, run_rows.row_hash),
+                    assigned_category=COALESCE(excluded.assigned_category, run_rows.assigned_category),
+                    confidence_score=COALESCE(excluded.confidence_score, run_rows.confidence_score),
+                    explanation=COALESCE(excluded.explanation, run_rows.explanation),
+                    flags_json=excluded.flags_json,
+                    fallback_events_json=excluded.fallback_events_json,
+                    soft_signal_score=COALESCE(excluded.soft_signal_score, run_rows.soft_signal_score),
+                    soft_signal_flags_json=excluded.soft_signal_flags_json,
+                    soft_signal_evidence_json=excluded.soft_signal_evidence_json,
+                    review_required=excluded.review_required,
+                    review_state=COALESCE(excluded.review_state, run_rows.review_state),
+                    review_decision=COALESCE(excluded.review_decision, run_rows.review_decision),
+                    reviewer_note=COALESCE(excluded.reviewer_note, run_rows.reviewer_note),
+                    judge_score=COALESCE(excluded.judge_score, run_rows.judge_score),
+                    judge_verdict=COALESCE(excluded.judge_verdict, run_rows.judge_verdict),
+                    consensus_tier=COALESCE(excluded.consensus_tier, run_rows.consensus_tier),
+                    minority_label=COALESCE(excluded.minority_label, run_rows.minority_label),
+                    model_votes_json=COALESCE(excluded.model_votes_json, run_rows.model_votes_json),
+                    drafted_text=COALESCE(excluded.drafted_text, run_rows.drafted_text),
+                    updated_at=excluded.updated_at
+                """,
+                (
+                    run_id,
+                    row_index,
+                    upload_id,
+                    attempt_id,
+                    int(sequence_index) if sequence_index not in {None, ""} else None,
+                    item_number,
+                    post_text,
+                    str(row.get("row_hash") or source_row.get("row_hash") or "") or None,
+                    str(row.get("assigned_category") or "") or None,
+                    float(row["confidence_score"]) if row.get("confidence_score") is not None else None,
+                    str(row.get("explanation") or "") or None,
+                    _json_dumps([str(item) for item in row.get("flags", []) if str(item)]),
+                    _json_dumps([str(item) for item in row.get("fallback_events", []) if str(item)]),
+                    float(row["soft_signal_score"]) if row.get("soft_signal_score") is not None else None,
+                    _json_dumps([str(item) for item in row.get("soft_signal_flags", []) if str(item)]),
+                    _json_dumps([str(item).strip() for item in row.get("soft_signal_evidence", []) if str(item).strip()]),
+                    1 if review_required else 0,
+                    str(review_state) if review_state not in {None, ""} else None,
+                    str(review_decision) if review_decision not in {None, ""} else None,
+                    str(reviewer_note or ""),
+                    float(row["judge_score"]) if row.get("judge_score") is not None else None,
+                    str(row.get("judge_verdict") or "") or None,
+                    str(row.get("consensus_tier") or "") or None,
+                    str(row.get("minority_label") or "") or None,
+                    _json_dumps(row.get("model_votes") or {}) if row.get("model_votes") else None,
+                    str(row.get("drafted_text") or "") or None,
+                    now,
+                    now,
+                ),
+            )
+        conn.commit()
+    return len(rows)
+
+
+def fetch_run_rows(*, runs_dir: Path, run_id: str, review_required_only: bool = False) -> list[dict[str, Any]]:
+    where = "WHERE run_id = ?"
+    params: list[Any] = [run_id]
+    if review_required_only:
+        where += " AND review_required = 1"
+    with _connect(runs_dir) as conn:
+        rows = conn.execute(
+            f"""
+            SELECT *
+            FROM run_rows
+            {where}
+            ORDER BY row_index ASC
+            """,
+            params,
+        ).fetchall()
+    return [_decode_run_row(row) for row in rows]
+
+
+def fetch_run_row(*, runs_dir: Path, run_id: str, row_index: int) -> dict[str, Any] | None:
+    with _connect(runs_dir) as conn:
+        row = conn.execute(
+            "SELECT * FROM run_rows WHERE run_id = ? AND row_index = ?",
+            (run_id, row_index),
+        ).fetchone()
+    return _decode_run_row(row) if row else None
+
+
+def summarize_run_rows(
+    *,
+    runs_dir: Path,
+    run_id: str,
+    row_index_min: int | None = None,
+    row_index_max: int | None = None,
+) -> dict[str, Any]:
+    where = ["run_id = ?"]
+    params: list[Any] = [run_id]
+    if row_index_min is not None:
+        where.append("row_index >= ?")
+        params.append(int(row_index_min))
+    if row_index_max is not None:
+        where.append("row_index <= ?")
+        params.append(int(row_index_max))
+    where_clause = " AND ".join(where)
+
+    with _connect(runs_dir) as conn:
+        row = conn.execute(
+            f"""
+            SELECT
+                COUNT(*) AS processed_rows,
+                SUM(CASE WHEN assigned_category IS NOT NULL AND assigned_category NOT IN ('', 'Not Antisemitic') THEN 1 ELSE 0 END) AS threat_rows_detected,
+                SUM(CASE WHEN review_required = 1 THEN 1 ELSE 0 END) AS review_required_rows_detected,
+                SUM(CASE WHEN judge_verdict IS NOT NULL OR judge_score IS NOT NULL THEN 1 ELSE 0 END) AS judged_rows,
+                SUM(CASE WHEN
+                    flags_json LIKE '%SECOND_PASS_RECHECK%' OR
+                    flags_json LIKE '%SECOND_PASS_CONFIRMED%' OR
+                    flags_json LIKE '%SECOND_PASS_DISAGREEMENT%' OR
+                    flags_json LIKE '%SECOND_PASS_UNAVAILABLE%'
+                THEN 1 ELSE 0 END) AS second_pass_candidates,
+                SUM(CASE WHEN
+                    flags_json LIKE '%SECOND_PASS_CONFIRMED%' OR
+                    flags_json LIKE '%SECOND_PASS_DISAGREEMENT%'
+                THEN 1 ELSE 0 END) AS second_pass_completed,
+                SUM(CASE WHEN flags_json LIKE '%SECOND_PASS_CATEGORY_OVERRIDDEN%' THEN 1 ELSE 0 END) AS second_pass_overrides
+            FROM run_rows
+            WHERE {where_clause}
+            """,
+            params,
+        ).fetchone()
+
+    return {
+        "processed_rows": int((row or {})["processed_rows"] or 0),
+        "threat_rows_detected": int((row or {})["threat_rows_detected"] or 0),
+        "review_required_rows_detected": int((row or {})["review_required_rows_detected"] or 0),
+        "judged_rows": int((row or {})["judged_rows"] or 0),
+        "second_pass_candidates": int((row or {})["second_pass_candidates"] or 0),
+        "second_pass_completed": int((row or {})["second_pass_completed"] or 0),
+        "second_pass_overrides": int((row or {})["second_pass_overrides"] or 0),
+    }
+
+
+def update_run_row_review(
+    *,
+    runs_dir: Path,
+    run_id: str,
+    row_index: int,
+    review_state: str | None,
+    review_decision: str | None,
+    reviewer_note: str | None,
+) -> None:
+    now = _now_ts()
+    with _connect(runs_dir) as conn:
+        conn.execute(
+            """
+            UPDATE run_rows
+            SET review_state = COALESCE(?, review_state),
+                review_decision = COALESCE(?, review_decision),
+                reviewer_note = COALESCE(?, reviewer_note),
+                updated_at = ?
+            WHERE run_id = ? AND row_index = ?
+            """,
+            (review_state, review_decision, reviewer_note, now, run_id, row_index),
+        )
+        conn.commit()
 
 
 def register_run(*, runs_dir: Path, run_id: str, upload_id: str | None, language: str, review_mode: str, state: str) -> None:
@@ -644,6 +989,45 @@ def reset_run_segments(*, runs_dir: Path, run_id: str) -> None:
         conn.commit()
 
 
+def resume_run_segments(*, runs_dir: Path, run_id: str) -> int:
+    now = _now_ts()
+    with _connect(runs_dir) as conn:
+        rows = conn.execute(
+            """
+            SELECT segment_id, row_count, processed_rows, state
+            FROM segments
+            WHERE run_id = ?
+            """,
+            (run_id,),
+        ).fetchall()
+        if not rows:
+            return 0
+        count = 0
+        for row in rows:
+            if str(row["state"] or "READY") == "COMPLETED":
+                continue
+            row_count = int(row["row_count"] or 0)
+            processed_rows = max(0, min(int(row["processed_rows"] or 0), row_count))
+            conn.execute(
+                """
+                UPDATE segments
+                SET state = 'QUEUED',
+                    processed_rows = ?,
+                    worker_id = NULL,
+                    claimed_at = NULL,
+                    started_at = CASE WHEN ? > 0 THEN started_at ELSE NULL END,
+                    completed_at = NULL,
+                    last_error = NULL,
+                    updated_at = ?
+                WHERE segment_id = ?
+                """,
+                (processed_rows, processed_rows, now, row["segment_id"]),
+            )
+            count += 1
+        conn.commit()
+    return count
+
+
 def reconcile_run_segments(*, runs_dir: Path, run_id: str, target_state: str = "QUEUED") -> int:
     now = _now_ts()
     with _connect(runs_dir) as conn:
@@ -662,7 +1046,7 @@ def reconcile_run_segments(*, runs_dir: Path, run_id: str, target_state: str = "
             row_count = int(row["row_count"] or 0)
             processed_rows = min(int(row["processed_rows"] or 0), row_count)
             resolved_state = "COMPLETED" if processed_rows >= row_count and row_count > 0 else target_state
-            resolved_processed_rows = row_count if resolved_state == "COMPLETED" else 0
+            resolved_processed_rows = row_count if resolved_state == "COMPLETED" else processed_rows
             conn.execute(
                 """
                 UPDATE segments
@@ -697,7 +1081,7 @@ def block_remaining_segments(*, runs_dir: Path, run_id: str, state: str, error_m
         conn.commit()
 
 
-def build_run_segment_summary(*, runs_dir: Path, run_id: str) -> dict[str, Any]:
+def build_run_segment_summary(*, runs_dir: Path, run_id: str, effective_run_state: str | None = None) -> dict[str, Any]:
     with _connect(runs_dir) as conn:
         segments = conn.execute("SELECT * FROM segments WHERE run_id = ? ORDER BY segment_index ASC", (run_id,)).fetchall()
     status_counts: dict[str, int] = {}
@@ -705,11 +1089,14 @@ def build_run_segment_summary(*, runs_dir: Path, run_id: str) -> dict[str, Any]:
     processed_rows = 0
     review: dict[str, Any] = {"total_segments": len(segments), "processed_rows": 0, "total_rows": 0, "segments_by_status": {}, "active_segment": None}
     for segment in segments:
-        status = str(segment["state"] or "READY")
+        status = effective_segment_state_for_run(
+            segment_state=str(segment["state"] or "READY"),
+            run_state=effective_run_state,
+        )
         status_counts[status] = status_counts.get(status, 0) + 1
-        total_rows += int(segment["row_count"] or 0)
-        if status == "COMPLETED":
-            processed_rows += int(segment["row_count"] or 0)
+        row_count = int(segment["row_count"] or 0)
+        total_rows += row_count
+        processed_rows += min(max(int(segment["processed_rows"] or 0), 0), row_count)
         if status == "PROCESSING" and review["active_segment"] is None:
             review["active_segment"] = dict(segment)
     review["total_rows"] = total_rows
@@ -816,14 +1203,15 @@ def build_upload_queue_summary(*, runs_dir: Path, upload_id: str) -> dict:
         completed_segments = status_counts.get("COMPLETED", 0)
         segment_progress_pct = round((completed_segments / total_segments) * 100, 2) if total_segments else 0.0
         segment_processed_rows = sum(
-            int(segment["row_count"] or 0)
+            min(max(int(segment["processed_rows"] or 0), 0), int(segment["row_count"] or 0))
             for segment in segments
-            if str(segment["state"] or "READY") == "COMPLETED"
         )
         total_segment_rows = sum(int(segment["row_count"] or 0) for segment in segments)
         resolved_run = _resolved_run_snapshot(runs_dir, str(run["run_id"]), run) if run else None
+        canonical_stats = summarize_run_rows(runs_dir=runs_dir, run_id=str(run["run_id"])) if run else {}
         run_processed_rows = int(
-            ((resolved_run or {}).get("processing_stats") or {}).get("processed_rows")
+            (canonical_stats or {}).get("processed_rows")
+            or ((resolved_run or {}).get("processing_stats") or {}).get("processed_rows")
             or ((resolved_run or {}).get("progress") or {}).get("processed_rows")
             or ((resolved_run or {}).get("processed_rows") or 0)
             or (run["processed_rows"] if run else 0)
@@ -836,7 +1224,12 @@ def build_upload_queue_summary(*, runs_dir: Path, upload_id: str) -> dict:
             else (resolved_run or {}).get("row_progress_percentage", _row_progress_percentage(run))
         )
         eta_seconds = (resolved_run or {}).get("estimated_remaining_seconds", _estimate_remaining_seconds(run))
-        processing_stats = (resolved_run or {}).get("processing_stats") or _read_processing_stats(runs_dir, str(run["run_id"]) if run else None) or _fallback_processing_stats(run)
+        processing_stats = (
+            (resolved_run or {}).get("processing_stats")
+            or ({**(_fallback_processing_stats(run) or {}), **canonical_stats} if run else None)
+            or _read_processing_stats(runs_dir, str(run["run_id"]) if run else None)
+            or _fallback_processing_stats(run)
+        )
         return {
             "upload_id": upload_id,
             "status": upload["status"],
@@ -846,6 +1239,7 @@ def build_upload_queue_summary(*, runs_dir: Path, upload_id: str) -> dict:
             "segment_count": total_segments,
             "segments_by_status": status_counts,
             "progress_percentage": row_progress_pct if run else segment_progress_pct,
+            "processed_rows": effective_processed_rows,
             "row_progress_percentage": row_progress_pct,
             "segment_progress_percentage": segment_progress_pct,
             "estimated_remaining_seconds": eta_seconds,
@@ -869,7 +1263,7 @@ def build_operations_overview(*, runs_dir: Path) -> dict:
             total_rows += int(summary.get("row_count") or 0)
             run = summary.get("run") or {}
             processing_stats = summary.get("processing_stats") or {}
-            processed_rows += int(processing_stats.get("processed_rows") or run.get("processed_rows") or 0)
+            processed_rows += int(summary.get("processed_rows") or processing_stats.get("processed_rows") or run.get("processed_rows") or 0)
             for name, value in (summary.get("segments_by_status") or {}).items():
                 aggregate[name] = aggregate.get(name, 0) + int(value)
         active_uploads = sum(1 for summary in summaries if summary.get("run") and str((summary.get("run") or {}).get("state", "")) in ACTIVE_RUN_STATES)

@@ -1,8 +1,8 @@
 # {spot} Local Appliance Runbook
 
-Current workspace implementation baseline: `0.4.1`
+Current workspace implementation baseline: `0.5.0`
 SSOT baseline: `0.2`
-Document date: `2026-05-03`
+Document date: `2026-05-07`
 
 ## Purpose
 
@@ -38,6 +38,7 @@ Key locations:
 - SSOT: `ssot/`
 - backend: `backend/`
 - runtime code: `src/`
+- native app source: `app/macos/`
 - run artifacts: `runs/`
 - environment: `.venv/`
 
@@ -97,43 +98,25 @@ From the project root:
 
 ```bash
 cd /Users/moldovancsaba/Projects/spot
-chmod +x start_browser_appliance.sh
-bash start_browser_appliance.sh
+cd app/macos
+swift build
+bash build-bundle.sh
+bash install-bundle.sh
+open /Applications/spot.app
 ```
 
 Expected result:
-- startup preflight runs first unless `SPOT_RUN_PREFLIGHT=0`
-- backend starts locally
-- browser operator surface becomes available on loopback
+- the native app starts locally
+- the supervised backend starts on loopback
+- the native SwiftUI workspace becomes available
 - no remote bind is required for normal operation
 
-Supported appliance entrypoint:
-- `start_browser_appliance.sh`
-- override `SPOT_RUN_PREFLIGHT=0` only for deliberate local dev restarts
+Supported native build validation:
+- `swift build`
+- `bash build-bundle.sh`
+- `bash install-bundle.sh`
 
-Supported browser startup URL:
-
-- dashboard: `http://127.0.0.1:8765/app`
-- root path alias: `http://127.0.0.1:8765/`
-
-Supported browser verification command:
-
-```bash
-cd /Users/moldovancsaba/Projects/spot
-.venv/bin/python backend/browser_operator_smoke.py
-```
-
-Expected verification result:
-- local auth succeeds
-- upload intake succeeds
-- browser operator pages render
-- review/sign-off/recovery seams respond successfully
-
-Verification boundary:
-- this smoke command validates the browser integration seams inside the local app
-- it does not replace live benchmark/UAT execution on the target delivery machine
-
-Current browser dashboard capabilities:
+Current native dashboard capabilities:
 - queue one or more `.xlsx` workbooks into local intake
 - inspect accepted uploads and their queue segmentation summary
 - monitor run state, row progress, segment progress, elapsed time, and average seconds per row
@@ -142,9 +125,11 @@ Current browser dashboard capabilities:
 
 Native app note:
 - `spot.app` currently uses a separate native-local workflow with watched-folder intake, native inbox history, and local run/upload fallback state
+- native app source of truth lives in `app/macos/`
+- generated native build folders `.build/` and `dist/` under `app/macos/` are disposable and intentionally untracked
 - native runtime shutdown is now expected to suspend active segment-worker runs for later recovery instead of cancelling them
 - relaunching `spot.app` is expected to restart the loopback backend and recover an interrupted resumable run when segment state remains queued
-- the browser runbook above does not describe the native dashboard recovery logic or its watched-folder automation contract
+- this runbook describes the supported native dashboard recovery logic and watched-folder automation contract
 
 ## Preflight Command
 
@@ -187,10 +172,8 @@ Expected result:
 
 ## Monitoring Procedure
 
-Main local URLs:
-- `http://127.0.0.1:8765/app`
-- `http://127.0.0.1:8765/classify-monitor`
-- `http://127.0.0.1:8765/agent-eval`
+Main local backend URL:
+- `http://127.0.0.1:8765/api/health`
 
 Operator checks:
 - run state moves through validation, processing, writing, completion

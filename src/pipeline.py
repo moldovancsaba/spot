@@ -12,6 +12,7 @@ from typing import Optional
 
 from . import PIPELINE_VERSION
 from .classifier import classify_batch, get_inference_parameters
+from .classifier import stable_row_hash
 from .defaults import DEFAULT_LOCKED_SSOT_PATH, DEFAULT_PRODUCTION_MODE
 from .ensemble.ensemble_runner import run_ensemble_batch
 from .excel_io import (
@@ -20,9 +21,10 @@ from .excel_io import (
     validate_no_null_assigned_category,
     write_output,
 )
-from .models import CANONICAL_CATEGORIES, RunPolicy
+from .models import CANONICAL_CATEGORIES, ClassificationResult, RunPolicy
 from .ssot_loader import SSOTError, load_ssot
 from .lanes import TASK_ROUTING, format_model_version, load_lane_config, parse_model_spec
+from backend.services.artifact_manifest_service import write_artifact_manifest
 
 
 class ConfigError(RuntimeError):
@@ -307,24 +309,141 @@ def _sha256_file(path: Path) -> str:
 
 
 def _write_artifact_manifest(run_dir: Path) -> None:
-    files = [
-        "progress.json",
-        "policy.json",
-        "integrity_report.json",
-        "output.xlsx",
-        "logs.txt",
-        "disagreement_report.json",
-        "control.json",
-    ]
-    manifest = {}
-    for name in files:
-        path = run_dir / name
-        if path.exists():
-            manifest[name] = {"sha256": _sha256_file(path), "bytes": path.stat().st_size}
-    (run_dir / "artifact_manifest.json").write_text(
-        json.dumps({"artifacts": manifest}, ensure_ascii=False, indent=2),
-        encoding="utf-8",
+    write_artifact_manifest(run_dir=run_dir, sha256_file=_sha256_file)
+
+
+def _serialize_result(result: ClassificationResult) -> dict:
+    return {
+        "row_index": result.row_index,
+        "raw_category": result.raw_category,
+        "category": result.category,
+        "confidence": result.confidence,
+        "explanation": result.explanation,
+        "flags": list(result.flags),
+        "soft_signal_score": result.soft_signal_score,
+        "soft_signal_flags": list(result.soft_signal_flags or []),
+        "soft_signal_evidence": list(result.soft_signal_evidence or []),
+        "resolved_model_version": result.resolved_model_version,
+        "model_votes": dict(result.model_votes or {}),
+        "consensus_tier": result.consensus_tier,
+        "minority_label": result.minority_label,
+        "drafted_text": result.drafted_text,
+        "judge_score": result.judge_score,
+        "judge_verdict": result.judge_verdict,
+        "fallback_events": list(result.fallback_events or []),
+    }
+
+
+def _deserialize_result(payload: dict) -> ClassificationResult:
+    return ClassificationResult(
+        row_index=int(payload["row_index"]),
+        raw_category=str(payload.get("raw_category") or ""),
+        category=str(payload.get("category") or ""),
+        confidence=float(payload.get("confidence") or 0.0),
+        explanation=str(payload.get("explanation") or ""),
+        flags=[str(item) for item in payload.get("flags", [])],
+        soft_signal_score=(float(payload["soft_signal_score"]) if payload.get("soft_signal_score") is not None else None),
+        soft_signal_flags=[str(item) for item in payload.get("soft_signal_flags", [])],
+        soft_signal_evidence=[str(item) for item in payload.get("soft_signal_evidence", [])],
+        resolved_model_version=(str(payload["resolved_model_version"]) if payload.get("resolved_model_version") else None),
+        model_votes={str(key): str(value) for key, value in dict(payload.get("model_votes") or {}).items()} or None,
+        consensus_tier=(str(payload["consensus_tier"]) if payload.get("consensus_tier") else None),
+        minority_label=(str(payload["minority_label"]) if payload.get("minority_label") else None),
+        drafted_text=(str(payload["drafted_text"]) if payload.get("drafted_text") is not None else None),
+        judge_score=(float(payload["judge_score"]) if payload.get("judge_score") is not None else None),
+        judge_verdict=(str(payload["judge_verdict"]) if payload.get("judge_verdict") else None),
+        fallback_events=[str(item) for item in payload.get("fallback_events", [])] or None,
     )
+
+
+def _append_result_checkpoint(checkpoint_path: Path, *, result_index: int, row_hash: str, result: ClassificationResult) -> None:
+    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+    with checkpoint_path.open("a", encoding="utf-8") as handle:
+        handle.write(
+            json.dumps(
+                {
+                    "result_index": result_index,
+                    "row_hash": row_hash,
+                    "result": _serialize_result(result),
+                },
+                ensure_ascii=False,
+            )
+            + "\n"
+        )
+
+
+def _persist_canonical_run_row(
+    *,
+    canonical_runs_dir: Path | None,
+    canonical_run_id: str | None,
+    canonical_upload_id: str | None,
+    canonical_attempt_id: str | None,
+    result: ClassificationResult,
+    row_hash: str,
+) -> None:
+    if canonical_runs_dir is None or not canonical_run_id:
+        return
+    from backend.services.ops_db_service import upsert_run_rows
+
+    upsert_run_rows(
+        runs_dir=canonical_runs_dir,
+        run_id=canonical_run_id,
+        upload_id=canonical_upload_id,
+        attempt_id=canonical_attempt_id,
+        rows=[
+            {
+                "row_index": result.row_index,
+                "row_hash": row_hash,
+                "assigned_category": result.category,
+                "confidence_score": result.confidence,
+                "explanation": result.explanation,
+                "flags": list(result.flags),
+                "fallback_events": list(result.fallback_events or []),
+                "soft_signal_score": result.soft_signal_score,
+                "soft_signal_flags": list(result.soft_signal_flags or []),
+                "soft_signal_evidence": list(result.soft_signal_evidence or []),
+                "judge_score": result.judge_score,
+                "judge_verdict": result.judge_verdict,
+                "consensus_tier": result.consensus_tier,
+                "minority_label": result.minority_label,
+                "model_votes": dict(result.model_votes or {}),
+                "drafted_text": result.drafted_text,
+                "review_required": "REVIEW_REQUIRED" in (result.flags or []),
+            }
+        ],
+    )
+
+
+def _load_result_checkpoint(checkpoint_path: Path, expected_row_hashes: list[str]) -> dict[int, ClassificationResult]:
+    completed: dict[int, ClassificationResult] = {}
+    if not checkpoint_path.exists():
+        return completed
+    for line in checkpoint_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            payload = json.loads(line)
+        except Exception:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        try:
+            result_index = int(payload.get("result_index"))
+        except Exception:
+            continue
+        if result_index < 0 or result_index >= len(expected_row_hashes):
+            continue
+        if str(payload.get("row_hash") or "") != expected_row_hashes[result_index]:
+            continue
+        result_payload = payload.get("result")
+        if not isinstance(result_payload, dict):
+            continue
+        try:
+            completed[result_index] = _deserialize_result(result_payload)
+        except Exception:
+            continue
+    return completed
 
 
 def run_classification(
@@ -342,6 +461,11 @@ def run_classification(
     consensus_strategy: str = "majority",
     disagreement_mode: str = "human_review",
     progress_every: int = 100,
+    resume_existing: bool = False,
+    canonical_runs_dir: Path | None = None,
+    canonical_run_id: str | None = None,
+    canonical_upload_id: str | None = None,
+    canonical_attempt_id: str | None = None,
 ) -> None:
     run_dir = runs_dir / run_id
     started_at = _now_iso()
@@ -351,8 +475,12 @@ def run_classification(
         "threat_rows": 0,
         "review_required_rows": 0,
         "judged_rows": 0,
+        "second_pass_candidates": 0,
+        "second_pass_completed": 0,
+        "second_pass_overrides": 0,
     }
     processing_stats_lock = Lock()
+    completed_rows_counter = 0
     try:
         _write_progress(run_dir, run_id, "PENDING", started_at=started_at)
         _write_progress(run_dir, run_id, "VALIDATING", started_at=started_at)
@@ -377,42 +505,113 @@ def run_classification(
         if not rows:
             raise SSOTError("No rows available after filtering.")
 
+        row_hashes = [stable_row_hash(row.item_number, row.post_text) for row in rows]
+        checkpoint_path = run_dir / "result_checkpoint.jsonl"
+        results: list[ClassificationResult | None] = [None] * total_rows
+        if resume_existing:
+            checkpoint_results = _load_result_checkpoint(checkpoint_path, row_hashes)
+            for idx, result in checkpoint_results.items():
+                results[idx] = result
+                _persist_canonical_run_row(
+                    canonical_runs_dir=canonical_runs_dir,
+                    canonical_run_id=canonical_run_id,
+                    canonical_upload_id=canonical_upload_id,
+                    canonical_attempt_id=canonical_attempt_id,
+                    result=result,
+                    row_hash=row_hashes[idx],
+                )
+        completed_rows_counter = sum(1 for result in results if result is not None)
+        for result in [result for result in results if result is not None]:
+            processing_stats["threat_rows"] += 1 if result.category != "Not Antisemitic" else 0
+            processing_stats["review_required_rows"] += 1 if "REVIEW_REQUIRED" in (result.flags or []) else 0
+            processing_stats["judged_rows"] += 1 if result.judge_verdict or result.judge_score is not None else 0
+            processing_stats["second_pass_candidates"] += 1 if any(
+                flag in (result.flags or [])
+                for flag in ["SECOND_PASS_RECHECK", "SECOND_PASS_CONFIRMED", "SECOND_PASS_DISAGREEMENT", "SECOND_PASS_UNAVAILABLE"]
+            ) else 0
+            processing_stats["second_pass_completed"] += 1 if any(
+                flag in (result.flags or [])
+                for flag in ["SECOND_PASS_CONFIRMED", "SECOND_PASS_DISAGREEMENT"]
+            ) else 0
+            processing_stats["second_pass_overrides"] += 1 if "SECOND_PASS_CATEGORY_OVERRIDDEN" in (result.flags or []) else 0
+
         _write_progress(
             run_dir,
             run_id,
             "PROCESSING",
             started_at=started_at,
             total_rows=total_rows,
-            processed_rows=0,
+            processed_rows=completed_rows_counter,
+        )
+        _write_processing_stats(
+            run_dir=run_dir,
+            run_id=run_id,
+            started_at=started_at,
+            total_rows=total_rows,
+            processed_rows=completed_rows_counter,
+            threat_rows=int(processing_stats["threat_rows"]),
+            review_required_rows=int(processing_stats["review_required_rows"]),
+            judged_rows=int(processing_stats["judged_rows"]),
+            second_pass_candidates=int(processing_stats["second_pass_candidates"]),
+            second_pass_completed=int(processing_stats["second_pass_completed"]),
+            second_pass_overrides=int(processing_stats["second_pass_overrides"]),
         )
 
-        def _progress_update(done: int, total: int, latest_result) -> None:
+        remaining_indices = [idx for idx, result in enumerate(results) if result is None]
+        remaining_rows = [rows[idx] for idx in remaining_indices]
+
+        def _row_completed(done: int, total: int, local_idx: int, latest_result, row_hash: str) -> None:
+            nonlocal completed_rows_counter
+            global_idx = remaining_indices[local_idx]
             with processing_stats_lock:
+                results[global_idx] = latest_result
+                completed_rows_counter += 1
+                _append_result_checkpoint(checkpoint_path, result_index=global_idx, row_hash=row_hash, result=latest_result)
+                _persist_canonical_run_row(
+                    canonical_runs_dir=canonical_runs_dir,
+                    canonical_run_id=canonical_run_id,
+                    canonical_upload_id=canonical_upload_id,
+                    canonical_attempt_id=canonical_attempt_id,
+                    result=latest_result,
+                    row_hash=row_hash,
+                )
                 if latest_result.category != "Not Antisemitic":
                     processing_stats["threat_rows"] += 1
                 if "REVIEW_REQUIRED" in (latest_result.flags or []):
                     processing_stats["review_required_rows"] += 1
                 if latest_result.judge_verdict or latest_result.judge_score is not None:
                     processing_stats["judged_rows"] += 1
+                if any(
+                    flag in (latest_result.flags or [])
+                    for flag in ["SECOND_PASS_RECHECK", "SECOND_PASS_CONFIRMED", "SECOND_PASS_DISAGREEMENT", "SECOND_PASS_UNAVAILABLE"]
+                ):
+                    processing_stats["second_pass_candidates"] += 1
+                if any(flag in (latest_result.flags or []) for flag in ["SECOND_PASS_CONFIRMED", "SECOND_PASS_DISAGREEMENT"]):
+                    processing_stats["second_pass_completed"] += 1
+                if "SECOND_PASS_CATEGORY_OVERRIDDEN" in (latest_result.flags or []):
+                    processing_stats["second_pass_overrides"] += 1
             _write_progress(
                 run_dir,
                 run_id,
                 "PROCESSING",
-                message=f"Processed {done}/{total} rows",
+                message=f"Processed {completed_rows_counter}/{total_rows} rows",
                 started_at=started_at,
-                total_rows=total,
-                processed_rows=done,
+                total_rows=total_rows,
+                processed_rows=completed_rows_counter,
             )
             with processing_stats_lock:
                 _write_processing_stats(
                     run_dir=run_dir,
                     run_id=run_id,
                     started_at=started_at,
-                    total_rows=total,
-                    processed_rows=done,
+                    total_rows=total_rows,
+                    processed_rows=completed_rows_counter,
                     threat_rows=int(processing_stats["threat_rows"]),
                     review_required_rows=int(processing_stats["review_required_rows"]),
                     judged_rows=int(processing_stats["judged_rows"]),
+                    second_pass_candidates=int(processing_stats["second_pass_candidates"]),
+                    second_pass_completed=int(processing_stats["second_pass_completed"]),
+                    second_pass_overrides=int(processing_stats["second_pass_overrides"]),
                 )
         lane_config = load_lane_config()
         _validate_production_lane_policy(ssot=ssot, lane_config=lane_config)
@@ -443,34 +642,56 @@ def run_classification(
                 raise ConfigError("Ensemble mode requires exactly 3 local models for MVP consensus.")
             if run_policy.consensus_strategy != "majority":
                 raise ConfigError("MVP ensemble supports consensus_strategy='majority' only.")
-            (
-                results,
-                row_hashes,
-                per_model_distribution,
-                consensus_distribution,
-                consensus_tier_summary,
-            ) = run_ensemble_batch(
-                rows=rows,
-                ssot=ssot,
-                review_mode=review_mode,
-                max_workers=max_workers,
-                run_policy=run_policy,
-                progress_callback=_progress_update,
-                progress_every=progress_every,
-            )
+            per_model_distribution: dict = {}
+            consensus_distribution: dict = {}
+            consensus_tier_summary: dict = {}
+            if remaining_rows:
+                (
+                    remaining_results,
+                    _remaining_hashes,
+                    per_model_distribution,
+                    consensus_distribution,
+                    consensus_tier_summary,
+                ) = run_ensemble_batch(
+                    rows=remaining_rows,
+                    ssot=ssot,
+                    review_mode=review_mode,
+                    max_workers=max_workers,
+                    run_policy=run_policy,
+                    row_completion_callback=_row_completed,
+                    progress_callback=None,
+                    progress_every=progress_every,
+                )
+                for local_idx, result in enumerate(remaining_results):
+                    results[remaining_indices[local_idx]] = result
+            else:
+                existing_results = [result for result in results if result is not None]
+                per_model_distribution = {}
+                consensus_distribution = dict(Counter(r.category for r in existing_results))
+                consensus_tier_summary = dict(Counter((r.consensus_tier or "HIGH") for r in existing_results))
         else:
-            results, row_hashes = classify_batch(
-                rows,
-                ssot,
-                max_workers=max_workers,
-                review_mode=review_mode,
-                model_name=run_policy.ensemble_models[0],
-                progress_callback=_progress_update,
-                progress_every=progress_every,
-            )
-            per_model_distribution = {model_versions[0]: dict(Counter(r.category for r in results))}
-            consensus_distribution = dict(Counter(r.category for r in results))
-            consensus_tier_summary = {"HIGH": len(results), "MEDIUM": 0, "LOW": 0}
+            if remaining_rows:
+                remaining_results, _remaining_hashes = classify_batch(
+                    remaining_rows,
+                    ssot,
+                    max_workers=max_workers,
+                    review_mode=review_mode,
+                    model_name=run_policy.ensemble_models[0],
+                    row_completion_callback=_row_completed,
+                    progress_callback=None,
+                    progress_every=progress_every,
+                )
+                for local_idx, result in enumerate(remaining_results):
+                    results[remaining_indices[local_idx]] = result
+            final_results = [result for result in results if result is not None]
+            per_model_distribution = {model_versions[0]: dict(Counter(r.category for r in final_results))}
+            consensus_distribution = dict(Counter(r.category for r in final_results))
+            consensus_tier_summary = dict(Counter((r.consensus_tier or "HIGH") for r in final_results))
+
+        if any(result is None for result in results):
+            missing = [idx for idx, result in enumerate(results) if result is None][:10]
+            raise RuntimeError(f"Missing final classification results for rows: {missing}")
+        results = [result for result in results if result is not None]
 
         # Hard guardrail: exactly one valid canonical category per row.
         for r in results:
@@ -508,7 +729,9 @@ def run_classification(
             raise RuntimeError(
                 f"Canonical set validation failed. Detected non-canonical categories: {sorted(detected_categories - CANONICAL_CATEGORIES)}"
             )
-        shutil.copy2(output_path, run_dir / "output.xlsx")
+        run_output_path = run_dir / "output.xlsx"
+        if output_path.resolve() != run_output_path.resolve():
+            shutil.copy2(output_path, run_output_path)
 
         policy_payload = {
             "run_id": run_id,
@@ -561,7 +784,6 @@ def run_classification(
             consensus_distribution=consensus_distribution,
             consensus_tier_summary=consensus_tier_summary,
         )
-        _write_artifact_manifest(run_dir)
         _write_progress(
             run_dir,
             run_id,
@@ -605,5 +827,7 @@ def run_classification(
             started_at=started_at,
             completed_at=completed_at,
             total_rows=total_rows,
+            processed_rows=completed_rows_counter,
         )
+        _write_artifact_manifest(run_dir)
         raise

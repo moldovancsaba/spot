@@ -5,6 +5,9 @@ __pycache__/
 .pytest_cache/
 logs/
 runs/
+app/macos/.build/
+app/macos/dist/
+app/macos/__pycache__/
 samples/*_out*.xlsx
 samples/*_proof.xlsx
 samples/*_smoke*.xlsx

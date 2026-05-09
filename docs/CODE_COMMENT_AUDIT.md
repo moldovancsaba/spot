@@ -1,7 +1,7 @@
 # {spot} Code Comment Audit
 
 Date: `2026-05-03`
-Workspace baseline: `0.4.1`
+Workspace baseline: `0.5.0`
 
 ## Scope
 

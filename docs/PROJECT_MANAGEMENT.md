@@ -15,29 +15,19 @@ The functional and technical single source of truth inside this repository is:
 
 ## Active Product Contract
 
-The active browser operator baseline contract is:
-- [`docs/BROWSER_OPERATOR_CONTRACT.md`](/Users/moldovancsaba/Projects/spot/docs/BROWSER_OPERATOR_CONTRACT.md)
+The active operator baseline is the native macOS workspace plus its supervised local runtime contract.
 
-This document is the repo-side implementation contract for GitHub issue `#1` and the `{spot} v0.4.1 Browser Contract & Foundations` milestone.
-
-Execution breakdown for the active phase:
-- [`docs/BROWSER_PHASE_EXECUTION_PLAN.md`](/Users/moldovancsaba/Projects/spot/docs/BROWSER_PHASE_EXECUTION_PLAN.md)
+Browser-phase planning documents remain historical records and are no longer the active implementation contract.
 
 ## Active Productionization Contract
 
-The active implementation contract for the next milestone is:
-- [`docs/BROWSER_PRODUCTIONIZATION_CONTRACT.md`](/Users/moldovancsaba/Projects/spot/docs/BROWSER_PRODUCTIONIZATION_CONTRACT.md)
-
-This document is the repo-side implementation contract for GitHub issue `#12` and the `{spot} v0.4.3 Browser Productionization` milestone.
-
-Execution breakdown for the current active milestone:
-- [`docs/BROWSER_PRODUCTIONIZATION_EXECUTION_PLAN.md`](/Users/moldovancsaba/Projects/spot/docs/BROWSER_PRODUCTIONIZATION_EXECUTION_PLAN.md)
+The active implementation contract for the next milestone is the native-only hardening and release cutover tracked in the current repo baseline.
 
 ## Current Implementation Status
 
 - Core runtime: implemented
-- Browser operator baseline: implemented
+- Native macOS supervisor baseline: implemented
 - Queue-backed local operations dashboard: implemented
-- Browser productionization verification: implemented as deterministic smoke plus startup contract
-- Live client acceptance on the browser-enabled baseline: pending
-- Current remaining milestone focus: release cutover and post-release handover
+- Native-only delivery baseline: in progress
+- Live client acceptance on the native-only baseline: pending
+- Current remaining milestone focus: foundation hardening, DB-centered execution migration, release cutover, and post-release handover

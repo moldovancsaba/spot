@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.0 - 2026-05-07
+
+- Renamed the native macOS app source root from `app/spot-app` to `app/macos`.
+- Aligned active workspace version markers to `0.5.0` and pipeline markers to `mvp-0.5.0`.
+- Documented the native supervisor baseline, repo layout, generated native build folders, and maintainer-facing source-of-truth paths.
+- Clarified that `app/macos/.build/` and `app/macos/dist/` are generated outputs and not source-controlled project structure.
+
 ## 0.4.0 - 2026-03-18
 
 - Implemented the local browser operator workflow for upload intake, run status, review, row inspection, artifact retrieval, and sign-off.

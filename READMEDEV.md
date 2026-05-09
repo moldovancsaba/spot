@@ -1,7 +1,7 @@
 # {spot} Developer Readme
 
-Document date: `2026-05-03`
-Workspace baseline: `0.4.1`
+Document date: `2026-05-07`
+Workspace baseline: `0.5.0`
 Latest shipped release: `v0.3.1`
 SSOT baseline: `0.2`
 
@@ -80,8 +80,7 @@ Security posture:
 The repo already includes:
 - bootstrap command
 - preflight command
-- browser appliance startup path
-- browser operator smoke coverage
+- native macOS supervisor app under `app/macos`
 - production-mode restrictions
 - audit manifest generation
 - fallback event reporting
@@ -95,8 +94,8 @@ The repo already includes:
 Current local acceptance path:
 - bootstrap the machine
 - run preflight
-- run the supported browser startup path
-- run browser smoke verification
+- build and install the native macOS app
+- run the native acceptance smoke
 - run benchmark checklist
 - run UAT checklist
 - record evidence with the acceptance template
@@ -108,14 +107,15 @@ Current local acceptance path:
 - Keep these distinct.
 
 Current state:
-- workspace baseline: `0.4.1`
-- pipeline baseline: `mvp-0.4.1`
+- workspace baseline: `0.5.0`
+- pipeline baseline: `mvp-0.5.0`
 - latest shipped release: `v0.3.1`
 
 Update these surfaces together when the workspace baseline changes:
 - [`VERSION`](/Users/moldovancsaba/Projects/spot/VERSION)
 - [`src/__init__.py`](/Users/moldovancsaba/Projects/spot/src/__init__.py)
 - [`backend/main.py`](/Users/moldovancsaba/Projects/spot/backend/main.py)
+- native bundle metadata under [`app/macos/`](/Users/moldovancsaba/Projects/spot/app/macos)
 - current-baseline docs such as [`README.md`](/Users/moldovancsaba/Projects/spot/README.md), [`README_BRIEF.md`](/Users/moldovancsaba/Projects/spot/README_BRIEF.md), and active planning/operational docs
 
 Do not rewrite historical release notes just to match the workspace baseline.
@@ -137,7 +137,7 @@ Minimum validation for routine repo work:
 
 ```bash
 git status --short --branch
-python3 -m py_compile src/*.py src/ensemble/*.py src/evaluation/*.py backend/main.py backend/models/*.py backend/routes/*.py backend/services/*.py backend/browser_operator_smoke.py
+python3 -m py_compile src/*.py src/ensemble/*.py src/evaluation/*.py backend/main.py backend/models/*.py backend/routes/*.py backend/services/*.py
 ```
 
 Operational validation when touching delivery/runtime behaviour:
@@ -147,11 +147,22 @@ python3 -m src.cli bootstrap --project-root . --venv-path .venv --requirements r
 SPOT_PRODUCTION_MODE=1 .venv/bin/python -m src.cli preflight --ssot ssot/ssot.json --runs-dir runs --port 8765
 ```
 
+Native app validation when touching `app/macos`:
+
+```bash
+cd /Users/moldovancsaba/Projects/spot/app/macos
+swift package dump-package >/dev/null
+swift build
+bash -n ./build-icon.sh
+bash -n ./build-bundle.sh
+bash -n ./install-bundle.sh
+plutil -lint ./Info.plist
+```
+
 ## Current Next Step Priority
 
-The active milestone is browser productionization:
-- current workspace baseline is `0.4.1`; `VERSION` and active docs are aligned to that baseline
-- browser operator baseline is implemented in code
-- queue-backed local operations and dashboard monitoring are implemented in code
-- browser smoke is synthetic integration verification, not live client acceptance proof
-- remaining pre-delivery work is release cutover plus fresh client-machine acceptance evidence on the current baseline
+The active maintainability baseline is:
+- current workspace baseline is `0.5.0`; `VERSION` and active docs are aligned to that baseline
+- native macOS supervisor baseline is implemented in code
+- queue-backed local operations and dashboard monitoring are implemented behind the native macOS workspace
+- remaining work is foundation hardening, DB-centered execution migration, release cutover, and fresh client-machine acceptance evidence on the current baseline

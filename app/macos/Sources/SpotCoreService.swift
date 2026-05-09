@@ -1,5 +1,8 @@
 import AppKit
 import Foundation
+import SQLite3
+
+private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
 @MainActor
 final class SpotCoreService: ObservableObject {
@@ -86,10 +89,6 @@ final class SpotCoreService: ObservableObject {
         let loadedConfig = loadNativeConfig()
         nativeConfig = loadedConfig
         inboxActivities = loadInboxActivities()
-        let missingWatchConfig =
-            loadedConfig.intakeWatchDir.isEmpty ||
-            loadedConfig.intakeArchiveDir.isEmpty ||
-            loadedConfig.intakeFailedDir.isEmpty
         if nativeConfig.runsDir.isEmpty {
             nativeConfig.runsDir = spotDataHome.appending(path: "runs").path
         }
@@ -111,9 +110,7 @@ final class SpotCoreService: ObservableObject {
         if newRunID.isEmpty {
             newRunID = suggestedRunID()
         }
-        if missingWatchConfig {
-            saveNativeConfig()
-        }
+        saveNativeConfig()
         refreshWatchFolderStatus()
     }
 
@@ -277,27 +274,6 @@ final class SpotCoreService: ObservableObject {
             semaphore.signal()
         }
         _ = semaphore.wait(timeout: .now() + 8)
-    }
-
-    func openBrowserWorkspace() {
-        guard let url = URL(string: "http://\(preferredHost):\(nativeConfig.port)/app") else { return }
-        NSWorkspace.shared.open(url)
-    }
-
-    func openReviewWorkspace(runID: String) {
-        guard !runID.isEmpty else { return }
-        guard let url = URL(string: "http://\(preferredHost):\(nativeConfig.port)/runs/\(runID)/review") else { return }
-        NSWorkspace.shared.open(url)
-    }
-
-    func openSelectedReviewWorkspace() {
-        openReviewWorkspace(runID: selectedRunID)
-    }
-
-    func openReviewInspectorInBrowser() {
-        guard !selectedRunID.isEmpty, let rowIndex = selectedReviewRowIndex else { return }
-        guard let url = URL(string: "http://\(preferredHost):\(nativeConfig.port)/runs/\(selectedRunID)/review-rows/\(rowIndex)/view") else { return }
-        NSWorkspace.shared.open(url)
     }
 
     func openLogs() {
@@ -1665,26 +1641,19 @@ final class SpotCoreService: ObservableObject {
         if let active = prioritizedRuns.first(where: { isActiveRunState($0.state) }) {
             return active.runID
         }
-        if let interrupted = prioritizedRuns.first(where: { ($0.state ?? "").uppercased() == "INTERRUPTED" }) {
-            return interrupted.runID
-        }
-        if let failed = prioritizedRuns.first(where: { ($0.state ?? "").uppercased() == "FAILED" }) {
-            return failed.runID
-        }
-        if let pending = prioritizedRuns.first(where: { ($0.reviewSummary?.pendingRows ?? 0) > 0 }) {
-            return pending.runID
+        if let newestCreatedAt = runs.compactMap(\.createdAt).max() {
+            let newestRuns = runs
+                .filter { ($0.createdAt ?? 0) == newestCreatedAt }
+                .sorted(by: sortRunsForPrimarySelection)
+            if let newest = newestRuns.first {
+                return newest.runID
+            }
         }
         if let runID = overview?.recentUploads.compactMap({ $0.run?.runID }).first, !runID.isEmpty {
             return runID
         }
         if let runID = inboxActivities.compactMap({ $0.runID }).first, !runID.isEmpty {
             return runID
-        }
-        if let cancelled = prioritizedRuns.first(where: { ($0.state ?? "").uppercased() == "CANCELLED" }) {
-            return cancelled.runID
-        }
-        if let completed = prioritizedRuns.first(where: { ($0.state ?? "").uppercased() == "COMPLETED" }) {
-            return completed.runID
         }
         if let first = prioritizedRuns.first?.runID {
             return first
@@ -1740,11 +1709,6 @@ final class SpotCoreService: ObservableObject {
         let rhsCreated = rhs.createdAt ?? 0
         if lhsCreated != rhsCreated {
             return lhsCreated > rhsCreated
-        }
-        let lhsUpdated = lhs.updatedAt ?? lhsCreated
-        let rhsUpdated = rhs.updatedAt ?? rhsCreated
-        if lhsUpdated != rhsUpdated {
-            return lhsUpdated > rhsUpdated
         }
         return lhs.runID > rhs.runID
     }
@@ -2073,11 +2037,6 @@ final class SpotCoreService: ObservableObject {
             if lhsActive != rhsActive {
                 return lhsActive && !rhsActive
             }
-            let lhsUpdated = lhs.updatedAt ?? 0
-            let rhsUpdated = rhs.updatedAt ?? 0
-            if lhsUpdated != rhsUpdated {
-                return lhsUpdated > rhsUpdated
-            }
             let lhsCreated = lhs.createdAt ?? 0
             let rhsCreated = rhs.createdAt ?? 0
             if lhsCreated != rhsCreated {
@@ -2318,6 +2277,10 @@ final class SpotCoreService: ObservableObject {
         spotDataHome.appending(path: "native-runtime.env")
     }
 
+    private var nativeConfigDatabaseURL: URL {
+        spotDataHome.appending(path: "native-config.sqlite3")
+    }
+
     private var inboxActivityURL: URL {
         spotDataHome.appending(path: "inbox-activity.json")
     }
@@ -2389,7 +2352,7 @@ final class SpotCoreService: ObservableObject {
         """
     }
 
-    private func loadNativeConfig() -> SpotNativeConfig {
+    private func loadNativeConfigFromEnv() -> SpotNativeConfig {
         var config = SpotNativeConfig.empty
         let url = nativeConfigURL
         guard let content = try? String(contentsOf: url, encoding: .utf8) else {
@@ -2429,6 +2392,16 @@ final class SpotCoreService: ObservableObject {
         return config
     }
 
+    private func loadNativeConfig() -> SpotNativeConfig {
+        let envConfig = loadNativeConfigFromEnv()
+        let dbConfig = loadNativeConfigFromDatabase() ?? .empty
+        let merged = mergedNativeConfig(primary: dbConfig, fallback: envConfig)
+        if loadNativeConfigFromDatabase() == nil, nativeConfigHasMeaningfulValues(envConfig) {
+            saveNativeConfigToDatabase(envConfig)
+        }
+        return merged
+    }
+
     private func loadInboxActivities() -> [SpotInboxDocumentActivity] {
         guard let data = try? Data(contentsOf: inboxActivityURL) else { return [] }
         let decoder = JSONDecoder()
@@ -2448,6 +2421,11 @@ final class SpotCoreService: ObservableObject {
     }
 
     private func saveNativeConfig() {
+        saveNativeConfigToDatabase(nativeConfig)
+        saveNativeConfigToEnv()
+    }
+
+    private func saveNativeConfigToEnv() {
         let boolValue = nativeConfig.autoStartWatchFolder ? "1" : "0"
         let content = """
         # {spot} native runtime configuration
@@ -2469,6 +2447,161 @@ final class SpotCoreService: ObservableObject {
             try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: nativeConfigURL.path)
         } catch {
             appendLog("Could not save native config: \(error.localizedDescription)")
+        }
+    }
+
+    private func mergedNativeConfig(primary: SpotNativeConfig, fallback: SpotNativeConfig) -> SpotNativeConfig {
+        SpotNativeConfig(
+            pythonBin: primary.pythonBin.isEmpty ? fallback.pythonBin : primary.pythonBin,
+            runsDir: primary.runsDir.isEmpty ? fallback.runsDir : primary.runsDir,
+            logsDir: primary.logsDir.isEmpty ? fallback.logsDir : primary.logsDir,
+            accessCode: primary.accessCode.isEmpty ? fallback.accessCode : primary.accessCode,
+            lockedSSOTPath: primary.lockedSSOTPath.isEmpty ? fallback.lockedSSOTPath : primary.lockedSSOTPath,
+            port: primary.port == 0 ? fallback.port : primary.port,
+            intakeWatchDir: primary.intakeWatchDir.isEmpty ? fallback.intakeWatchDir : primary.intakeWatchDir,
+            intakeArchiveDir: primary.intakeArchiveDir.isEmpty ? fallback.intakeArchiveDir : primary.intakeArchiveDir,
+            intakeFailedDir: primary.intakeFailedDir.isEmpty ? fallback.intakeFailedDir : primary.intakeFailedDir,
+            autoStartWatchFolder: primary.autoStartWatchFolder
+        )
+    }
+
+    private func nativeConfigHasMeaningfulValues(_ config: SpotNativeConfig) -> Bool {
+        !config.pythonBin.isEmpty ||
+        !config.runsDir.isEmpty ||
+        !config.logsDir.isEmpty ||
+        !config.accessCode.isEmpty ||
+        !config.lockedSSOTPath.isEmpty ||
+        !config.intakeWatchDir.isEmpty ||
+        !config.intakeArchiveDir.isEmpty ||
+        !config.intakeFailedDir.isEmpty
+    }
+
+    private func loadNativeConfigFromDatabase() -> SpotNativeConfig? {
+        var db: OpaquePointer?
+        guard sqlite3_open(nativeConfigDatabaseURL.path, &db) == SQLITE_OK, let db else {
+            sqlite3_close(db)
+            return nil
+        }
+        defer { sqlite3_close(db) }
+
+        let createSQL = """
+        CREATE TABLE IF NOT EXISTS app_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+        """
+        guard sqlite3_exec(db, createSQL, nil, nil, nil) == SQLITE_OK else {
+            return nil
+        }
+
+        let query = "SELECT key, value FROM app_settings"
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK, let statement else {
+            sqlite3_finalize(statement)
+            return nil
+        }
+        defer { sqlite3_finalize(statement) }
+
+        var config = SpotNativeConfig.empty
+        var sawRow = false
+        while sqlite3_step(statement) == SQLITE_ROW {
+            sawRow = true
+            guard
+                let keyCString = sqlite3_column_text(statement, 0),
+                let valueCString = sqlite3_column_text(statement, 1)
+            else { continue }
+            let key = String(cString: keyCString)
+            let value = String(cString: valueCString)
+            switch key {
+            case "python_bin":
+                config.pythonBin = value
+            case "runs_dir":
+                config.runsDir = value
+            case "logs_dir":
+                config.logsDir = value
+            case "access_code":
+                config.accessCode = value
+            case "locked_ssot_path":
+                config.lockedSSOTPath = value
+            case "port":
+                config.port = Int(value) ?? config.port
+            case "intake_watch_dir":
+                config.intakeWatchDir = value
+            case "intake_archive_dir":
+                config.intakeArchiveDir = value
+            case "intake_failed_dir":
+                config.intakeFailedDir = value
+            case "auto_start_watch_folder":
+                config.autoStartWatchFolder = !["0", "false", "no"].contains(value.lowercased())
+            default:
+                continue
+            }
+        }
+        return sawRow ? config : nil
+    }
+
+    private func saveNativeConfigToDatabase(_ config: SpotNativeConfig) {
+        var db: OpaquePointer?
+        guard sqlite3_open(nativeConfigDatabaseURL.path, &db) == SQLITE_OK, let db else {
+            sqlite3_close(db)
+            appendLog("Could not open native config database.")
+            return
+        }
+        defer { sqlite3_close(db) }
+
+        let createSQL = """
+        CREATE TABLE IF NOT EXISTS app_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+        """
+        guard sqlite3_exec(db, createSQL, nil, nil, nil) == SQLITE_OK else {
+            appendLog("Could not initialize native config database.")
+            return
+        }
+
+        let insertSQL = """
+        INSERT INTO app_settings (key, value, updated_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET
+            value = excluded.value,
+            updated_at = excluded.updated_at
+        """
+
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, insertSQL, -1, &statement, nil) == SQLITE_OK, let statement else {
+            sqlite3_finalize(statement)
+            appendLog("Could not prepare native config database write.")
+            return
+        }
+        defer { sqlite3_finalize(statement) }
+
+        let now = Int(Date().timeIntervalSince1970)
+        let rows: [(String, String)] = [
+            ("python_bin", config.pythonBin),
+            ("runs_dir", config.runsDir),
+            ("logs_dir", config.logsDir),
+            ("access_code", config.accessCode),
+            ("locked_ssot_path", config.lockedSSOTPath),
+            ("port", String(config.port)),
+            ("intake_watch_dir", config.intakeWatchDir),
+            ("intake_archive_dir", config.intakeArchiveDir),
+            ("intake_failed_dir", config.intakeFailedDir),
+            ("auto_start_watch_folder", config.autoStartWatchFolder ? "1" : "0"),
+        ]
+
+        for (key, value) in rows {
+            sqlite3_reset(statement)
+            sqlite3_clear_bindings(statement)
+            sqlite3_bind_text(statement, 1, key, -1, SQLITE_TRANSIENT)
+            sqlite3_bind_text(statement, 2, value, -1, SQLITE_TRANSIENT)
+            sqlite3_bind_int64(statement, 3, sqlite3_int64(now))
+            guard sqlite3_step(statement) == SQLITE_DONE else {
+                appendLog("Could not persist native config key \(key) to database.")
+                return
+            }
         }
     }
 }

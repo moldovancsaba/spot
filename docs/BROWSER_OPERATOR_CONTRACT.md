@@ -1,8 +1,16 @@
 # {spot} Browser Operator Contract
 
+Historical note:
+- this document is retained as an archive of the former browser operator phase
+- the active operator surface is now the native macOS workspace under `app/macos`
+
 This document is the implementation contract for the browser operator phase tracked by GitHub issue `#1`.
 
-Current contract milestone: `{spot} v0.4.1 Browser Contract & Foundations`
+Current contract milestone: `{spot} browser operator baseline`
+
+Note:
+- this document describes the browser operator surface
+- the native supervisor shell under `app/macos/` is a separate implementation layer around the same runtime
 
 ## Purpose
 

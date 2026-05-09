@@ -1,8 +1,8 @@
 # {spot} Client Package
 
-Document date: `2026-05-03`
-Workspace baseline: `0.4.1`
-Pipeline baseline: `mvp-0.4.1`
+Document date: `2026-05-07`
+Workspace baseline: `0.5.0`
+Pipeline baseline: `mvp-0.5.0`
 SSOT baseline: `0.2`
 
 ## Overview
@@ -22,11 +22,12 @@ Its purpose is to classify rows into a strict antisemitism taxonomy with:
 
 The delivered `{spot}` package consists of:
 - local runtime package
+- native macOS supervisor app source under `app/macos` for maintainers
 - SSOT-governed configuration baseline
 - local appliance runbook
-- supported browser appliance startup entrypoint
+- supported native macOS app build/install path
 - operator guidance
-- browser operator surface with queue intake, monitoring, and process-control interface
+- native operator surface with queue intake, monitoring, and process-control interface
 - benchmark and acceptance support package
 - audit artefact structure for completed runs
 
@@ -38,7 +39,7 @@ In scope:
 - exactly one category per row
 - deterministic fallback handling
 - review flagging for uncertain rows
-- local browser operator workflow
+- local native operator workflow
 - local monitoring and run control
 - auditable artefact generation
 
@@ -166,8 +167,8 @@ Base delivery calculation:
 `{spot}` should be treated as ready for structured client acceptance when:
 - SSOT loads cleanly
 - code compiles cleanly
-- supported browser startup path works on the target machine
-- browser smoke verification passes
+- supported native macOS app build/install path works on the target machine
+- native acceptance smoke verification passes
 - preflight passes on the target machine
 - the primary MLX route completes a real run
 - fallback behaviour is visible and auditable
@@ -175,9 +176,16 @@ Base delivery calculation:
 - acceptance evidence is reviewed against client-owned sample data
 
 Current pre-delivery status:
-- browser operator workflow is implemented in the local appliance
-- browser smoke verification is available as deterministic integration coverage
-- fresh live acceptance evidence on the current `0.4.1` browser-enabled baseline is still required before first client delivery
+- native operator workflow is implemented in the local appliance
+- native macOS supervisor shell is implemented in the local appliance repository
+- native acceptance smoke verification is available as deterministic integration coverage
+- fresh live acceptance evidence on the current `0.5.0` native-only baseline is still required before first client delivery
+
+## Maintainer Notes
+
+- native app source root: [`app/macos/`](/Users/moldovancsaba/Projects/spot/app/macos)
+- native generated folders: `app/macos/.build/` and `app/macos/dist/`
+- current repo does not declare an open-source license file
 
 ## Reference Documents
 

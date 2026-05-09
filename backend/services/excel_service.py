@@ -103,6 +103,60 @@ def read_upload_record(*, runs_dir: Path, upload_id: str) -> dict | None:
         return None
 
 
+def ensure_upload_rows_materialized(
+    *,
+    runs_dir: Path,
+    ssot_path: Path,
+    upload_id: str,
+    fallback_input_path: Path | None = None,
+) -> int:
+    record = read_upload_record(runs_dir=runs_dir, upload_id=upload_id)
+    if not record:
+        raise FileNotFoundError(f"Upload record {upload_id} was not found.")
+    if str(record.get("status") or "").lower() != "accepted":
+        raise RuntimeError(f"Upload {upload_id} is not accepted and cannot be materialized.")
+
+    candidate_paths: list[Path] = []
+    stored_path = record.get("stored_path")
+    if stored_path:
+        candidate_paths.append(Path(str(stored_path)))
+    if fallback_input_path is not None:
+        candidate_paths.append(Path(fallback_input_path))
+
+    workbook_path = next((path for path in candidate_paths if path.exists()), None)
+    if workbook_path is None:
+        searched = ", ".join(str(path) for path in candidate_paths) or "(none)"
+        raise FileNotFoundError(f"Could not locate source workbook for upload {upload_id}. Checked: {searched}")
+
+    ssot = load_ssot(ssot_path)
+    rows = read_input_rows(workbook_path, ssot)
+    manifest_entries = build_row_manifest_entries(rows)
+    row_manifest_path = upload_dir(runs_dir, upload_id) / "row_manifest.jsonl"
+    write_row_manifest(row_manifest_path, manifest_entries)
+    replace_upload_rows(runs_dir=runs_dir, upload_id=upload_id, rows=build_stored_row_entries(rows))
+
+    validation = record.get("validation")
+    if not isinstance(validation, dict):
+        validation = {}
+    validation.update(
+        {
+            "accepted": True,
+            "row_count": len(rows),
+            "expected_columns": ssot.policy.expected_columns,
+            "max_input_rows": MAX_INPUT_ROWS,
+            "max_post_text_length": MAX_POST_TEXT_LENGTH,
+            "row_manifest_path": str(row_manifest_path),
+        }
+    )
+    record["validation"] = validation
+    record["stored_path"] = str(workbook_path)
+    upload_record_path(runs_dir, upload_id).write_text(
+        json.dumps(record, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return len(rows)
+
+
 def list_upload_records(*, runs_dir: Path) -> list[dict]:
     root = uploads_dir(runs_dir)
     uploads: list[dict] = []

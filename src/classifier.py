@@ -788,14 +788,20 @@ def classify_batch(
     review_mode: str,
     model_name: str = "",
     progress_callback: Callable[[int, int, ClassificationResult], None] | None = None,
+    row_completion_callback: Callable[[int, int, int, ClassificationResult, str], None] | None = None,
     progress_every: int = 100,
 ) -> Tuple[List[ClassificationResult], List[str]]:
     hashes = [stable_row_hash(r.item_number, r.post_text) for r in rows]
     total = len(rows)
     results: List[ClassificationResult] = [None] * total  # type: ignore[list-item]
+
+    def classify_one(row: InputRow) -> ClassificationResult:
+        initial_result = classify_row(row, ssot, review_mode, model_name)
+        return _adjudicate_targeted_row(row, initial_result, ssot, review_mode, model_name)
+
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         future_to_idx = {
-            pool.submit(classify_row, row, ssot, review_mode, model_name): idx
+            pool.submit(classify_one, row): idx
             for idx, row in enumerate(rows)
         }
         completed = 0
@@ -803,17 +809,8 @@ def classify_batch(
             idx = future_to_idx[future]
             results[idx] = future.result()
             completed += 1
+            if row_completion_callback:
+                row_completion_callback(completed, total, idx, results[idx], hashes[idx])
             if progress_callback and (completed % progress_every == 0 or completed == total):
                 progress_callback(completed, total, results[idx])
-    candidate_indices = [idx for idx, result in enumerate(results) if _should_run_targeted_second_pass(result, ssot)]
-    if candidate_indices:
-        adjudication_workers = min(max_workers, max(1, len(candidate_indices)))
-        with ThreadPoolExecutor(max_workers=adjudication_workers) as pool:
-            future_to_idx = {
-                pool.submit(_adjudicate_targeted_row, rows[idx], results[idx], ssot, review_mode, model_name): idx
-                for idx in candidate_indices
-            }
-            for future in as_completed(future_to_idx):
-                idx = future_to_idx[future]
-                results[idx] = future.result()
     return results, hashes

@@ -1,5 +1,9 @@
 # {spot} Browser Productionization Execution Plan
 
+Historical note:
+- this execution plan is preserved for browser productionization history only
+- it is no longer the active implementation plan
+
 Primary contract:
 - [`docs/BROWSER_PRODUCTIONIZATION_CONTRACT.md`](/Users/moldovancsaba/Projects/spot/docs/BROWSER_PRODUCTIONIZATION_CONTRACT.md)
 

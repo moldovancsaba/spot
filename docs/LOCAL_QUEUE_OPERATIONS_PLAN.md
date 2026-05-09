@@ -1,7 +1,7 @@
 # {spot} Local Queue Operations Plan
 
 Document date: `2026-05-03`
-Workspace baseline: `0.4.1`
+Workspace baseline: `0.5.0`
 
 ## Purpose
 

@@ -1,7 +1,7 @@
 # {spot} Native App Scaffold Spec
 
 Document date: `2026-05-05`
-Target baseline: `0.4.1`
+Target baseline: `0.5.0`
 
 ## Purpose
 
@@ -71,19 +71,19 @@ Stage 1 security non-goals:
 
 Create these files:
 
-- `/Users/moldovancsaba/Projects/spot/app/spot-app/Package.swift`
-- `/Users/moldovancsaba/Projects/spot/app/spot-app/Info.plist`
-- `/Users/moldovancsaba/Projects/spot/app/spot-app/build-icon.sh`
-- `/Users/moldovancsaba/Projects/spot/app/spot-app/build-bundle.sh`
-- `/Users/moldovancsaba/Projects/spot/app/spot-app/install-bundle.sh`
+- `/Users/moldovancsaba/Projects/spot/app/macos/Package.swift`
+- `/Users/moldovancsaba/Projects/spot/app/macos/Info.plist`
+- `/Users/moldovancsaba/Projects/spot/app/macos/build-icon.sh`
+- `/Users/moldovancsaba/Projects/spot/app/macos/build-bundle.sh`
+- `/Users/moldovancsaba/Projects/spot/app/macos/install-bundle.sh`
 - `/Users/moldovancsaba/Projects/spot/script/build_and_run.sh`
-- `/Users/moldovancsaba/Projects/spot/app/spot-app/Sources/SpotApp.swift`
-- `/Users/moldovancsaba/Projects/spot/app/spot-app/Sources/SpotCoreService.swift`
+- `/Users/moldovancsaba/Projects/spot/app/macos/Sources/SpotApp.swift`
+- `/Users/moldovancsaba/Projects/spot/app/macos/Sources/SpotCoreService.swift`
 - `/Users/moldovancsaba/Projects/spot/docs/NATIVE_APP_BUILD_HANDOFF.md`
 
 Optional helper:
 
-- `/Users/moldovancsaba/Projects/spot/app/spot-app/Sources/SpotHelper/main.swift`
+- `/Users/moldovancsaba/Projects/spot/app/macos/Sources/SpotHelper/main.swift`
 
 Only add the helper target if the app genuinely needs a protected local helper for file or mirror operations.
 
@@ -108,7 +108,7 @@ Expected phase-1 directory layout:
 
 ```text
 app/
-  spot-app/
+  macos/
     Package.swift
     Info.plist
     build-icon.sh
@@ -151,7 +151,7 @@ Recommended first target structure:
 
 Starter structure:
 
-- package name: `spot-app`
+- package name: `spot-macos`
 - product `spot`
 - optional product `spot-helper`
 
@@ -296,7 +296,7 @@ Required behavior:
 
 1. stop previous native app process if present
 2. stop previous bundled backend process if present
-3. build bundle via `app/spot-app/build-bundle.sh`
+3. build bundle via `app/macos/build-bundle.sh`
 4. open built bundle with `open -n`
 5. if `--verify`, poll runtime health
 
@@ -505,13 +505,13 @@ Show:
 
 ## Exact Implementation Order
 
-1. create `app/spot-app/Package.swift`
-2. create `app/spot-app/Info.plist`
-3. create `app/spot-app/Sources/SpotApp.swift`
-4. create `app/spot-app/Sources/SpotCoreService.swift`
-5. create `app/spot-app/build-icon.sh`
-6. create `app/spot-app/build-bundle.sh`
-7. create `app/spot-app/install-bundle.sh`
+1. create `app/macos/Package.swift`
+2. create `app/macos/Info.plist`
+3. create `app/macos/Sources/SpotApp.swift`
+4. create `app/macos/Sources/SpotCoreService.swift`
+5. create `app/macos/build-icon.sh`
+6. create `app/macos/build-bundle.sh`
+7. create `app/macos/install-bundle.sh`
 8. create `script/build_and_run.sh`
 9. create `docs/NATIVE_APP_BUILD_HANDOFF.md`
 10. add validation notes to active docs once the scaffold exists
@@ -547,7 +547,7 @@ Do not use these implementation shortcuts:
 Required syntax validation once scaffold files exist:
 
 ```bash
-cd /Users/moldovancsaba/Projects/spot/app/spot-app
+cd /Users/moldovancsaba/Projects/spot/app/macos
 swift package dump-package >/dev/null
 bash -n ./build-icon.sh
 bash -n ./build-bundle.sh
