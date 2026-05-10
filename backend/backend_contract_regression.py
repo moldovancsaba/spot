@@ -761,6 +761,24 @@ class BackendContractRegressionTests(unittest.TestCase):
         self.assertEqual((stored_row or {}).get("assigned_category"), "Anti-Israel")
         self.assertTrue((stored_row or {}).get("review_required"))
 
+    def test_review_queue_does_not_parse_output_without_explicit_migration(self) -> None:
+        run_id = f"output-read-bridge-{uuid.uuid4().hex[:8]}"
+        _prepare_synthetic_run(self.runs_dir, run_id)
+
+        queue_before = build_review_queue(runs_dir=self.runs_dir, run_id=run_id)
+        self.assertIsNotNone(queue_before)
+        self.assertEqual(queue_before["rows"], [])
+        self.assertIsNone(fetch_run_row(runs_dir=self.runs_dir, run_id=run_id, row_index=2))
+
+        summary = run_state_service.migrate_run_rows_to_canonical(runs_dir=self.runs_dir, run_id=run_id)
+        self.assertEqual(summary["output_rows_migrated"], 1)
+
+        queue_after = build_review_queue(runs_dir=self.runs_dir, run_id=run_id)
+        self.assertIsNotNone(queue_after)
+        self.assertEqual(len(queue_after["rows"]), 1)
+        self.assertEqual(queue_after["rows"][0]["row_index"], 2)
+        self.assertEqual(queue_after["rows"][0]["assigned_category"], "Anti-Israel")
+
     def test_migrate_row_state_from_checkpoints_imports_nonreview_rows(self) -> None:
         self._login_admin()
         upload_id = f"checkpoint-upload-{uuid.uuid4().hex[:8]}"

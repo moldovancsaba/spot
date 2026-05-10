@@ -39,6 +39,35 @@ Historical note:
   - `python3 -m py_compile backend/main.py src/__init__.py` => passed
   - `plutil -lint app/macos/Info.plist` => passed
 
+## 2026-05-10 Europe/Budapest - Codex (Industry Feature Research And GitHub Ideabank Refresh)
+
+- Objective: research current leader platforms adjacent to `{spot}`, convert the strongest recurring capabilities into an auditable ideabank source, and use that to normalize GitHub planning quality.
+- Changes:
+  - added an official-source research note covering trust and safety, moderation, consumer-intelligence, and review/compliance platforms relevant to `{spot}`
+  - distilled recurring market patterns into a `{spot}`-specific top-25 feature candidate list
+  - used that feature list as the source basis for GitHub ideabank issue creation and project-board cleanup
+- Files touched:
+  - `docs/INDUSTRY_FEATURE_RESEARCH_2026-05-10.md`
+  - `docs/HANDOVER.md`
+
+## 2026-05-10 Europe/Budapest - Codex ({spot} P0 Canonical Read-Path Hardening)
+
+- Objective: push `#17` further by removing normal review/detail reads from the `output.xlsx` truth path while keeping explicit migration available for legacy runs.
+- Changes:
+  - changed canonical review-state projection so normal review/detail reads use `run_rows` and only checkpoint import remains as a temporary in-flight compatibility bridge
+  - stopped `build_run_detail`, `build_review_queue`, and `build_row_inspector` from opportunistically parsing `output.xlsx` during reads
+  - kept explicit legacy workbook import behind `POST /runs/{run_id}/migrate-row-state`
+  - changed review-row mutation so an explicit reviewer action can still promote a legacy output-backed row into canonical state before saving the review decision
+  - added regression coverage proving read paths no longer parse `output.xlsx` unless migration is invoked explicitly
+- Files touched:
+  - `backend/main.py`
+  - `backend/services/run_state_service.py`
+  - `backend/backend_contract_regression.py`
+  - `docs/HANDOVER.md`
+- Validation:
+  - `python3 -m py_compile backend/main.py backend/services/run_state_service.py backend/backend_contract_regression.py` => passed
+  - `.venv/bin/python backend/backend_contract_regression.py` => passed
+
 ## 2026-05-10 Europe/Budapest - Codex ({spot} P0 Canonical Run-Row Migration Start)
 
 - Objective: start `#17` by making canonical `run_rows` backfill explicit for legacy and interrupted runs while preserving read-path backfill as a temporary compatibility bridge.

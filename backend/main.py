@@ -273,6 +273,9 @@ def update_review_row(run_id: str, row_index: int, request: Request, payload: di
     payload = payload or {}
     state = sync_review_rows_from_output(runs_dir=RUNS_DIR, run_id=run_id)
     if str(row_index) not in state.get("rows", {}):
+        migrate_run_rows_to_canonical(runs_dir=RUNS_DIR, run_id=run_id, include_checkpoints=True, include_output=True)
+        state = read_review_state(runs_dir=RUNS_DIR, run_id=run_id)
+    if str(row_index) not in state.get("rows", {}):
         raise HTTPException(status_code=404, detail="review row not found")
     row = upsert_review_row(
         runs_dir=RUNS_DIR,

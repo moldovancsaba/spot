@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
-from zipfile import BadZipFile
 
 from backend.services.ops_db_service import (
     build_run_segment_summary,
@@ -262,6 +261,19 @@ def _project_review_state_from_run_rows(*, runs_dir: Path, run_id: str) -> dict:
     return state
 
 
+def _review_state_from_canonical(
+    *,
+    runs_dir: Path,
+    run_id: str,
+    allow_checkpoint_backfill: bool = True,
+) -> dict:
+    state = _project_review_state_from_run_rows(runs_dir=runs_dir, run_id=run_id)
+    if state.get("rows") or not allow_checkpoint_backfill:
+        return state
+    migrate_run_rows_to_canonical(runs_dir=runs_dir, run_id=run_id, include_checkpoints=True, include_output=False)
+    return _project_review_state_from_run_rows(runs_dir=runs_dir, run_id=run_id)
+
+
 def _checkpoint_rows_to_canonical(*, checkpoint_path: Path) -> list[dict]:
     rows: list[dict] = []
     for line in checkpoint_path.read_text(encoding="utf-8").splitlines():
@@ -456,20 +468,11 @@ def migrate_run_rows_to_canonical(
 
 
 def sync_review_rows_from_output(*, runs_dir: Path, run_id: str) -> dict:
-    path = run_dir(runs_dir, run_id) / "output.xlsx"
-    # Keep read-path migration as a compatibility bridge for older runs until
-    # canonical row-state migration is no longer needed during normal reads.
-    migrate_run_rows_to_canonical(runs_dir=runs_dir, run_id=run_id, include_checkpoints=True, include_output=False)
-    state = _project_review_state_from_run_rows(runs_dir=runs_dir, run_id=run_id)
-    if not path.exists():
-        return state
-
-    try:
-        _migrate_run_rows_from_output(runs_dir=runs_dir, run_id=run_id, output_path=path)
-    except (BadZipFile, OSError, ValueError):
-        # A run may create output.xlsx before the workbook zip is fully written.
-        return state
-    return _project_review_state_from_run_rows(runs_dir=runs_dir, run_id=run_id)
+    # Normal read paths now project review state from canonical `run_rows` and
+    # only use checkpoint import as a temporary bridge for in-flight older runs.
+    # Output workbook import remains an explicit migration command so reads stop
+    # depending on parsing `output.xlsx` as live truth.
+    return _review_state_from_canonical(runs_dir=runs_dir, run_id=run_id, allow_checkpoint_backfill=True)
 
 
 def _pid_alive(pid: int | None) -> bool:
@@ -855,7 +858,7 @@ def build_run_detail(*, runs_dir: Path, run_id: str) -> dict | None:
     progress = record.get("progress") or {}
     processing_stats = record.get("processing_stats") or {}
     signoff = record.get("signoff")
-    review_state = sync_review_rows_from_output(runs_dir=runs_dir, run_id=run_id)
+    review_state = _review_state_from_canonical(runs_dir=runs_dir, run_id=run_id, allow_checkpoint_backfill=True)
     review_rows = sorted(review_state.get("rows", {}).values(), key=lambda row: row.get("row_index", 0))
     review_required_target = max(
         len(review_rows),
@@ -1009,7 +1012,7 @@ def build_review_queue(
     record = refresh_run_record(runs_dir=runs_dir, run_id=run_id)
     if not record:
         return None
-    state = sync_review_rows_from_output(runs_dir=runs_dir, run_id=run_id)
+    state = _review_state_from_canonical(runs_dir=runs_dir, run_id=run_id, allow_checkpoint_backfill=True)
     rows = list(state.get("rows", {}).values())
 
     if review_state_filter and review_state_filter != "all":
@@ -1045,7 +1048,7 @@ def build_row_inspector(*, runs_dir: Path, run_id: str, row_index: int) -> dict 
     record = refresh_run_record(runs_dir=runs_dir, run_id=run_id)
     if not record:
         return None
-    state = sync_review_rows_from_output(runs_dir=runs_dir, run_id=run_id)
+    state = _review_state_from_canonical(runs_dir=runs_dir, run_id=run_id, allow_checkpoint_backfill=True)
     row = fetch_run_row(runs_dir=runs_dir, run_id=run_id, row_index=row_index)
     if row:
         row = {
