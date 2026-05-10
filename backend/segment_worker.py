@@ -25,7 +25,6 @@ from backend.services.ops_db_service import (
     reconcile_run_segments,
     reset_run_segments,
     summarize_run_rows,
-    update_segment_progress,
 )
 from backend.services.excel_service import ensure_upload_rows_materialized
 from backend.services.artifact_manifest_service import write_artifact_manifest
@@ -162,6 +161,25 @@ def _write_processing_stats(
         "second_pass_overrides": second_pass_overrides,
     }
     _write_json(run_dir / "processing_stats.json", payload)
+
+
+def _current_runtime_stats(*, runs_dir: Path, run_id: str, effective_run_state: str) -> dict:
+    segment_summary = build_run_segment_summary(
+        runs_dir=runs_dir,
+        run_id=run_id,
+        effective_run_state=effective_run_state,
+    )
+    canonical_summary = summarize_run_rows(runs_dir=runs_dir, run_id=run_id)
+    return {
+        "segment_summary": segment_summary,
+        "processed_rows": int(segment_summary.get("processed_rows") or 0),
+        "threat_rows": int(canonical_summary.get("threat_rows_detected") or 0),
+        "review_required_rows": int(canonical_summary.get("review_required_rows_detected") or 0),
+        "judged_rows": int(canonical_summary.get("judged_rows") or 0),
+        "second_pass_candidates": int(canonical_summary.get("second_pass_candidates") or 0),
+        "second_pass_completed": int(canonical_summary.get("second_pass_completed") or 0),
+        "second_pass_overrides": int(canonical_summary.get("second_pass_overrides") or 0),
+    }
 
 
 def _copy_parent_policy(segment_policy_path: Path, run_dir: Path, run_id: str) -> None:
@@ -369,6 +387,10 @@ def _reset_segment_attempt_artifacts(
         shutil.rmtree(child_run_dir, ignore_errors=True)
 
 
+def _should_resume_segment_attempt(*, resume_existing: bool, committed_processed_rows: int) -> bool:
+    return bool(resume_existing and committed_processed_rows > 0)
+
+
 def _handle_stop(signum, _frame) -> None:  # noqa: ANN001
     del signum
     global STOP_REQUESTED
@@ -402,16 +424,16 @@ def main() -> int:
     else:
         reset_run_segments(runs_dir=args.runs_dir, run_id=args.run_id)
         reconcile_message = "Waiting for queued segments"
-    summary = build_run_segment_summary(runs_dir=args.runs_dir, run_id=args.run_id)
+    runtime_stats = _current_runtime_stats(runs_dir=args.runs_dir, run_id=args.run_id, effective_run_state="PROCESSING")
+    summary = runtime_stats["segment_summary"]
     total_rows = int(summary.get("total_rows") or 0)
-    canonical_summary = summarize_run_rows(runs_dir=args.runs_dir, run_id=args.run_id)
-    completed_rows = int(canonical_summary.get("processed_rows") or summary.get("processed_rows") or 0)
-    completed_threat_rows = int(canonical_summary.get("threat_rows_detected") or 0)
-    completed_review_required_rows = int(canonical_summary.get("review_required_rows_detected") or 0)
-    completed_judged_rows = int(canonical_summary.get("judged_rows") or 0)
-    completed_second_pass_candidates = int(canonical_summary.get("second_pass_candidates") or 0)
-    completed_second_pass_completed = int(canonical_summary.get("second_pass_completed") or 0)
-    completed_second_pass_overrides = int(canonical_summary.get("second_pass_overrides") or 0)
+    completed_rows = int(runtime_stats["processed_rows"] or 0)
+    completed_threat_rows = int(runtime_stats["threat_rows"] or 0)
+    completed_review_required_rows = int(runtime_stats["review_required_rows"] or 0)
+    completed_judged_rows = int(runtime_stats["judged_rows"] or 0)
+    completed_second_pass_candidates = int(runtime_stats["second_pass_candidates"] or 0)
+    completed_second_pass_completed = int(runtime_stats["second_pass_completed"] or 0)
+    completed_second_pass_overrides = int(runtime_stats["second_pass_overrides"] or 0)
     _append_log(run_dir, f"[STARTING] Segment worker booted for {args.run_id}")
     _write_progress(
         run_dir=run_dir,
@@ -456,18 +478,11 @@ def main() -> int:
             segment_log_path = segment_dir / "worker.log"
             child_run_dir = segment_runs_dir / segment_run_id
             checkpoint_path = child_run_dir / "result_checkpoint.jsonl"
-            resume_segment_attempt = bool(args.resume_existing and checkpoint_path.exists())
-            resumed_segment_summary = (
-                summarize_run_rows(
-                    runs_dir=args.runs_dir,
-                    run_id=args.run_id,
-                    row_index_min=int(segment["row_start"]),
-                    row_index_max=int(segment["row_end"]),
-                )
-                if resume_segment_attempt
-                else {}
+            resumed_segment_rows = min(int(segment.get("processed_rows") or 0), segment_row_count)
+            resume_segment_attempt = _should_resume_segment_attempt(
+                resume_existing=args.resume_existing,
+                committed_processed_rows=resumed_segment_rows,
             )
-            resumed_segment_rows = min(int((resumed_segment_summary or {}).get("processed_rows") or 0), segment_row_count)
 
             _reset_segment_attempt_artifacts(
                 segment_dir=segment_dir,
@@ -546,6 +561,8 @@ def main() -> int:
                 args.run_id,
                 "--canonical-upload-id",
                 args.upload_id,
+                "--canonical-segment-id",
+                segment_id,
             ]
             if args.attempt_id:
                 cmd.extend(["--canonical-attempt-id", str(args.attempt_id)])
@@ -562,9 +579,10 @@ def main() -> int:
                     text=True,
                 )
                 if resume_segment_attempt:
+                    resume_basis = "committed state + checkpoint" if checkpoint_path.exists() else "committed state"
                     _append_log(
                         run_dir,
-                        f"[PROCESSING] Resumed {segment_id} from checkpoint ({resumed_segment_rows}/{segment_row_count} rows)",
+                        f"[PROCESSING] Resumed {segment_id} from {resume_basis} ({resumed_segment_rows}/{segment_row_count} rows)",
                     )
                 else:
                     _append_log(run_dir, f"[PROCESSING] Claimed {segment_id} ({segment_row_count} rows)")
@@ -572,22 +590,21 @@ def main() -> int:
                     if STOP_REQUESTED:
                         CURRENT_CHILD.terminate()
                         break
-                    canonical_segment_summary = summarize_run_rows(
+                    runtime_stats = _current_runtime_stats(
                         runs_dir=args.runs_dir,
                         run_id=args.run_id,
-                        row_index_min=int(segment["row_start"]),
-                        row_index_max=int(segment["row_end"]),
+                        effective_run_state="PROCESSING",
                     )
-                    canonical_run_summary = summarize_run_rows(runs_dir=args.runs_dir, run_id=args.run_id)
-                    child_processed_rows = min(int(canonical_segment_summary.get("processed_rows") or 0), segment_row_count)
-                    update_segment_progress(runs_dir=args.runs_dir, segment_id=segment_id, processed_rows=child_processed_rows)
-                    aggregate_processed_rows = int(canonical_run_summary.get("processed_rows") or 0)
-                    aggregate_threat_rows = int(canonical_run_summary.get("threat_rows_detected") or 0)
-                    aggregate_review_required_rows = int(canonical_run_summary.get("review_required_rows_detected") or 0)
-                    aggregate_judged_rows = int(canonical_run_summary.get("judged_rows") or 0)
-                    aggregate_second_pass_candidates = int(canonical_run_summary.get("second_pass_candidates") or 0)
-                    aggregate_second_pass_completed = int(canonical_run_summary.get("second_pass_completed") or 0)
-                    aggregate_second_pass_overrides = int(canonical_run_summary.get("second_pass_overrides") or 0)
+                    segment_summary = runtime_stats["segment_summary"]
+                    active_segment = segment_summary.get("active_segment") or {}
+                    child_processed_rows = min(int(active_segment.get("processed_rows") or 0), segment_row_count)
+                    aggregate_processed_rows = int(runtime_stats["processed_rows"] or 0)
+                    aggregate_threat_rows = int(runtime_stats["threat_rows"] or 0)
+                    aggregate_review_required_rows = int(runtime_stats["review_required_rows"] or 0)
+                    aggregate_judged_rows = int(runtime_stats["judged_rows"] or 0)
+                    aggregate_second_pass_candidates = int(runtime_stats["second_pass_candidates"] or 0)
+                    aggregate_second_pass_completed = int(runtime_stats["second_pass_completed"] or 0)
+                    aggregate_second_pass_overrides = int(runtime_stats["second_pass_overrides"] or 0)
                     _write_progress(
                         run_dir=run_dir,
                         run_id=args.run_id,
@@ -630,14 +647,14 @@ def main() -> int:
 
             complete_segment(runs_dir=args.runs_dir, segment_id=segment_id)
 
-            canonical_run_summary = summarize_run_rows(runs_dir=args.runs_dir, run_id=args.run_id)
-            completed_rows = int(canonical_run_summary.get("processed_rows") or completed_rows)
-            completed_threat_rows = int(canonical_run_summary.get("threat_rows_detected") or 0)
-            completed_review_required_rows = int(canonical_run_summary.get("review_required_rows_detected") or 0)
-            completed_judged_rows = int(canonical_run_summary.get("judged_rows") or 0)
-            completed_second_pass_candidates = int(canonical_run_summary.get("second_pass_candidates") or 0)
-            completed_second_pass_completed = int(canonical_run_summary.get("second_pass_completed") or 0)
-            completed_second_pass_overrides = int(canonical_run_summary.get("second_pass_overrides") or 0)
+            runtime_stats = _current_runtime_stats(runs_dir=args.runs_dir, run_id=args.run_id, effective_run_state="PROCESSING")
+            completed_rows = int(runtime_stats["processed_rows"] or completed_rows)
+            completed_threat_rows = int(runtime_stats["threat_rows"] or 0)
+            completed_review_required_rows = int(runtime_stats["review_required_rows"] or 0)
+            completed_judged_rows = int(runtime_stats["judged_rows"] or 0)
+            completed_second_pass_candidates = int(runtime_stats["second_pass_candidates"] or 0)
+            completed_second_pass_completed = int(runtime_stats["second_pass_completed"] or 0)
+            completed_second_pass_overrides = int(runtime_stats["second_pass_overrides"] or 0)
             _write_progress(
                 run_dir=run_dir,
                 run_id=args.run_id,
@@ -693,6 +710,8 @@ def main() -> int:
         shutdown_mode = _shutdown_mode(run_dir)
         if shutdown_mode == "suspend":
             reconciled = reconcile_run_segments(runs_dir=args.runs_dir, run_id=args.run_id, target_state="QUEUED")
+            runtime_stats = _current_runtime_stats(runs_dir=args.runs_dir, run_id=args.run_id, effective_run_state="INTERRUPTED")
+            completed_rows = int(runtime_stats["processed_rows"] or completed_rows)
             _write_progress(
                 run_dir=run_dir,
                 run_id=args.run_id,
@@ -707,6 +726,8 @@ def main() -> int:
             _write_artifact_manifest(run_dir)
             return 0
         block_remaining_segments(runs_dir=args.runs_dir, run_id=args.run_id, state="CANCELLED", error_message="Run cancelled by operator.")
+        runtime_stats = _current_runtime_stats(runs_dir=args.runs_dir, run_id=args.run_id, effective_run_state="CANCELLED")
+        completed_rows = int(runtime_stats["processed_rows"] or completed_rows)
         _write_progress(
             run_dir=run_dir,
             run_id=args.run_id,
@@ -722,6 +743,8 @@ def main() -> int:
         return 1
     except Exception as exc:  # noqa: BLE001
         block_remaining_segments(runs_dir=args.runs_dir, run_id=args.run_id, state="FAILED", error_message=str(exc))
+        runtime_stats = _current_runtime_stats(runs_dir=args.runs_dir, run_id=args.run_id, effective_run_state="FAILED")
+        completed_rows = int(runtime_stats["processed_rows"] or completed_rows)
         _write_progress(
             run_dir=run_dir,
             run_id=args.run_id,

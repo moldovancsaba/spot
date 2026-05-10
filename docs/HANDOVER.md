@@ -68,6 +68,74 @@ Historical note:
   - `python3 -m py_compile backend/main.py backend/services/run_state_service.py backend/backend_contract_regression.py` => passed
   - `.venv/bin/python backend/backend_contract_regression.py` => passed
 
+## 2026-05-10 Europe/Budapest - Codex ({spot} P0 Segment Progress From Row Commits)
+
+- Objective: start `#18` by moving segment `processed_rows` updates into the child row-commit path so the parent worker stops inferring segment progress from row-range scans and checkpoint polling.
+- Changes:
+  - extended `src.cli classify` and `src.pipeline.run_classification(...)` with `canonical_segment_id`
+  - changed row completion in `src/pipeline.py` so canonical row persistence and segment-progress updates now happen from the same commit path
+  - changed checkpoint resume initialization so resumed committed rows immediately restore segment `processed_rows`
+  - changed `backend/segment_worker.py` to pass the owning `segment_id` into the child classifier and to read committed segment counters from `build_run_segment_summary(...)` instead of recomputing per-segment progress from canonical row-range scans
+  - added regression coverage proving classification now advances segment progress directly from row commits
+- Files touched:
+  - `src/cli.py`
+  - `src/pipeline.py`
+  - `backend/segment_worker.py`
+  - `backend/backend_contract_regression.py`
+  - `docs/HANDOVER.md`
+- Validation:
+  - `python3 -m py_compile src/cli.py src/pipeline.py backend/segment_worker.py backend/backend_contract_regression.py` => passed
+  - `.venv/bin/python -m unittest backend.backend_contract_regression.BackendContractRegressionTests.test_run_classification_advances_segment_progress_from_row_commits` => passed
+  - `.venv/bin/python backend/backend_contract_regression.py` => passed
+
+## 2026-05-10 Europe/Budapest - Codex ({spot} P0 Segment-Counter-First Worker Accounting)
+
+- Objective: continue `#18` by removing more parent-side processed-row inference so startup, live progress, completion, suspend, cancel, and failure paths all prefer committed segment counters over canonical row-range scans.
+- Changes:
+  - added a shared runtime-stats helper in `backend/segment_worker.py` that combines committed segment totals with canonical threat/review/judge counters
+  - changed segment-worker startup accounting to derive `processed_rows` from `build_run_segment_summary(...)`
+  - changed resumed-segment bootstrapping to use the claimed segment record's committed `processed_rows` instead of recomputing row-range summaries
+  - changed in-loop, post-segment, suspend, cancel, and failure progress writes to reuse the same segment-counter-first runtime stats
+- Files touched:
+  - `backend/segment_worker.py`
+  - `docs/HANDOVER.md`
+- Validation:
+  - `python3 -m py_compile backend/segment_worker.py src/cli.py src/pipeline.py backend/backend_contract_regression.py` => passed
+  - `.venv/bin/python backend/backend_contract_regression.py` => passed
+
+## 2026-05-10 Europe/Budapest - Codex ({spot} P0 Canonical-First Child Resume)
+
+- Objective: continue `#18` by making resumed child classification trust committed canonical `run_rows` before checkpoint replay when deciding which rows are already done.
+- Changes:
+  - added canonical committed-result restoration in `src/pipeline.py` for resumed classification runs
+  - changed resume initialization so checkpoint replay only fills rows still missing from canonical state
+  - added regression coverage proving a resumed classification run can skip already committed rows even when `result_checkpoint.jsonl` is absent
+- Files touched:
+  - `src/pipeline.py`
+  - `backend/backend_contract_regression.py`
+  - `docs/HANDOVER.md`
+- Validation:
+  - `python3 -m py_compile src/pipeline.py backend/backend_contract_regression.py` => passed
+  - `.venv/bin/python -m unittest backend.backend_contract_regression.BackendContractRegressionTests.test_run_classification_resumes_from_canonical_rows_without_checkpoint` => passed
+  - `.venv/bin/python backend/backend_contract_regression.py` => passed
+
+## 2026-05-10 Europe/Budapest - Codex ({spot} P0 Resume Heuristic From Committed Segment State)
+
+- Objective: continue `#18` by removing the segment-worker resume heuristic that depended on `result_checkpoint.jsonl` existence and replacing it with a committed-segment-progress rule.
+- Changes:
+  - added an explicit `_should_resume_segment_attempt(...)` helper in `backend/segment_worker.py`
+  - changed segment resume gating so the worker resumes when `resume_existing` is requested and the claimed segment already has committed `processed_rows > 0`
+  - changed resume logging so the worker distinguishes `committed state` from `committed state + checkpoint`
+  - added queue regression coverage proving resume gating now uses committed segment progress rather than checkpoint-file presence
+- Files touched:
+  - `backend/segment_worker.py`
+  - `backend/ops_queue_regression.py`
+  - `docs/HANDOVER.md`
+- Validation:
+  - `python3 -m py_compile backend/segment_worker.py backend/ops_queue_regression.py` => passed
+  - `.venv/bin/python -m unittest backend.ops_queue_regression.OpsQueueRegressionTests.test_resume_segment_attempt_uses_committed_progress_not_checkpoint_presence` => passed
+  - `.venv/bin/python backend/ops_queue_regression.py` => passed
+
 ## 2026-05-10 Europe/Budapest - Codex ({spot} P0 Canonical Run-Row Migration Start)
 
 - Objective: start `#17` by making canonical `run_rows` backfill explicit for legacy and interrupted runs while preserving read-path backfill as a temporary compatibility bridge.

@@ -11,7 +11,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 import backend.main as main_module
-from backend.segment_worker import _reset_segment_attempt_artifacts
+from backend.segment_worker import _reset_segment_attempt_artifacts, _should_resume_segment_attempt
 from backend.services import auth_service
 from backend.services.ops_db_service import (
     build_operations_overview,
@@ -251,6 +251,11 @@ class OpsQueueRegressionTests(unittest.TestCase):
         self.assertFalse((segment_dir / "output.xlsx").exists())
         self.assertFalse((segment_dir / "worker.log").exists())
         self.assertTrue(child_run_dir.exists())
+
+    def test_resume_segment_attempt_uses_committed_progress_not_checkpoint_presence(self) -> None:
+        self.assertFalse(_should_resume_segment_attempt(resume_existing=False, committed_processed_rows=10))
+        self.assertFalse(_should_resume_segment_attempt(resume_existing=True, committed_processed_rows=0))
+        self.assertTrue(_should_resume_segment_attempt(resume_existing=True, committed_processed_rows=1))
 
     def test_resume_run_segments_requeues_failed_work_without_dropping_progress(self) -> None:
         accepted_upload_id = "upload-resume"

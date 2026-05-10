@@ -35,6 +35,7 @@ def _parser() -> argparse.ArgumentParser:
     classify.add_argument("--canonical-run-id", default=None)
     classify.add_argument("--canonical-upload-id", default=None)
     classify.add_argument("--canonical-attempt-id", default=None)
+    classify.add_argument("--canonical-segment-id", default=None)
 
     benchmark = sub.add_parser("benchmark-workers", help="Benchmark local throughput across max_workers values")
     benchmark.add_argument("--input", required=True, type=Path)
@@ -110,6 +111,7 @@ def main() -> int:
                 canonical_run_id=args.canonical_run_id,
                 canonical_upload_id=args.canonical_upload_id,
                 canonical_attempt_id=args.canonical_attempt_id,
+                canonical_segment_id=args.canonical_segment_id,
             )
         except Exception as exc:  # noqa: BLE001
             print(

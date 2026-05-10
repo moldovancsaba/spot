@@ -22,7 +22,7 @@ import backend.main as main_module
 from backend.services import auth_service
 from backend.services.excel_service import ensure_upload_rows_materialized, intake_workbook
 from backend.services.artifact_manifest_service import build_artifact_manifest
-from backend.services.ops_db_service import fetch_run_row, fetch_upload_rows_for_segment, start_run_attempt
+from backend.services.ops_db_service import build_run_segment_summary, claim_next_segment, fetch_run_row, fetch_upload_rows_for_segment, start_run_attempt, upsert_run_rows
 from backend.services.run_state_service import build_review_queue, create_run_record
 from backend.services import run_state_service
 from src.excel_io import build_segment_input_workbook_from_entries, read_input_rows
@@ -684,6 +684,88 @@ class BackendContractRegressionTests(unittest.TestCase):
         checkpoint_lines = [json.loads(line) for line in checkpoint_path.read_text(encoding="utf-8").splitlines() if line.strip()]
         self.assertEqual(len(checkpoint_lines), 2)
 
+    def test_run_classification_resumes_from_canonical_rows_without_checkpoint(self) -> None:
+        workbook_path = self.runs_dir / "resume-canonical-input.xlsx"
+        wb = Workbook()
+        ws = wb.active
+        ws.append(["Item number", "Post text", "Category"])
+        ws.append(["1", "First canonical resume row", ""])
+        ws.append(["2", "Second canonical resume row", ""])
+        wb.save(workbook_path)
+        wb.close()
+
+        run_id = "resume-canonical-run"
+        run_dir = self.runs_dir / run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+        create_run_record(
+            runs_dir=self.runs_dir,
+            run_id=run_id,
+            input_path=str(workbook_path),
+            output_path=str(run_dir / "output.xlsx"),
+            upload_id=None,
+            language="de",
+            review_mode="partial",
+            start_payload={"language": "de", "review_mode": "partial"},
+        )
+        upsert_run_rows(
+            runs_dir=self.runs_dir,
+            run_id=run_id,
+            upload_id=None,
+            attempt_id=None,
+            rows=[
+                {
+                    "row_index": 2,
+                    "row_hash": stable_row_hash("1", "First canonical resume row"),
+                    "assigned_category": "Not Antisemitic",
+                    "confidence_score": 0.91,
+                    "explanation": "Committed canonical result.",
+                    "flags": [],
+                    "review_required": False,
+                }
+            ],
+        )
+
+        def _fake_classify_batch(rows, ssot, max_workers, review_mode, model_name="", progress_callback=None, row_completion_callback=None, progress_every=100):
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0].row_index, 3)
+            second_hash = stable_row_hash(rows[0].item_number, rows[0].post_text)
+            second_result = ClassificationResult(
+                row_index=3,
+                raw_category="Anti-Israel",
+                category="Anti-Israel",
+                confidence=0.88,
+                explanation="Canonical resumed row result.",
+                flags=["REVIEW_REQUIRED"],
+                resolved_model_version="synthetic-model",
+            )
+            if row_completion_callback:
+                row_completion_callback(1, 1, 0, second_result, second_hash)
+            return [second_result], [second_hash]
+
+        with patch("src.pipeline.classify_batch", side_effect=_fake_classify_batch):
+            run_classification(
+                input_path=workbook_path,
+                output_path=run_dir / "output.xlsx",
+                run_id=run_id,
+                run_language="de",
+                review_mode="partial",
+                ssot_path=PROJECT_ROOT / "ssot/ssot.json",
+                runs_dir=self.runs_dir,
+                max_workers=1,
+                progress_every=1,
+                resume_existing=True,
+                canonical_runs_dir=self.runs_dir,
+                canonical_run_id=run_id,
+            )
+
+        progress = json.loads((run_dir / "progress.json").read_text(encoding="utf-8"))
+        self.assertEqual(progress["state"], "COMPLETED")
+        self.assertEqual(progress["total_rows"], 2)
+        stored_first = fetch_run_row(runs_dir=self.runs_dir, run_id=run_id, row_index=2)
+        stored_second = fetch_run_row(runs_dir=self.runs_dir, run_id=run_id, row_index=3)
+        self.assertEqual((stored_first or {}).get("assigned_category"), "Not Antisemitic")
+        self.assertEqual((stored_second or {}).get("assigned_category"), "Anti-Israel")
+
     def test_run_classification_persists_canonical_rows_during_execution(self) -> None:
         workbook_path = self.runs_dir / "canonical-input.xlsx"
         wb = Workbook()
@@ -744,6 +826,70 @@ class BackendContractRegressionTests(unittest.TestCase):
         self.assertEqual((stored_row or {}).get("assigned_category"), "Anti-Israel")
         self.assertEqual((stored_row or {}).get("attempt_id"), attempt["attempt_id"])
         self.assertTrue((stored_row or {}).get("review_required"))
+
+    def test_run_classification_advances_segment_progress_from_row_commits(self) -> None:
+        upload_id = f"segment-progress-upload-{uuid.uuid4().hex[:8]}"
+        record = intake_workbook(
+            runs_dir=self.runs_dir,
+            ssot_path=PROJECT_ROOT / "ssot/ssot.json",
+            upload_id=upload_id,
+            filename="segment-progress.xlsx",
+            content=_build_workbook_bytes(),
+        )
+        self.assertEqual(record["status"], "accepted")
+
+        run_id = f"segment-progress-run-{uuid.uuid4().hex[:8]}"
+        run_dir = self.runs_dir / run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+        create_run_record(
+            runs_dir=self.runs_dir,
+            run_id=run_id,
+            input_path=str(Path(record["stored_path"])),
+            output_path=str(run_dir / "output.xlsx"),
+            upload_id=upload_id,
+            language="de",
+            review_mode="partial",
+            start_payload={"upload_id": upload_id, "language": "de", "review_mode": "partial"},
+        )
+        attempt = start_run_attempt(runs_dir=self.runs_dir, run_id=run_id, attempt_type="start")
+        segment = claim_next_segment(runs_dir=self.runs_dir, run_id=run_id, worker_id="segment-progress-test")
+        self.assertIsNotNone(segment)
+
+        def _fake_classify_batch(rows, ssot, max_workers, review_mode, model_name="", progress_callback=None, row_completion_callback=None, progress_every=100):
+            result = ClassificationResult(
+                row_index=2,
+                raw_category="Not Antisemitic",
+                category="Not Antisemitic",
+                confidence=0.95,
+                explanation="Segment progress commit.",
+                flags=[],
+                resolved_model_version="synthetic-model",
+            )
+            row_hash = stable_row_hash(rows[0].item_number, rows[0].post_text)
+            if row_completion_callback:
+                row_completion_callback(1, 1, 0, result, row_hash)
+            return [result], [row_hash]
+
+        with patch("src.pipeline.classify_batch", side_effect=_fake_classify_batch):
+            run_classification(
+                input_path=Path(record["stored_path"]),
+                output_path=run_dir / "output.xlsx",
+                run_id=run_id,
+                run_language="de",
+                review_mode="partial",
+                ssot_path=PROJECT_ROOT / "ssot/ssot.json",
+                runs_dir=self.runs_dir,
+                max_workers=1,
+                progress_every=1,
+                canonical_runs_dir=self.runs_dir,
+                canonical_run_id=run_id,
+                canonical_upload_id=upload_id,
+                canonical_attempt_id=str(attempt["attempt_id"]),
+                canonical_segment_id=str(segment["segment_id"]),
+            )
+
+        summary = build_run_segment_summary(runs_dir=self.runs_dir, run_id=run_id, effective_run_state="PROCESSING")
+        self.assertEqual(summary["processed_rows"], 1)
 
     def test_migrate_row_state_from_output_backfills_canonical_rows(self) -> None:
         self._login_admin()

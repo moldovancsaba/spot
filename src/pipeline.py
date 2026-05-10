@@ -446,6 +446,54 @@ def _load_result_checkpoint(checkpoint_path: Path, expected_row_hashes: list[str
     return completed
 
 
+def _load_committed_canonical_results(
+    *,
+    canonical_runs_dir: Path | None,
+    canonical_run_id: str | None,
+    row_hashes: list[str],
+    rows: list[InputRow],
+) -> dict[int, ClassificationResult]:
+    if canonical_runs_dir is None or not canonical_run_id:
+        return {}
+    from backend.services.ops_db_service import fetch_run_rows
+
+    committed_by_row_index = {
+        int(row.get("row_index") or 0): row
+        for row in fetch_run_rows(runs_dir=canonical_runs_dir, run_id=canonical_run_id)
+    }
+    restored: dict[int, ClassificationResult] = {}
+    for idx, input_row in enumerate(rows):
+        committed = committed_by_row_index.get(int(input_row.row_index))
+        if not committed:
+            continue
+        committed_hash = str(committed.get("row_hash") or "")
+        if committed_hash and committed_hash != row_hashes[idx]:
+            continue
+        assigned_category = str(committed.get("assigned_category") or "")
+        if not assigned_category:
+            continue
+        restored[idx] = ClassificationResult(
+            row_index=int(committed.get("row_index") or input_row.row_index),
+            raw_category=assigned_category,
+            category=assigned_category,
+            confidence=float(committed.get("confidence_score") or 0.0),
+            explanation=str(committed.get("explanation") or ""),
+            flags=[str(item) for item in committed.get("flags") or []],
+            soft_signal_score=committed.get("soft_signal_score"),
+            soft_signal_flags=[str(item) for item in committed.get("soft_signal_flags") or []],
+            soft_signal_evidence=[str(item) for item in committed.get("soft_signal_evidence") or []],
+            resolved_model_version=None,
+            model_votes=dict(committed.get("model_votes") or {}) or None,
+            consensus_tier=(str(committed.get("consensus_tier")) if committed.get("consensus_tier") else None),
+            minority_label=(str(committed.get("minority_label")) if committed.get("minority_label") else None),
+            drafted_text=(str(committed.get("drafted_text")) if committed.get("drafted_text") is not None else None),
+            judge_score=(float(committed["judge_score"]) if committed.get("judge_score") is not None else None),
+            judge_verdict=(str(committed.get("judge_verdict")) if committed.get("judge_verdict") else None),
+            fallback_events=[str(item) for item in committed.get("fallback_events") or []] or None,
+        )
+    return restored
+
+
 def run_classification(
     input_path: Path,
     output_path: Path,
@@ -466,6 +514,7 @@ def run_classification(
     canonical_run_id: str | None = None,
     canonical_upload_id: str | None = None,
     canonical_attempt_id: str | None = None,
+    canonical_segment_id: str | None = None,
 ) -> None:
     run_dir = runs_dir / run_id
     started_at = _now_iso()
@@ -509,8 +558,18 @@ def run_classification(
         checkpoint_path = run_dir / "result_checkpoint.jsonl"
         results: list[ClassificationResult | None] = [None] * total_rows
         if resume_existing:
+            committed_results = _load_committed_canonical_results(
+                canonical_runs_dir=canonical_runs_dir,
+                canonical_run_id=canonical_run_id,
+                row_hashes=row_hashes,
+                rows=rows,
+            )
+            for idx, result in committed_results.items():
+                results[idx] = result
             checkpoint_results = _load_result_checkpoint(checkpoint_path, row_hashes)
             for idx, result in checkpoint_results.items():
+                if results[idx] is not None:
+                    continue
                 results[idx] = result
                 _persist_canonical_run_row(
                     canonical_runs_dir=canonical_runs_dir,
@@ -521,6 +580,14 @@ def run_classification(
                     row_hash=row_hashes[idx],
                 )
         completed_rows_counter = sum(1 for result in results if result is not None)
+        if canonical_runs_dir is not None and canonical_segment_id and completed_rows_counter > 0:
+            from backend.services.ops_db_service import update_segment_progress
+
+            update_segment_progress(
+                runs_dir=canonical_runs_dir,
+                segment_id=canonical_segment_id,
+                processed_rows=completed_rows_counter,
+            )
         for result in [result for result in results if result is not None]:
             processing_stats["threat_rows"] += 1 if result.category != "Not Antisemitic" else 0
             processing_stats["review_required_rows"] += 1 if "REVIEW_REQUIRED" in (result.flags or []) else 0
@@ -590,6 +657,14 @@ def run_classification(
                     processing_stats["second_pass_completed"] += 1
                 if "SECOND_PASS_CATEGORY_OVERRIDDEN" in (latest_result.flags or []):
                     processing_stats["second_pass_overrides"] += 1
+                if canonical_runs_dir is not None and canonical_segment_id:
+                    from backend.services.ops_db_service import update_segment_progress
+
+                    update_segment_progress(
+                        runs_dir=canonical_runs_dir,
+                        segment_id=canonical_segment_id,
+                        processed_rows=completed_rows_counter,
+                    )
             _write_progress(
                 run_dir,
                 run_id,
