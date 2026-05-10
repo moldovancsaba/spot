@@ -1,7 +1,7 @@
 # {spot} Acceptance Evidence Template
 
 Document date: `2026-05-03`
-Workspace baseline: `0.5.0`
+Workspace baseline: `0.5.1`
 SSOT: `0.2`
 
 ## Session Details
@@ -13,7 +13,7 @@ SSOT: `0.2`
 - macOS version: `<macOS version>`
 - Python version: `<python version>`
 - `{spot}` commit hash: `<git commit hash>`
-- Workspace baseline: `0.5.0`
+- Workspace baseline: `0.5.1`
 - Latest shipped release: `v0.3.1`
 - SSOT path: `/Users/moldovancsaba/Projects/spot/ssot/ssot.json`
 - Production mode: `SPOT_PRODUCTION_MODE=1` for bootstrap/preflight/runtime acceptance commands

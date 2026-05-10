@@ -3,15 +3,15 @@
 
 AI-assisted antisemitism classification system with SSOT-governed, auditable local processing.
 
-Current workspace implementation: `0.5.0`
-Pipeline version: `mvp-0.5.0`
+Current workspace implementation: `0.5.1`
+Pipeline version: `mvp-0.5.1`
 Authoritative SSOT version: `0.2`
 Latest shipped release notes in repo: [`docs/RELEASE_NOTES_0.3.1.md`](/Users/moldovancsaba/Projects/spot/docs/RELEASE_NOTES_0.3.1.md)
 
-Maintenance note:
+Distribution note:
 - native macOS app source lives under [`app/macos/`](/Users/moldovancsaba/Projects/spot/app/macos)
 - generated native app outputs live under `app/macos/.build/` and `app/macos/dist/` and are intentionally not source-controlled
-- this repository currently has no declared open-source license file; do not assume one exists
+- this repository currently has no declared open-source license file; treat it as a private maintainer workspace, not an open-source distribution
 
 Documentation map:
 - [README Brief](/Users/moldovancsaba/Projects/spot/README_BRIEF.md)
@@ -28,6 +28,13 @@ Documentation map:
 
 {spot} is a deterministic, auditable classification platform for large Excel batches of social media posts.
 It enforces a strict closed-set taxonomy, produces explainable metadata, and writes governed outputs to Excel.
+
+## Source Status
+
+- this repository does not currently ship with a `LICENSE` file
+- no public redistribution, modification, packaging, or support rights should be assumed from the repository contents alone
+- the supported delivery posture is a source checkout maintained by the project owner or an explicitly authorized maintainer
+- there is no supported `.pkg`, `.dmg`, Homebrew formula, or public installer channel in the current baseline
 
 ## What {spot} Is
 
@@ -113,7 +120,7 @@ Evaluation defaults remain explicit and deterministic:
 - MLX is intended for locally available Apertus weights
 - No training on client data is part of {spot}
 
-## Quick Start
+## Maintainer Install From Source
 
 ```bash
 cd /Users/moldovancsaba/Projects/spot
@@ -122,16 +129,56 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Native macOS build entrypoints:
+Prepare the local appliance directories:
+
+```bash
+python3 -m src.cli bootstrap \
+  --project-root . \
+  --venv-path .venv \
+  --requirements requirements.txt \
+  --ssot ssot/ssot.json \
+  --runs-dir runs \
+  --logs-dir logs
+```
+
+Validate the machine before first launch:
+
+```bash
+.venv/bin/python -m src.cli preflight \
+  --ssot ssot/ssot.json \
+  --runs-dir runs \
+  --port 8765
+```
+
+Native macOS build and install entrypoints:
 
 ```bash
 cd /Users/moldovancsaba/Projects/spot/app/macos
-swift package dump-package >/dev/null
-bash -n ./build-bundle.sh
-bash -n ./install-bundle.sh
+swift build
+bash build-bundle.sh
+bash install-bundle.sh
+open /Applications/spot.app
 ```
 
-Run deterministic classification:
+The only supported update path for `/Applications/spot.app` is to rebuild the bundle and rerun `app/macos/install-bundle.sh`.
+
+## Maintenance Workflow
+
+Routine maintainer workflow:
+
+1. pull or review the intended repo changes into a clean source checkout
+2. run `python3 -m src.cli bootstrap ... --skip-install` if only directory/permission setup needs refresh
+3. rerun `.venv/bin/python -m src.cli preflight --ssot ssot/ssot.json --runs-dir runs --port 8765`
+4. rebuild and reinstall the native app with `app/macos/build-bundle.sh` and `app/macos/install-bundle.sh`
+5. run backend and native verification before handing the machine back to operators
+
+Supported maintainer removal path:
+
+- remove `/Applications/spot.app`
+- remove or archive the configured runtime directories under `~/Library/Application Support/spot/` if the machine is being decommissioned
+- preserve `runs/` artifacts separately before cleanup when audit retention is required
+
+Example deterministic classification command:
 
 ```bash
 .venv/bin/python -m src.cli classify \
@@ -145,28 +192,7 @@ Run deterministic classification:
   --max-workers 1
 ```
 
-Run local appliance preflight:
-
-```bash
-.venv/bin/python -m src.cli preflight \
-  --ssot ssot/ssot.json \
-  --runs-dir runs \
-  --port 8765
-```
-
-Bootstrap local appliance setup:
-
-```bash
-python3 -m src.cli bootstrap \
-  --project-root . \
-  --venv-path .venv \
-  --requirements requirements.txt \
-  --ssot ssot/ssot.json \
-  --runs-dir runs \
-  --logs-dir logs
-```
-
-Run single-vs-ensemble evaluation:
+Example single-vs-ensemble evaluation command:
 
 ```bash
 .venv/bin/python -m src.cli evaluate \
@@ -183,17 +209,9 @@ Run single-vs-ensemble evaluation:
   --progress-every 10
 ```
 
-Build and install the supported native macOS app:
+## Backend Endpoints
 
-```bash
-cd /Users/moldovancsaba/Projects/spot/app/macos
-swift build
-bash build-bundle.sh
-bash install-bundle.sh
-open /Applications/spot.app
-```
-
-Browser-intake foundation endpoints:
+Intake and queue endpoints:
 
 - `POST /uploads/intake?filename=<workbook.xlsx>` with raw `.xlsx` request body and legacy `X-Filename` header fallback
 - `GET /uploads`
@@ -201,7 +219,7 @@ Browser-intake foundation endpoints:
 - `GET /operations/overview`
 - `POST /classify/start/{run_id}` with `{"upload_id":"..."}` to start from an accepted intake record
 
-Browser-state foundation endpoints:
+Run, review, and artifact endpoints:
 
 - `GET /runs/{run_id}/state`
 - `GET /runs/{run_id}/detail`
@@ -214,8 +232,9 @@ Browser-state foundation endpoints:
 - `POST /runs/{run_id}/cancel`
 - `POST /runs/{run_id}/retry`
 - `POST /runs/{run_id}/recover`
+- `POST /runs/{run_id}/migrate-row-state` to backfill canonical `run_rows` from checkpoint and/or output artifacts for legacy or interrupted runs
 
-Browser run-operation endpoints:
+Active run-control endpoints:
 
 - `POST /classify/pause/{run_id}`
 - `POST /classify/resume/{run_id}`

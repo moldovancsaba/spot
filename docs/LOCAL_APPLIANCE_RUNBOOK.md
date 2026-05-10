@@ -1,8 +1,8 @@
 # {spot} Local Appliance Runbook
 
-Current workspace implementation baseline: `0.5.0`
+Current workspace implementation baseline: `0.5.1`
 SSOT baseline: `0.2`
-Document date: `2026-05-07`
+Document date: `2026-05-10`
 
 ## Purpose
 
@@ -17,6 +17,11 @@ It is written for a single-node deployment where the system, models, artifacts, 
 - local backend/UI bound to loopback
 - primary classifier on MLX
 - deterministic Ollama fallback and support lanes
+
+Source and installer status:
+- the repo does not currently declare an open-source license file
+- the supported posture is a maintained source checkout on the target machine
+- there is no supported `.pkg`, `.dmg`, or package-manager installer in the current baseline
 
 ## Runtime Baseline
 
@@ -115,6 +120,18 @@ Supported native build validation:
 - `swift build`
 - `bash build-bundle.sh`
 - `bash install-bundle.sh`
+
+## Update Procedure
+
+Use this path for supported maintenance updates on a machine that already runs `{spot}`:
+
+1. update the checked-out source tree under `/Users/moldovancsaba/Projects/spot`
+2. rerun bootstrap if environment or directory expectations changed
+3. rerun preflight
+4. rebuild the native bundle with `app/macos/build-bundle.sh`
+5. reinstall the app with `app/macos/install-bundle.sh`
+6. relaunch `/Applications/spot.app`
+7. rerun native acceptance smoke and any required benchmark/UAT checks before operator sign-off
 
 Current native dashboard capabilities:
 - queue one or more `.xlsx` workbooks into local intake
@@ -242,6 +259,14 @@ Minimum retained material:
 Recommended approach:
 - copy artifacts to an external backup volume after accepted runs
 - avoid editing archived artifacts after a run is complete
+
+## Removal Guidance
+
+If a machine must be decommissioned:
+- archive retained `runs/` evidence first if audit retention applies
+- remove `/Applications/spot.app`
+- remove or archive the configured runtime directories under `~/Library/Application Support/spot/`
+- remove the source checkout only after evidence retention and handover obligations are complete
 
 ## Handover Note
 

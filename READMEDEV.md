@@ -1,13 +1,19 @@
 # {spot} Developer Readme
 
-Document date: `2026-05-07`
-Workspace baseline: `0.5.0`
+Document date: `2026-05-10`
+Workspace baseline: `0.5.1`
 Latest shipped release: `v0.3.1`
 SSOT baseline: `0.2`
 
 ## Purpose
 
 This file is the first-read developer handover for agents working inside the `{spot}` workspace.
+
+Repository distribution truth:
+- this repo does not currently declare an open-source license
+- treat it as a private maintainer workspace unless the owner adds an explicit license
+- the supported install/update posture is source-checkout maintenance plus `app/macos/install-bundle.sh`
+- there is no current public package-manager or installer distribution contract
 
 Read this first, then read:
 - [`README.md`](/Users/moldovancsaba/Projects/spot/README.md)
@@ -107,8 +113,8 @@ Current local acceptance path:
 - Keep these distinct.
 
 Current state:
-- workspace baseline: `0.5.0`
-- pipeline baseline: `mvp-0.5.0`
+- workspace baseline: `0.5.1`
+- pipeline baseline: `mvp-0.5.1`
 - latest shipped release: `v0.3.1`
 
 Update these surfaces together when the workspace baseline changes:
@@ -162,7 +168,8 @@ plutil -lint ./Info.plist
 ## Current Next Step Priority
 
 The active maintainability baseline is:
-- current workspace baseline is `0.5.0`; `VERSION` and active docs are aligned to that baseline
+- current workspace baseline is `0.5.1`; `VERSION` and active docs are aligned to that baseline
 - native macOS supervisor baseline is implemented in code
 - queue-backed local operations and dashboard monitoring are implemented behind the native macOS workspace
+- canonical run-row migration is now started, but read-path compatibility backfill still exists and must be retired deliberately in a later hardening step
 - remaining work is foundation hardening, DB-centered execution migration, release cutover, and fresh client-machine acceptance evidence on the current baseline

@@ -39,7 +39,10 @@ from backend.services.run_state_service import (
     build_row_inspector,
     build_review_queue,
     create_run_record,
+    list_recovery_candidates,
     list_run_records,
+    migrate_run_rows_to_canonical,
+    purge_run_state,
     read_action_log,
     read_review_state,
     read_run_record,
@@ -64,7 +67,7 @@ from src.defaults import (
 )
 from src.lanes import load_lane_config
 
-app = FastAPI(title="{spot} Classification Backend", version="0.5.0")
+app = FastAPI(title="{spot} Classification Backend", version="0.5.1")
 RUNS_DIR = Path(os.getenv("RUNS_DIR", str(Path(__file__).resolve().parent.parent / "runs")))
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 PYTHON_BIN = Path(os.getenv("SPOT_NATIVE_PYTHON_BIN") or sys.executable)
@@ -80,7 +83,7 @@ def api_health():
         "status": "online",
         "launch": {"ready": True},
         "service": "{spot} Classification Backend",
-        "version": "0.5.0",
+        "version": "0.5.1",
         "auth_enabled": auth_enabled(),
         "host": "127.0.0.1",
         "port": 8765,
@@ -206,6 +209,12 @@ def list_runs(request: Request):
             }
         )
     return runs
+
+
+@app.get("/runs/recovery-candidates/list")
+def get_recovery_candidates(request: Request):
+    require_permission(request, "view")
+    return {"runs": list_recovery_candidates(runs_dir=RUNS_DIR)}
 
 
 @app.get("/runs/{run_id}/state")
@@ -992,6 +1001,56 @@ def run_heal(run_id: str, request: Request):
         actor=actor,
         resume_existing=True,
     )
+
+
+@app.post("/runs/{run_id}/migrate-row-state")
+def migrate_run_row_state(
+    run_id: str,
+    request: Request,
+    include_checkpoints: bool = Query(default=True),
+    include_output: bool = Query(default=True),
+):
+    session = require_permission(request, "manage_run")
+    summary = migrate_run_rows_to_canonical(
+        runs_dir=RUNS_DIR,
+        run_id=run_id,
+        include_checkpoints=include_checkpoints,
+        include_output=include_output,
+    )
+    if not summary:
+        raise HTTPException(status_code=404, detail="run not found")
+    append_action(
+        runs_dir=RUNS_DIR,
+        run_id=run_id,
+        actor=str(session.get("actor_name", "local-operator")),
+        action="run_row_state_migrated",
+        payload={
+            "include_checkpoints": include_checkpoints,
+            "include_output": include_output,
+            "checkpoint_files_seen": summary.get("checkpoint_files_seen", 0),
+            "checkpoint_rows_migrated": summary.get("checkpoint_rows_migrated", 0),
+            "output_rows_migrated": summary.get("output_rows_migrated", 0),
+        },
+    )
+    return summary
+
+
+@app.delete("/runs/{run_id}")
+def delete_run(run_id: str, request: Request, purge_source: bool = Query(default=True)):
+    require_permission(request, "manage_run")
+    try:
+        result = purge_run_state(runs_dir=RUNS_DIR, run_id=run_id, purge_source=purge_source)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if not result:
+        raise HTTPException(status_code=404, detail="run not found")
+    return {
+        "status": "deleted",
+        "run_id": run_id,
+        "removed_paths": result.get("removed_paths", []),
+        "skipped_paths": result.get("skipped_paths", []),
+        "purged_source": bool(result.get("purged_source")),
+    }
 
 
 @app.get("/classify/status/{run_id}")

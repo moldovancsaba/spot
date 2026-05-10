@@ -5,6 +5,58 @@ Historical note:
 - older entries intentionally preserve the browser-phase and `app/spot-app` wording that was true when those entries were written
 - current operator and startup guidance lives in [`README.md`](/Users/moldovancsaba/Projects/spot/README.md), [`READMEDEV.md`](/Users/moldovancsaba/Projects/spot/READMEDEV.md), and [`docs/LOCAL_APPLIANCE_RUNBOOK.md`](/Users/moldovancsaba/Projects/spot/docs/LOCAL_APPLIANCE_RUNBOOK.md)
 
+## 2026-05-10 Europe/Budapest - Codex (Versioning And Documentation Audit)
+
+- Objective: promote the active workspace baseline and audit the maintainer-facing documentation for version drift, source-distribution ambiguity, and incomplete install/update guidance.
+- Changes:
+  - promoted active workspace markers from `0.5.0` to `0.5.1` and the pipeline marker from `mvp-0.5.0` to `mvp-0.5.1`
+  - updated backend runtime version reporting and native bundle metadata to the `0.5.1` baseline
+  - rewrote active README sections so the repo no longer reads like an open-source/public-installer distribution when no license or package channel exists
+  - clarified the supported source-checkout install, update, removal, and maintenance path for the native local appliance
+  - aligned the client package, developer handover, local appliance runbook, and active baseline docs to the same maintainer/support posture
+- Files touched:
+  - `VERSION`
+  - `src/__init__.py`
+  - `backend/main.py`
+  - `app/macos/Info.plist`
+  - `app/macos/README.md`
+  - `README.md`
+  - `READMEDEV.md`
+  - `README_BRIEF.md`
+  - `docs/ARCHITECTURE.md`
+  - `docs/CLIENT_PACKAGE.md`
+  - `docs/LOCAL_APPLIANCE_RUNBOOK.md`
+  - `docs/PRODUCTION_PLAN.md`
+  - `docs/UAT_CHECKLIST.md`
+  - `docs/LOCAL_QUEUE_OPERATIONS_PLAN.md`
+  - `docs/NATIVE_APP_SCAFFOLD_SPEC.md`
+  - `docs/FOUNDATION_HARDENING_PLAN.md`
+  - `docs/ACCEPTANCE_EVIDENCE_TEMPLATE.md`
+  - `docs/BENCHMARK_CHECKLIST.md`
+  - `docs/CODE_COMMENT_AUDIT.md`
+  - `docs/HANDOVER.md`
+- Validation:
+  - `python3 -m py_compile backend/main.py src/__init__.py` => passed
+  - `plutil -lint app/macos/Info.plist` => passed
+
+## 2026-05-10 Europe/Budapest - Codex ({spot} P0 Canonical Run-Row Migration Start)
+
+- Objective: start `#17` by making canonical `run_rows` backfill explicit for legacy and interrupted runs while preserving read-path backfill as a temporary compatibility bridge.
+- Changes:
+  - added backend `POST /runs/{run_id}/migrate-row-state` as a manage-run endpoint for explicit canonical row-state migration
+  - changed run-row checkpoint import so checkpoint replay can backfill all completed rows into `run_rows`, not only `REVIEW_REQUIRED` rows
+  - preserved output-workbook and read-path backfill as deterministic compatibility paths for completed legacy runs while projecting review state from canonical `run_rows`
+  - added backend regression coverage for output-backed migration and checkpoint-backed non-review row migration
+- Files touched:
+  - `backend/main.py`
+  - `backend/services/run_state_service.py`
+  - `backend/backend_contract_regression.py`
+  - `README.md`
+  - `docs/HANDOVER.md`
+- Validation:
+  - `python3 -m py_compile backend/main.py backend/services/run_state_service.py backend/backend_contract_regression.py` => passed
+  - `.venv/bin/python backend/backend_contract_regression.py` => passed
+
 ## 2026-05-07 Europe/Budapest - Codex (Repository Structure And Documentation Normalization)
 
 - Objective: normalize the active repository layout and maintainer-facing documentation around the current `0.5.0` baseline.

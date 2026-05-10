@@ -502,6 +502,125 @@ class BackendContractRegressionTests(unittest.TestCase):
         mocked_start.assert_called_once()
         self.assertTrue(bool(mocked_start.call_args.kwargs.get("resume_existing")))
 
+    def test_recovery_candidates_flag_missing_source_as_broken(self) -> None:
+        self._login_admin()
+        upload_id = "broken-upload"
+        upload_dir = self.runs_dir / "uploads" / upload_id
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        workbook_path = upload_dir / "missing.xlsx"
+        upload_record = {
+            "upload_id": upload_id,
+            "filename": "missing.xlsx",
+            "stored_path": str(workbook_path),
+            "bytes": 0,
+            "status": "accepted",
+            "created_at": 1771000000,
+            "validation": {"accepted": True, "row_count": 1},
+        }
+        from backend.services.ops_db_service import record_upload, register_run
+
+        (upload_dir / "upload.json").write_text(json.dumps(upload_record), encoding="utf-8")
+        record_upload(runs_dir=self.runs_dir, record=upload_record)
+        run_id = "broken-run"
+        run_path = self.runs_dir / run_id
+        run_path.mkdir(parents=True, exist_ok=True)
+        create_run_record(
+            runs_dir=self.runs_dir,
+            run_id=run_id,
+            input_path=str(workbook_path),
+            output_path=str(run_path / "output.xlsx"),
+            upload_id=upload_id,
+            language="de",
+            review_mode="partial",
+            start_payload={"upload_id": upload_id, "language": "de", "review_mode": "partial"},
+        )
+        register_run(
+            runs_dir=self.runs_dir,
+            run_id=run_id,
+            upload_id=upload_id,
+            language="de",
+            review_mode="partial",
+            state="PROCESSING",
+        )
+        (run_path / "progress.json").write_text(
+            json.dumps({"run_id": run_id, "state": "PROCESSING", "processed_rows": 1, "total_rows": 10, "progress_percentage": 10.0}),
+            encoding="utf-8",
+        )
+        (run_path / "control.json").write_text(
+            json.dumps({"run_id": run_id, "pid": None, "paused": False, "output": str(run_path / "output.xlsx")}),
+            encoding="utf-8",
+        )
+        (run_path / "logs.txt").write_text("[FAILED] missing source workbook\n", encoding="utf-8")
+
+        response = self.client.get("/runs/recovery-candidates/list")
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(len(payload["runs"]), 1)
+        candidate = payload["runs"][0]
+        self.assertEqual(candidate["run_id"], run_id)
+        self.assertTrue(candidate["is_broken"])
+        self.assertFalse(candidate["can_continue"])
+        self.assertIn("managed source workbook is missing from local storage", candidate["broken_reasons"])
+        self.assertEqual(candidate["last_log_line"], "[FAILED] missing source workbook")
+
+    def test_delete_run_purges_run_and_managed_source_when_inactive(self) -> None:
+        self._login_admin()
+        upload_id = "purge-upload"
+        upload_dir = self.runs_dir / "uploads" / upload_id
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        workbook_path = upload_dir / "purge.xlsx"
+        workbook_path.write_bytes(_build_workbook_bytes())
+        upload_record = {
+            "upload_id": upload_id,
+            "filename": "purge.xlsx",
+            "stored_path": str(workbook_path),
+            "bytes": workbook_path.stat().st_size,
+            "status": "accepted",
+            "created_at": 1771000000,
+            "validation": {"accepted": True, "row_count": 1},
+        }
+        from backend.services.ops_db_service import record_upload, register_run
+
+        (upload_dir / "upload.json").write_text(json.dumps(upload_record), encoding="utf-8")
+        record_upload(runs_dir=self.runs_dir, record=upload_record)
+        run_id = "purge-run"
+        run_path = self.runs_dir / run_id
+        run_path.mkdir(parents=True, exist_ok=True)
+        create_run_record(
+            runs_dir=self.runs_dir,
+            run_id=run_id,
+            input_path=str(workbook_path),
+            output_path=str(run_path / "output.xlsx"),
+            upload_id=upload_id,
+            language="de",
+            review_mode="partial",
+            start_payload={"upload_id": upload_id, "language": "de", "review_mode": "partial"},
+        )
+        register_run(
+            runs_dir=self.runs_dir,
+            run_id=run_id,
+            upload_id=upload_id,
+            language="de",
+            review_mode="partial",
+            state="FAILED",
+        )
+        (run_path / "progress.json").write_text(
+            json.dumps({"run_id": run_id, "state": "FAILED", "processed_rows": 1, "total_rows": 10, "progress_percentage": 10.0}),
+            encoding="utf-8",
+        )
+        (run_path / "control.json").write_text(
+            json.dumps({"run_id": run_id, "pid": None, "paused": False, "output": str(run_path / "output.xlsx")}),
+            encoding="utf-8",
+        )
+
+        response = self.client.delete(f"/runs/{run_id}?purge_source=true")
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["status"], "deleted")
+        self.assertFalse(run_path.exists())
+        self.assertFalse(upload_dir.exists())
+        self.assertIsNone(run_state_service.read_run_record(runs_dir=self.runs_dir, run_id=run_id))
+
     def test_run_classification_resumes_from_checkpoint(self) -> None:
         workbook_path = self.runs_dir / "resume-input.xlsx"
         wb = Workbook()
@@ -625,6 +744,79 @@ class BackendContractRegressionTests(unittest.TestCase):
         self.assertEqual((stored_row or {}).get("assigned_category"), "Anti-Israel")
         self.assertEqual((stored_row or {}).get("attempt_id"), attempt["attempt_id"])
         self.assertTrue((stored_row or {}).get("review_required"))
+
+    def test_migrate_row_state_from_output_backfills_canonical_rows(self) -> None:
+        self._login_admin()
+        run_id = f"migrate-output-{uuid.uuid4().hex[:8]}"
+        _prepare_synthetic_run(self.runs_dir, run_id)
+
+        response = self.client.post(f"/runs/{run_id}/migrate-row-state")
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertTrue(payload["output_present"])
+        self.assertEqual(payload["output_rows_migrated"], 1)
+
+        stored_row = fetch_run_row(runs_dir=self.runs_dir, run_id=run_id, row_index=2)
+        self.assertIsNotNone(stored_row)
+        self.assertEqual((stored_row or {}).get("assigned_category"), "Anti-Israel")
+        self.assertTrue((stored_row or {}).get("review_required"))
+
+    def test_migrate_row_state_from_checkpoints_imports_nonreview_rows(self) -> None:
+        self._login_admin()
+        upload_id = f"checkpoint-upload-{uuid.uuid4().hex[:8]}"
+        record = intake_workbook(
+            runs_dir=self.runs_dir,
+            ssot_path=PROJECT_ROOT / "ssot/ssot.json",
+            upload_id=upload_id,
+            filename="checkpoint.xlsx",
+            content=(PROJECT_ROOT / "samples" / "sample_germany.xlsx").read_bytes(),
+        )
+        self.assertEqual(record["status"], "accepted")
+
+        run_id = f"checkpoint-run-{uuid.uuid4().hex[:8]}"
+        run_path = self.runs_dir / run_id
+        run_path.mkdir(parents=True, exist_ok=True)
+        create_run_record(
+            runs_dir=self.runs_dir,
+            run_id=run_id,
+            input_path=str(Path(record["stored_path"])),
+            output_path=str(run_path / "output.xlsx"),
+            upload_id=upload_id,
+            language="de",
+            review_mode="partial",
+            start_payload={"upload_id": upload_id, "language": "de", "review_mode": "partial"},
+        )
+        checkpoint_dir = run_path / "_segments" / f"{upload_id}-seg-00001" / "runs" / f"{run_id}-segment-00001"
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        _append_result_checkpoint(
+            checkpoint_dir / "result_checkpoint.jsonl",
+            result_index=0,
+            row_hash=stable_row_hash(
+                "1",
+                "There are a lot of cultural barbarians in Germany now who hate us as Germans and abuse us as zombies or white bread. We are all pigs. That is racist, isn't it?",
+            ),
+            result=ClassificationResult(
+                row_index=2,
+                raw_category="Not Antisemitic",
+                category="Not Antisemitic",
+                confidence=0.91,
+                explanation="Checkpointed non-review row.",
+                flags=[],
+                resolved_model_version="synthetic-model",
+            ),
+        )
+
+        response = self.client.post(f"/runs/{run_id}/migrate-row-state?include_output=false")
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["checkpoint_files_seen"], 1)
+        self.assertEqual(payload["checkpoint_rows_migrated"], 1)
+        self.assertFalse(payload["output_present"])
+
+        stored_row = fetch_run_row(runs_dir=self.runs_dir, run_id=run_id, row_index=2)
+        self.assertIsNotNone(stored_row)
+        self.assertEqual((stored_row or {}).get("assigned_category"), "Not Antisemitic")
+        self.assertFalse(bool((stored_row or {}).get("review_required")))
 
     def test_review_queue_reads_live_checkpoint_rows(self) -> None:
         upload_id = "live-review-upload"

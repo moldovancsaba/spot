@@ -1,7 +1,7 @@
 # {spot} UAT Checklist
 
 Document date: `2026-05-03`
-Workspace baseline: `0.5.0`
+Workspace baseline: `0.5.1`
 SSOT: `0.2`
 
 ## Purpose

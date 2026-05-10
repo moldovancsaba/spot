@@ -1,8 +1,8 @@
 # {spot} Client Package
 
-Document date: `2026-05-07`
-Workspace baseline: `0.5.0`
-Pipeline baseline: `mvp-0.5.0`
+Document date: `2026-05-10`
+Workspace baseline: `0.5.1`
+Pipeline baseline: `mvp-0.5.1`
 SSOT baseline: `0.2`
 
 ## Overview
@@ -17,6 +17,13 @@ Its purpose is to classify rows into a strict antisemitism taxonomy with:
 - full audit evidence
 
 `{spot}` is designed for local Apple Silicon delivery and does not require normal cloud runtime dependencies.
+
+## Source And License Status
+
+- the current repository does not declare an open-source license file
+- treat the codebase as a private/source-available maintainer workspace, not as a public open-source package
+- the supported delivery model is a checked-out source tree maintained by the project owner or an explicitly authorized maintainer
+- no `.pkg`, `.dmg`, Homebrew, or other public installer contract is part of the current baseline
 
 ## What The Client Receives
 
@@ -179,7 +186,35 @@ Current pre-delivery status:
 - native operator workflow is implemented in the local appliance
 - native macOS supervisor shell is implemented in the local appliance repository
 - native acceptance smoke verification is available as deterministic integration coverage
-- fresh live acceptance evidence on the current `0.5.0` native-only baseline is still required before first client delivery
+- fresh live acceptance evidence on the current `0.5.1` native-only baseline is still required before first client delivery
+
+## Install And Update Contract
+
+Supported installation/update path:
+
+```bash
+cd /Users/moldovancsaba/Projects/spot
+python3 -m src.cli bootstrap \
+  --project-root . \
+  --venv-path .venv \
+  --requirements requirements.txt \
+  --ssot ssot/ssot.json \
+  --runs-dir runs \
+  --logs-dir logs
+.venv/bin/python -m src.cli preflight --ssot ssot/ssot.json --runs-dir runs --port 8765
+cd app/macos
+swift build
+bash build-bundle.sh
+bash install-bundle.sh
+open /Applications/spot.app
+```
+
+Supported update contract:
+- update the source checkout
+- rerun preflight
+- rebuild the app bundle
+- rerun `app/macos/install-bundle.sh`
+- rerun the native acceptance smoke and the required benchmark/UAT evidence for the target machine
 
 ## Maintainer Notes
 

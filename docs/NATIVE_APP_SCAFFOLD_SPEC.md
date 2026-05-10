@@ -5,7 +5,7 @@ Historical note:
 - references to browser-era review routing or startup paths below are historical implementation context, not the current delivery contract
 
 Document date: `2026-05-05`
-Target baseline: `0.5.0`
+Target baseline: `0.5.1`
 
 ## Purpose
 

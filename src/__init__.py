@@ -1,1 +1,1 @@
-PIPELINE_VERSION = "mvp-0.5.0"
+PIPELINE_VERSION = "mvp-0.5.1"

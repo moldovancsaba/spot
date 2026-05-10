@@ -16,3 +16,12 @@ Generated output:
 - `dist/`: locally built `spot.app` bundle
 
 Generated output is disposable and must not be committed.
+
+Supported native maintainer path:
+- build bundle: `bash build-bundle.sh`
+- install or update `/Applications/spot.app`: `bash install-bundle.sh`
+- launch installed app: `open /Applications/spot.app`
+
+Distribution note:
+- the repository currently has no declared open-source license file
+- this directory documents a source-checkout maintainer workflow, not a public installer or package-manager contract

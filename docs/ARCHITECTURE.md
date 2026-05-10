@@ -2,8 +2,8 @@
 
 `{spot}` stands for `Smart Platform for Observing Threats`.
 
-Current workspace implementation: `0.5.0`
-Pipeline version: `mvp-0.5.0`
+Current workspace implementation: `0.5.1`
+Pipeline version: `mvp-0.5.1`
 SSOT version: `0.2`
 
 ## System Boundary
