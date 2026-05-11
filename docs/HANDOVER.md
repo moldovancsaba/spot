@@ -5,6 +5,25 @@ Historical note:
 - older entries intentionally preserve the browser-phase and `app/spot-app` wording that was true when those entries were written
 - current operator and startup guidance lives in [`README.md`](/Users/moldovancsaba/Projects/spot/README.md), [`READMEDEV.md`](/Users/moldovancsaba/Projects/spot/READMEDEV.md), and [`docs/LOCAL_APPLIANCE_RUNBOOK.md`](/Users/moldovancsaba/Projects/spot/docs/LOCAL_APPLIANCE_RUNBOOK.md)
 
+## 2026-05-11 Europe/Budapest - Codex ({spot} P0 Canonical Final Merge Recovery)
+
+- Objective: reduce another remaining child-run filesystem dependency in `#18` by making final run assembly recover missing segment outputs from committed canonical state.
+- Changes:
+  - added worker helper logic to rebuild a segment workbook from canonical `run_rows` even when the child-run `input.xlsx` and `output.xlsx` are both missing locally
+  - changed final run merge to iterate canonical segment records from the ops DB instead of only merging whatever segment directories already contain `output.xlsx`
+  - added recovery behavior so a `COMPLETED` segment with full committed progress can recreate its missing output workbook before aggregate merge
+  - added queue regression coverage proving a completed segment can restore its missing segment workbook from canonical state alone
+- Files touched:
+  - `backend/segment_worker.py`
+  - `backend/services/ops_db_service.py`
+  - `backend/ops_queue_regression.py`
+  - `docs/HANDOVER.md`
+- Validation:
+  - `python3 -m py_compile backend/segment_worker.py backend/services/ops_db_service.py backend/ops_queue_regression.py` => passed
+  - `.venv/bin/python -m unittest backend.ops_queue_regression.OpsQueueRegressionTests.test_rebuild_segment_output_from_canonical_restores_missing_completed_segment_output` => passed
+  - `.venv/bin/python backend/ops_queue_regression.py` => passed
+  - `.venv/bin/python backend/backend_contract_regression.py` => passed
+
 ## 2026-05-10 Europe/Budapest - Codex (Versioning And Documentation Audit)
 
 - Objective: promote the active workspace baseline and audit the maintainer-facing documentation for version drift, source-distribution ambiguity, and incomplete install/update guidance.

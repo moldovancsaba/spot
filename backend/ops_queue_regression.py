@@ -12,6 +12,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 import backend.main as main_module
 from backend.segment_worker import _reset_segment_attempt_artifacts, _should_resume_segment_attempt
+from backend.segment_worker import _rebuild_segment_output_from_canonical
 from backend.services import auth_service
 from backend.services.ops_db_service import (
     build_operations_overview,
@@ -31,6 +32,8 @@ from backend.services.ops_db_service import (
 from backend.services.run_state_service import create_run_record
 from backend.services.run_state_service import sync_review_rows_from_output
 from fastapi.testclient import TestClient
+from openpyxl import Workbook, load_workbook
+from src.classifier import stable_row_hash
 
 
 class OpsQueueRegressionTests(unittest.TestCase):
@@ -256,6 +259,142 @@ class OpsQueueRegressionTests(unittest.TestCase):
         self.assertFalse(_should_resume_segment_attempt(resume_existing=False, committed_processed_rows=10))
         self.assertFalse(_should_resume_segment_attempt(resume_existing=True, committed_processed_rows=0))
         self.assertTrue(_should_resume_segment_attempt(resume_existing=True, committed_processed_rows=1))
+
+    def test_rebuild_segment_output_from_canonical_restores_missing_completed_segment_output(self) -> None:
+        upload_id = "upload-rebuild-completed-segment"
+        upload_dir = self.runs_dir / "uploads" / upload_id
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        workbook_path = upload_dir / "segment-source.xlsx"
+        wb = Workbook()
+        ws = wb.active
+        ws.append(["Item number", "Post text", "Category"])
+        ws.append(["1", "First segment row", ""])
+        ws.append(["2", "Second segment row", ""])
+        wb.save(workbook_path)
+        wb.close()
+
+        record = {
+            "upload_id": upload_id,
+            "filename": "segment-source.xlsx",
+            "stored_path": str(workbook_path),
+            "bytes": workbook_path.stat().st_size,
+            "status": "accepted",
+            "created_at": 1770000500,
+            "validation": {"accepted": True, "row_count": 2},
+        }
+        (upload_dir / "upload.json").write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+        record_upload(runs_dir=self.runs_dir, record=record)
+
+        from backend.services.ops_db_service import replace_upload_rows
+
+        replace_upload_rows(
+            runs_dir=self.runs_dir,
+            upload_id=upload_id,
+            rows=[
+                {
+                    "sequence_index": 1,
+                    "row_index": 2,
+                    "item_number": "1",
+                    "post_text": "First segment row",
+                    "source_category": "",
+                    "row_hash": stable_row_hash("1", "First segment row"),
+                    "post_text_sha256": "sha-segment-1",
+                    "post_text_length": 17,
+                },
+                {
+                    "sequence_index": 2,
+                    "row_index": 3,
+                    "item_number": "2",
+                    "post_text": "Second segment row",
+                    "source_category": "",
+                    "row_hash": stable_row_hash("2", "Second segment row"),
+                    "post_text_sha256": "sha-segment-2",
+                    "post_text_length": 18,
+                },
+            ],
+        )
+
+        run_id = "rebuild-completed-segment-run"
+        run_dir = self.runs_dir / run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+        create_run_record(
+            runs_dir=self.runs_dir,
+            run_id=run_id,
+            input_path=str(workbook_path),
+            output_path=str(run_dir / "output.xlsx"),
+            upload_id=upload_id,
+            language="de",
+            review_mode="partial",
+            start_payload={"upload_id": upload_id, "language": "de", "review_mode": "partial"},
+        )
+        register_run(
+            runs_dir=self.runs_dir,
+            run_id=run_id,
+            upload_id=upload_id,
+            language="de",
+            review_mode="partial",
+            state="PROCESSING",
+        )
+        segment = claim_next_segment(runs_dir=self.runs_dir, run_id=run_id, worker_id="worker-segment-rebuild")
+        self.assertIsNotNone(segment)
+        complete_segment(runs_dir=self.runs_dir, segment_id=str(segment["segment_id"]))
+        upsert_run_rows(
+            runs_dir=self.runs_dir,
+            run_id=run_id,
+            upload_id=upload_id,
+            rows=[
+                {
+                    "row_index": 2,
+                    "row_hash": stable_row_hash("1", "First segment row"),
+                    "assigned_category": "Not Antisemitic",
+                    "confidence_score": 0.91,
+                    "explanation": "Recovered first row.",
+                    "flags": [],
+                    "review_required": False,
+                },
+                {
+                    "row_index": 3,
+                    "row_hash": stable_row_hash("2", "Second segment row"),
+                    "assigned_category": "Anti-Israel",
+                    "confidence_score": 0.87,
+                    "explanation": "Recovered second row.",
+                    "flags": ["REVIEW_REQUIRED"],
+                    "review_required": True,
+                },
+            ],
+        )
+
+        segment_dir = run_dir / "_segments" / str(segment["segment_id"])
+        rebuilt_rows = _rebuild_segment_output_from_canonical(
+            runs_dir=self.runs_dir,
+            run_id=run_id,
+            upload_id=upload_id,
+            segment_id=str(segment["segment_id"]),
+            segment_run_id=f"{run_id}-segment-00001",
+            segment_input_path=segment_dir / "input.xlsx",
+            segment_output_path=segment_dir / "output.xlsx",
+            segment_dir=segment_dir,
+            row_start=int(segment["row_start"]),
+            row_end=int(segment["row_end"]),
+            row_count=int(segment["row_count"]),
+            language="de",
+            review_mode="partial",
+            ssot_path=PROJECT_ROOT / "ssot/ssot.json",
+        )
+        self.assertEqual(rebuilt_rows, 2)
+        self.assertTrue((segment_dir / "input.xlsx").exists())
+        self.assertTrue((segment_dir / "output.xlsx").exists())
+
+        rebuilt_wb = load_workbook(segment_dir / "output.xlsx", read_only=True, data_only=True)
+        try:
+            rebuilt_ws = rebuilt_wb[rebuilt_wb.sheetnames[0]]
+            header = [str(v).strip() if v is not None else "" for v in next(rebuilt_ws.iter_rows(min_row=1, max_row=1, values_only=True))]
+            assigned_category_idx = header.index("Assigned Category")
+            rows = list(rebuilt_ws.iter_rows(min_row=2, max_row=3, values_only=True))
+        finally:
+            rebuilt_wb.close()
+        self.assertEqual(rows[0][assigned_category_idx], "Not Antisemitic")
+        self.assertEqual(rows[1][assigned_category_idx], "Anti-Israel")
 
     def test_resume_run_segments_requeues_failed_work_without_dropping_progress(self) -> None:
         accepted_upload_id = "upload-resume"

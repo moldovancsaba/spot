@@ -422,6 +422,15 @@ def fetch_upload_rows_for_segment(*, runs_dir: Path, upload_id: str, row_start: 
     return [dict(row) for row in rows]
 
 
+def list_run_segments(*, runs_dir: Path, run_id: str) -> list[dict[str, Any]]:
+    with _connect(runs_dir) as conn:
+        rows = conn.execute(
+            "SELECT * FROM segments WHERE run_id = ? ORDER BY segment_index ASC",
+            (run_id,),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def fetch_upload_rows_by_row_indices(*, runs_dir: Path, upload_id: str, row_indices: list[int]) -> dict[int, dict]:
     normalized = sorted({int(item) for item in row_indices if int(item) > 0})
     if not normalized:
@@ -1106,6 +1115,43 @@ def build_run_segment_summary(*, runs_dir: Path, run_id: str, effective_run_stat
     review["progress_percentage"] = round((processed_rows / total_rows) * 100, 2) if total_rows else 0.0
     review["segment_progress_percentage"] = round((review["completed_segments"] / len(segments)) * 100, 2) if segments else 0.0
     return review
+
+
+def count_other_runs_for_upload(*, runs_dir: Path, upload_id: str, excluding_run_id: str | None = None) -> int:
+    with _connect(runs_dir) as conn:
+        if excluding_run_id:
+            row = conn.execute(
+                "SELECT COUNT(*) AS count FROM runs WHERE upload_id = ? AND run_id != ?",
+                (upload_id, excluding_run_id),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT COUNT(*) AS count FROM runs WHERE upload_id = ?",
+                (upload_id,),
+            ).fetchone()
+    return int((row or {})["count"] or 0)
+
+
+def delete_run_snapshot(*, runs_dir: Path, run_id: str) -> None:
+    with _connect(runs_dir) as conn:
+        conn.execute("DELETE FROM feedback_items WHERE run_id = ?", (run_id,))
+        conn.execute("DELETE FROM events WHERE entity_type = 'run' AND entity_id = ?", (run_id,))
+        conn.execute("DELETE FROM run_rows WHERE run_id = ?", (run_id,))
+        conn.execute("DELETE FROM run_attempts WHERE run_id = ?", (run_id,))
+        conn.execute("DELETE FROM segments WHERE run_id = ?", (run_id,))
+        conn.execute("DELETE FROM runs WHERE run_id = ?", (run_id,))
+        conn.commit()
+
+
+def delete_upload_snapshot(*, runs_dir: Path, upload_id: str) -> None:
+    with _connect(runs_dir) as conn:
+        conn.execute("DELETE FROM feedback_items WHERE run_id IN (SELECT run_id FROM runs WHERE upload_id = ?)", (upload_id,))
+        conn.execute("DELETE FROM run_rows WHERE upload_id = ?", (upload_id,))
+        conn.execute("DELETE FROM upload_rows WHERE upload_id = ?", (upload_id,))
+        conn.execute("DELETE FROM events WHERE entity_type = 'upload' AND entity_id = ?", (upload_id,))
+        conn.execute("DELETE FROM segments WHERE upload_id = ?", (upload_id,))
+        conn.execute("DELETE FROM uploads WHERE upload_id = ?", (upload_id,))
+        conn.commit()
 
 
 def _append_event(conn: sqlite3.Connection, entity_type: str, entity_id: str, event_type: str, payload: dict) -> None:

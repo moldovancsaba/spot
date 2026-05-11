@@ -22,6 +22,7 @@ from backend.services.ops_db_service import (
     complete_segment,
     fail_segment,
     fetch_upload_rows_for_segment,
+    list_run_segments,
     reconcile_run_segments,
     reset_run_segments,
     summarize_run_rows,
@@ -391,6 +392,54 @@ def _should_resume_segment_attempt(*, resume_existing: bool, committed_processed
     return bool(resume_existing and committed_processed_rows > 0)
 
 
+def _rebuild_segment_output_from_canonical(
+    *,
+    runs_dir: Path,
+    run_id: str,
+    upload_id: str,
+    segment_id: str,
+    segment_run_id: str,
+    segment_input_path: Path,
+    segment_output_path: Path,
+    segment_dir: Path,
+    row_start: int,
+    row_end: int,
+    row_count: int,
+    language: str,
+    review_mode: str,
+    ssot_path: Path,
+) -> int:
+    segment_dir.mkdir(parents=True, exist_ok=True)
+    if not segment_input_path.exists():
+        stored_rows = fetch_upload_rows_for_segment(
+            runs_dir=runs_dir,
+            upload_id=upload_id,
+            row_start=row_start,
+            row_end=row_end,
+        )
+        if len(stored_rows) != row_count:
+            raise RuntimeError(
+                f"Segment {segment_id} expected {row_count} stored rows but found {len(stored_rows)}."
+            )
+        manifest_entries = build_segment_input_workbook_from_entries(segment_input_path, stored_rows)
+        write_row_manifest(segment_dir / "row_manifest.jsonl", manifest_entries)
+    rebuilt_rows = rebuild_output_from_canonical(
+        input_path=segment_input_path,
+        output_path=segment_output_path,
+        run_id=segment_run_id,
+        run_language=language,
+        review_mode=review_mode,
+        ssot_path=ssot_path,
+        canonical_runs_dir=runs_dir,
+        canonical_run_id=run_id,
+    )
+    if rebuilt_rows < row_count:
+        raise RuntimeError(
+            f"Segment {segment_id} canonical rebuild produced {rebuilt_rows}/{row_count} rows."
+        )
+    return rebuilt_rows
+
+
 def _handle_stop(signum, _frame) -> None:  # noqa: ANN001
     del signum
     global STOP_REQUESTED
@@ -649,15 +698,21 @@ def main() -> int:
                 active_segment = runtime_stats["segment_summary"].get("active_segment") or {}
                 committed_segment_rows = min(int(active_segment.get("processed_rows") or resumed_segment_rows), segment_row_count)
                 if committed_segment_rows >= segment_row_count:
-                    rebuilt_rows = rebuild_output_from_canonical(
-                        input_path=segment_input_path,
-                        output_path=segment_output_path,
-                        run_id=segment_run_id,
-                        run_language=args.language,
+                    rebuilt_rows = _rebuild_segment_output_from_canonical(
+                        runs_dir=args.runs_dir,
+                        run_id=args.run_id,
+                        upload_id=args.upload_id,
+                        segment_id=segment_id,
+                        segment_run_id=segment_run_id,
+                        segment_input_path=segment_input_path,
+                        segment_output_path=segment_output_path,
+                        segment_dir=segment_dir,
+                        row_start=int(segment["row_start"]),
+                        row_end=int(segment["row_end"]),
+                        row_count=segment_row_count,
+                        language=args.language,
                         review_mode=args.review_mode,
                         ssot_path=args.ssot,
-                        canonical_runs_dir=args.runs_dir,
-                        canonical_run_id=args.run_id,
                     )
                     _append_log(
                         run_dir,
@@ -706,8 +761,40 @@ def main() -> int:
             args.output.unlink()
         shutil.copy2(args.input, args.output)
         ensure_output_columns(args.output)
-        for segment_dir in sorted(path for path in segments_dir.iterdir() if path.is_dir()):
+        for segment in list_run_segments(runs_dir=args.runs_dir, run_id=args.run_id):
+            segment_id = str(segment["segment_id"])
+            segment_dir = segments_dir / segment_id
+            segment_input_path = segment_dir / "input.xlsx"
             segment_output_path = segment_dir / "output.xlsx"
+            segment_run_id = _segment_run_id(args.run_id, int(segment["segment_index"]))
+            segment_row_count = int(segment["row_count"] or 0)
+            segment_processed_rows = min(max(int(segment["processed_rows"] or 0), 0), segment_row_count)
+            if (
+                str(segment["state"] or "") == "COMPLETED"
+                and not segment_output_path.exists()
+                and segment_row_count > 0
+                and segment_processed_rows >= segment_row_count
+            ):
+                rebuilt_rows = _rebuild_segment_output_from_canonical(
+                    runs_dir=args.runs_dir,
+                    run_id=args.run_id,
+                    upload_id=args.upload_id,
+                    segment_id=segment_id,
+                    segment_run_id=segment_run_id,
+                    segment_input_path=segment_input_path,
+                    segment_output_path=segment_output_path,
+                    segment_dir=segment_dir,
+                    row_start=int(segment["row_start"]),
+                    row_end=int(segment["row_end"]),
+                    row_count=segment_row_count,
+                    language=args.language,
+                    review_mode=args.review_mode,
+                    ssot_path=args.ssot,
+                )
+                _append_log(
+                    run_dir,
+                    f"[RECOVERED] Rebuilt missing output for completed {segment_id} from canonical state ({rebuilt_rows}/{segment_row_count} rows)",
+                )
             if segment_output_path.exists():
                 merge_segment_output(segment_output_path, args.output)
 
