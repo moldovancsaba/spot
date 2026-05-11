@@ -1,7 +1,7 @@
 # {spot} Developer Readme
 
-Document date: `2026-05-10`
-Workspace baseline: `0.5.1`
+Document date: `2026-05-11`
+Workspace baseline: `0.5.2`
 Latest shipped release: `v0.3.1`
 SSOT baseline: `0.2`
 
@@ -113,8 +113,8 @@ Current local acceptance path:
 - Keep these distinct.
 
 Current state:
-- workspace baseline: `0.5.1`
-- pipeline baseline: `mvp-0.5.1`
+- workspace baseline: `0.5.2`
+- pipeline baseline: `mvp-0.5.2`
 - latest shipped release: `v0.3.1`
 
 Update these surfaces together when the workspace baseline changes:
@@ -168,7 +168,7 @@ plutil -lint ./Info.plist
 ## Current Next Step Priority
 
 The active maintainability baseline is:
-- current workspace baseline is `0.5.1`; `VERSION` and active docs are aligned to that baseline
+- current workspace baseline is `0.5.2`; `VERSION` and active docs are aligned to that baseline
 - native macOS supervisor baseline is implemented in code
 - queue-backed local operations and dashboard monitoring are implemented behind the native macOS workspace
 - canonical run-row migration is now started, but read-path compatibility backfill still exists and must be retired deliberately in a later hardening step

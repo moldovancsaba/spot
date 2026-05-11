@@ -67,7 +67,7 @@ from src.defaults import (
 )
 from src.lanes import load_lane_config
 
-app = FastAPI(title="{spot} Classification Backend", version="0.5.1")
+app = FastAPI(title="{spot} Classification Backend", version="0.5.2")
 RUNS_DIR = Path(os.getenv("RUNS_DIR", str(Path(__file__).resolve().parent.parent / "runs")))
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 PYTHON_BIN = Path(os.getenv("SPOT_NATIVE_PYTHON_BIN") or sys.executable)
@@ -83,7 +83,7 @@ def api_health():
         "status": "online",
         "launch": {"ready": True},
         "service": "{spot} Classification Backend",
-        "version": "0.5.1",
+        "version": "0.5.2",
         "auth_enabled": auth_enabled(),
         "host": "127.0.0.1",
         "port": 8765,

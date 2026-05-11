@@ -1,6 +1,6 @@
 # {spot} Production Plan
 
-Current workspace implementation baseline: `0.5.1`
+Current workspace implementation baseline: `0.5.2`
 SSOT baseline: `0.2`
 Document date: `2026-05-03`
 

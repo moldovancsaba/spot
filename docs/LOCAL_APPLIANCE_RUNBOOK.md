@@ -1,8 +1,8 @@
 # {spot} Local Appliance Runbook
 
-Current workspace implementation baseline: `0.5.1`
+Current workspace implementation baseline: `0.5.2`
 SSOT baseline: `0.2`
-Document date: `2026-05-10`
+Document date: `2026-05-11`
 
 ## Purpose
 
@@ -186,6 +186,22 @@ Example command:
 Expected result:
 - output workbook is produced
 - run artifacts are written under `runs/local-run-001/`
+
+## Bounded Trinity/Train Export
+
+Use this after reviewers have saved `confirm` or `adjust` decisions on flagged rows:
+
+```bash
+.venv/bin/python -m src.cli export-trinity-spot-bundles \
+  --run-id local-run-001 \
+  --runs-dir runs \
+  --company-id company-1 \
+  --output-dir runs/local-run-001/trinity_bundles
+```
+
+Expected result:
+- reviewed Spot rows are exported as `trinity.spot.v1alpha1` `spot-review-policy-learning` bundle files
+- the exported bundle files can be handed to the bounded `{train}` Spot review-policy proposal lane
 
 ## Monitoring Procedure
 

@@ -50,6 +50,17 @@ python3 -m src.cli bootstrap \
 ```
 
 ```bash
+python3 -m src.cli bootstrap \
+  --project-root . \
+  --venv-path .venv \
+  --requirements requirements.txt \
+  --ssot ssot/ssot.json \
+  --runs-dir runs \
+  --logs-dir logs \
+  --skip-install
+```
+
+```bash
 .venv/bin/python -m src.cli evaluate \
   --input samples/sample_germany.xlsx \
   --ssot ssot/ssot.json \
@@ -77,14 +88,25 @@ python3 -m src.cli bootstrap \
   --progress-every 10
 ```
 
+```bash
+.venv/bin/python -m src.cli export-trinity-spot-bundles \
+  --run-id run-001 \
+  --runs-dir runs \
+  --company-id company-1 \
+  --output-dir runs/run-001/trinity_bundles
+```
+
 Native app workflow:
 - supported startup path: build and launch `/Applications/spot.app` from `app/macos`
 - the native app supervises the loopback backend on `127.0.0.1:8765`
 - the supported operator surface is the native SwiftUI workspace only
+- native runtime shutdown is expected to suspend active runs for later recovery
+- relaunching `/Applications/spot.app` is expected to recover an interrupted resumable run when queued segment state remains
 
 Native verification workflow:
 - native app validation lives under `app/macos`
-- use `swift build`, `bash build-bundle.sh`, and `bash install-bundle.sh`
+- use `swift package dump-package`, `swift build`, `bash -n build-icon.sh`, `bash -n build-bundle.sh`, `bash -n install-bundle.sh`, and `plutil -lint Info.plist`
+- use `bash build-bundle.sh` and `bash install-bundle.sh` for the supported install/update path
 - backend regressions still validate the API/runtime contract behind the native shell
 
 Minimum validation:

@@ -79,6 +79,16 @@ def _parser() -> argparse.ArgumentParser:
     bootstrap.add_argument("--runs-dir", default=Path("runs"), type=Path)
     bootstrap.add_argument("--logs-dir", default=Path("logs"), type=Path)
     bootstrap.add_argument("--skip-install", action="store_true")
+
+    export_trinity_spot_bundles = sub.add_parser(
+        "export-trinity-spot-bundles",
+        help="Export reviewed Spot rows as bounded Trinity/Train training bundles",
+    )
+    export_trinity_spot_bundles.add_argument("--run-id", required=True)
+    export_trinity_spot_bundles.add_argument("--runs-dir", default=Path("runs"), type=Path)
+    export_trinity_spot_bundles.add_argument("--company-id", required=True)
+    export_trinity_spot_bundles.add_argument("--output-dir", required=True, type=Path)
+    export_trinity_spot_bundles.add_argument("--row-indices", default="")
     return p
 
 
@@ -213,6 +223,46 @@ def main() -> int:
         )
         print(bootstrap_report_json(report))
         return 0 if report["status"] == "ok" else 1
+    elif args.command == "export-trinity-spot-bundles":
+        try:
+            from .trinity_spot_bundle import export_trinity_spot_training_bundles
+
+            row_indices = [int(item.strip()) for item in str(args.row_indices).split(",") if item.strip()]
+            summary = export_trinity_spot_training_bundles(
+                runs_dir=args.runs_dir,
+                run_id=args.run_id,
+                company_id=args.company_id,
+                output_dir=args.output_dir,
+                row_indices=row_indices or None,
+            )
+            print(
+                json.dumps(
+                    {
+                        "status": "ok",
+                        "run_id": summary.run_id,
+                        "company_id": summary.company_id,
+                        "exported_count": summary.exported_count,
+                        "skipped_count": summary.skipped_count,
+                        "output_dir": str(summary.output_dir),
+                        "files": list(summary.files),
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+            return 0
+        except Exception as exc:  # noqa: BLE001
+            print(
+                json.dumps(
+                    {
+                        "status": "error",
+                        "error_type": exc.__class__.__name__,
+                        "message": str(exc),
+                    },
+                    ensure_ascii=False,
+                )
+            )
+            return 1
 
     print(json.dumps({"status": "ok"}))
     return 0

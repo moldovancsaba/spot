@@ -2,8 +2,8 @@
 
 `{spot}` stands for `Smart Platform for Observing Threats`.
 
-Current workspace implementation baseline: `0.5.1`
-Pipeline baseline: `mvp-0.5.1`
+Current workspace implementation baseline: `0.5.2`
+Pipeline baseline: `mvp-0.5.2`
 SSOT baseline: `0.2`
 Date: `2026-05-07`
 
@@ -261,7 +261,7 @@ This makes the system operable beyond simple CLI-only use.
 Current implementation stage:
 - the core runtime and native macOS operator surface are implemented
 - the browser UI surface has been removed from the active delivery path
-- release cutover and fresh client acceptance evidence on the `0.5.1` baseline remain pending
+- release cutover and fresh client acceptance evidence on the `0.5.2` baseline remain pending
 
 ## 16. Audit Artefacts
 

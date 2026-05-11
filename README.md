@@ -3,8 +3,8 @@
 
 AI-assisted antisemitism classification system with SSOT-governed, auditable local processing.
 
-Current workspace implementation: `0.5.1`
-Pipeline version: `mvp-0.5.1`
+Current workspace implementation: `0.5.2`
+Pipeline version: `mvp-0.5.2`
 Authoritative SSOT version: `0.2`
 Latest shipped release notes in repo: [`docs/RELEASE_NOTES_0.3.1.md`](/Users/moldovancsaba/Projects/spot/docs/RELEASE_NOTES_0.3.1.md)
 
@@ -61,6 +61,7 @@ Current implementation stage:
 - native macOS supervisor shell is implemented
 - queue-backed local operations dashboard is implemented
 - productionization verification is in progress
+- bounded `{trinity}` / `{train}` review-policy export is now implemented and locally validated
 - live client acceptance on the current workspace baseline is still pending
 
 ## Canonical Taxonomy
@@ -207,6 +208,16 @@ Example single-vs-ensemble evaluation command:
   --max-workers 1 \
   --limit 500 \
   --progress-every 10
+```
+
+Example bounded Trinity/Train bundle export from reviewed Spot rows:
+
+```bash
+.venv/bin/python -m src.cli export-trinity-spot-bundles \
+  --run-id run-001 \
+  --runs-dir runs \
+  --company-id company-1 \
+  --output-dir runs/run-001/trinity_bundles
 ```
 
 ## Backend Endpoints

@@ -5,6 +5,56 @@ Historical note:
 - older entries intentionally preserve the browser-phase and `app/spot-app` wording that was true when those entries were written
 - current operator and startup guidance lives in [`README.md`](/Users/moldovancsaba/Projects/spot/README.md), [`READMEDEV.md`](/Users/moldovancsaba/Projects/spot/READMEDEV.md), and [`docs/LOCAL_APPLIANCE_RUNBOOK.md`](/Users/moldovancsaba/Projects/spot/docs/LOCAL_APPLIANCE_RUNBOOK.md)
 
+## 2026-05-11 Europe/Budapest - Codex ({spot} 0.5.2 bounded export docs promotion)
+
+- Objective: promote the active workspace baseline after the bounded `{trinity}` / `{train}` Spot export seam landed, and align maintainer-facing install/update docs to that new current state.
+- Changes:
+  - promoted the active workspace baseline from `0.5.1` to `0.5.2` and the pipeline marker from `mvp-0.5.1` to `mvp-0.5.2`
+  - updated backend runtime version reporting and native bundle metadata to the `0.5.2` baseline
+  - updated `README.md`, `READMEDEV.md`, `README_BRIEF.md`, `docs/CLIENT_PACKAGE.md`, and `docs/LOCAL_APPLIANCE_RUNBOOK.md` so the supported install/update path and the bounded `{trinity}` / `{train}` export command are documented together
+  - kept the acceptance wording explicit: the bounded export seam is working and locally validated, but fresh client-machine acceptance evidence is still a separate gate
+- Files touched:
+  - `VERSION`
+  - `src/__init__.py`
+  - `backend/main.py`
+  - `app/macos/Info.plist`
+  - `README.md`
+  - `READMEDEV.md`
+  - `README_BRIEF.md`
+  - `docs/CLIENT_PACKAGE.md`
+  - `docs/LOCAL_APPLIANCE_RUNBOOK.md`
+  - `docs/ARCHITECTURE.md`
+  - `docs/PRODUCTION_PLAN.md`
+  - `docs/BENCHMARK_CHECKLIST.md`
+  - `docs/UAT_CHECKLIST.md`
+  - `docs/ACCEPTANCE_EVIDENCE_TEMPLATE.md`
+  - `docs/HANDOVER.md`
+- Validation:
+  - `python3 -m py_compile src/*.py src/ensemble/*.py src/evaluation/*.py backend/main.py backend/models/*.py backend/routes/*.py backend/services/*.py backend/backend_contract_regression.py backend/ops_queue_regression.py backend/segment_worker.py src/benchmark.py src/targeted_adjudication_regression.py src/trinity_spot_bundle.py src/trinity_spot_bundle_regression.py` => passed
+  - `PYTHONPATH=/Users/moldovancsaba/Projects/spot .venv/bin/python backend/backend_contract_regression.py` => passed
+  - `PYTHONPATH=/Users/moldovancsaba/Projects/spot .venv/bin/python backend/ops_queue_regression.py` => passed
+  - `cd app/macos && swift package dump-package >/dev/null && swift build && bash -n ./build-icon.sh && bash -n ./build-bundle.sh && bash -n ./install-bundle.sh && plutil -lint ./Info.plist` => passed
+
+## 2026-05-11 Europe/Budapest - Codex ({spot} bounded Trinity/Train bundle export)
+
+- Objective: add the first explicit `{spot}` export seam that lets reviewed run rows feed the bounded `{trinity}` / `{train}` Spot review-policy loop without inventing broader live-runtime integration.
+- Changes:
+  - added `src/trinity_spot_bundle.py` with a bounded `trinity.spot.v1alpha1` export path that converts reviewed canonical Spot rows into `spot-review-policy-learning` bundle files
+  - added `python -m src.cli export-trinity-spot-bundles --run-id ... --company-id ... --output-dir ...` so maintainers can export reviewed rows directly from local run artefacts
+  - limited export eligibility to reviewed/escalated rows with saved `confirm` or `adjust` decisions and documented the new command in `README.md` and `AGENTS.md`
+  - added `src/trinity_spot_bundle_regression.py` and validated one generated export against `{train}`'s `load_trinity_spot_training_bundle(...)` loader
+- Files touched:
+  - `src/trinity_spot_bundle.py`
+  - `src/cli.py`
+  - `src/trinity_spot_bundle_regression.py`
+  - `README.md`
+  - `AGENTS.md`
+  - `docs/HANDOVER.md`
+- Validation:
+  - `python3 -m py_compile src/*.py src/ensemble/*.py src/evaluation/*.py backend/main.py backend/models/*.py backend/routes/*.py backend/services/*.py backend/backend_contract_regression.py backend/ops_queue_regression.py backend/segment_worker.py src/benchmark.py src/targeted_adjudication_regression.py src/trinity_spot_bundle.py src/trinity_spot_bundle_regression.py` => passed
+  - `PYTHONPATH=/Users/moldovancsaba/Projects/spot .venv/bin/python src/trinity_spot_bundle_regression.py` => passed
+  - generated a real bundle with `{spot}` and loaded it via `{train}` using `PYTHONPATH=core uv run python -c 'from train_core.trinity_trace_loader import load_trinity_spot_training_bundle ...'` => passed
+
 ## 2026-05-11 Europe/Budapest - Codex ({spot} P0 Run Presentation Canonicalization)
 
 - Objective: finish the current `#19` cleanup pass by making run-list, run-state, detail, and artifact-center presentation fields inherit canonicalized progress and review summaries instead of raw `progress.json` counters.

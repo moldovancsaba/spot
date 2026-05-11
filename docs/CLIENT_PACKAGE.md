@@ -1,8 +1,8 @@
 # {spot} Client Package
 
-Document date: `2026-05-10`
-Workspace baseline: `0.5.1`
-Pipeline baseline: `mvp-0.5.1`
+Document date: `2026-05-11`
+Workspace baseline: `0.5.2`
+Pipeline baseline: `mvp-0.5.2`
 SSOT baseline: `0.2`
 
 ## Overview
@@ -186,7 +186,8 @@ Current pre-delivery status:
 - native operator workflow is implemented in the local appliance
 - native macOS supervisor shell is implemented in the local appliance repository
 - native acceptance smoke verification is available as deterministic integration coverage
-- fresh live acceptance evidence on the current `0.5.1` native-only baseline is still required before first client delivery
+- bounded `{trinity}` / `{train}` Spot review-policy bundle export is implemented for reviewed rows
+- fresh live acceptance evidence on the current `0.5.2` native-only baseline is still required before first client delivery
 
 ## Install And Update Contract
 
@@ -211,10 +212,21 @@ open /Applications/spot.app
 
 Supported update contract:
 - update the source checkout
+- rerun `python3 -m src.cli bootstrap ... --skip-install` if only local directories or permissions need refresh
 - rerun preflight
 - rebuild the app bundle
 - rerun `app/macos/install-bundle.sh`
 - rerun the native acceptance smoke and the required benchmark/UAT evidence for the target machine
+
+Bounded `{trinity}` / `{train}` export path:
+
+```bash
+.venv/bin/python -m src.cli export-trinity-spot-bundles \
+  --run-id run-001 \
+  --runs-dir runs \
+  --company-id company-1 \
+  --output-dir runs/run-001/trinity_bundles
+```
 
 ## Maintainer Notes
 
