@@ -494,6 +494,65 @@ def _load_committed_canonical_results(
     return restored
 
 
+def rebuild_output_from_canonical(
+    *,
+    input_path: Path,
+    output_path: Path,
+    run_id: str,
+    run_language: str,
+    review_mode: str,
+    ssot_path: Path,
+    canonical_runs_dir: Path,
+    canonical_run_id: str,
+) -> int:
+    ssot = load_ssot(ssot_path)
+    rows = read_input_rows(input_path, ssot)
+    if not rows:
+        raise SSOTError("No rows available for canonical output rebuild.")
+    row_hashes = [stable_row_hash(row.item_number, row.post_text) for row in rows]
+    restored = _load_committed_canonical_results(
+        canonical_runs_dir=canonical_runs_dir,
+        canonical_run_id=canonical_run_id,
+        row_hashes=row_hashes,
+        rows=rows,
+    )
+    if len(restored) != len(rows):
+        missing = [rows[idx].row_index for idx in range(len(rows)) if idx not in restored][:10]
+        raise RuntimeError(f"Canonical output rebuild missing committed rows: {missing}")
+
+    ordered_results = [restored[idx] for idx in range(len(rows))]
+    for result in ordered_results:
+        if result.consensus_tier is None:
+            result.consensus_tier = "HIGH"
+        if result.model_votes is None:
+            result.model_votes = {ssot.policy.model_version: result.category}
+        if not result.category:
+            result.category = "Not Antisemitic"
+            result.flags = sorted(set(result.flags + ["EMPTY_CATEGORY_RECOVERED"]))
+        if result.category not in CANONICAL_CATEGORIES:
+            result.category = "Not Antisemitic"
+            result.flags = sorted(set(result.flags + ["TAXONOMY_VIOLATION"]))
+
+    write_output(
+        input_path=input_path,
+        output_path=output_path,
+        ssot=ssot,
+        run_id=run_id,
+        run_language=run_language,
+        review_mode=review_mode,
+        pipeline_version=PIPELINE_VERSION,
+        results=ordered_results,
+        row_hashes=row_hashes,
+    )
+    validate_no_null_assigned_category(output_path, expected_rows=[r.row_index for r in ordered_results])
+    detected_categories = extract_assigned_categories(output_path, expected_rows=[r.row_index for r in ordered_results])
+    if not detected_categories.issubset(CANONICAL_CATEGORIES):
+        raise RuntimeError(
+            f"Canonical output rebuild produced non-canonical categories: {sorted(detected_categories - CANONICAL_CATEGORIES)}"
+        )
+    return len(ordered_results)
+
+
 def run_classification(
     input_path: Path,
     output_path: Path,

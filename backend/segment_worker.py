@@ -29,7 +29,7 @@ from backend.services.ops_db_service import (
 from backend.services.excel_service import ensure_upload_rows_materialized
 from backend.services.artifact_manifest_service import write_artifact_manifest
 from src.excel_io import build_segment_input_workbook_from_entries, ensure_output_columns, merge_segment_output, write_row_manifest
-from src.pipeline import _sha256_file
+from src.pipeline import _sha256_file, rebuild_output_from_canonical
 
 
 PYTHON_BIN = Path(os.getenv("SPOT_NATIVE_PYTHON_BIN") or sys.executable)
@@ -641,11 +641,35 @@ def main() -> int:
                 raise KeyboardInterrupt("stop requested")
 
             if return_code != 0:
-                error_message = segment_log_path.read_text(encoding="utf-8")[-4000:] if segment_log_path.exists() else "Segment classify subprocess failed."
-                fail_segment(runs_dir=args.runs_dir, segment_id=segment_id, error_message=error_message, state="FAILED")
-                raise RuntimeError(f"Segment {segment_id} failed.")
-
-            complete_segment(runs_dir=args.runs_dir, segment_id=segment_id)
+                runtime_stats = _current_runtime_stats(
+                    runs_dir=args.runs_dir,
+                    run_id=args.run_id,
+                    effective_run_state="PROCESSING",
+                )
+                active_segment = runtime_stats["segment_summary"].get("active_segment") or {}
+                committed_segment_rows = min(int(active_segment.get("processed_rows") or resumed_segment_rows), segment_row_count)
+                if committed_segment_rows >= segment_row_count:
+                    rebuilt_rows = rebuild_output_from_canonical(
+                        input_path=segment_input_path,
+                        output_path=segment_output_path,
+                        run_id=segment_run_id,
+                        run_language=args.language,
+                        review_mode=args.review_mode,
+                        ssot_path=args.ssot,
+                        canonical_runs_dir=args.runs_dir,
+                        canonical_run_id=args.run_id,
+                    )
+                    _append_log(
+                        run_dir,
+                        f"[RECOVERED] Rebuilt output for {segment_id} from canonical state after child failure ({rebuilt_rows}/{segment_row_count} rows)",
+                    )
+                    return_code = 0
+                else:
+                    error_message = segment_log_path.read_text(encoding="utf-8")[-4000:] if segment_log_path.exists() else "Segment classify subprocess failed."
+                    fail_segment(runs_dir=args.runs_dir, segment_id=segment_id, error_message=error_message, state="FAILED")
+                    raise RuntimeError(f"Segment {segment_id} failed.")
+            if return_code == 0:
+                complete_segment(runs_dir=args.runs_dir, segment_id=segment_id)
 
             runtime_stats = _current_runtime_stats(runs_dir=args.runs_dir, run_id=args.run_id, effective_run_state="PROCESSING")
             completed_rows = int(runtime_stats["processed_rows"] or completed_rows)

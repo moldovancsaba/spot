@@ -28,7 +28,7 @@ from backend.services import run_state_service
 from src.excel_io import build_segment_input_workbook_from_entries, read_input_rows
 from src.classifier import stable_row_hash
 from src.models import ClassificationResult
-from src.pipeline import _append_result_checkpoint, run_classification
+from src.pipeline import _append_result_checkpoint, rebuild_output_from_canonical, run_classification
 from src.ssot_loader import load_ssot
 
 
@@ -765,6 +765,71 @@ class BackendContractRegressionTests(unittest.TestCase):
         stored_second = fetch_run_row(runs_dir=self.runs_dir, run_id=run_id, row_index=3)
         self.assertEqual((stored_first or {}).get("assigned_category"), "Not Antisemitic")
         self.assertEqual((stored_second or {}).get("assigned_category"), "Anti-Israel")
+
+    def test_rebuild_output_from_canonical_recreates_segment_output(self) -> None:
+        workbook_path = self.runs_dir / "rebuild-output-input.xlsx"
+        wb = Workbook()
+        ws = wb.active
+        ws.append(["Item number", "Post text", "Category"])
+        ws.append(["1", "First rebuild row", ""])
+        ws.append(["2", "Second rebuild row", ""])
+        wb.save(workbook_path)
+        wb.close()
+
+        run_id = "rebuild-output-run"
+        run_dir = self.runs_dir / run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+        create_run_record(
+            runs_dir=self.runs_dir,
+            run_id=run_id,
+            input_path=str(workbook_path),
+            output_path=str(run_dir / "output.xlsx"),
+            upload_id=None,
+            language="de",
+            review_mode="partial",
+            start_payload={"language": "de", "review_mode": "partial"},
+        )
+        upsert_run_rows(
+            runs_dir=self.runs_dir,
+            run_id=run_id,
+            upload_id=None,
+            attempt_id=None,
+            rows=[
+                {
+                    "row_index": 2,
+                    "row_hash": stable_row_hash("1", "First rebuild row"),
+                    "assigned_category": "Not Antisemitic",
+                    "confidence_score": 0.91,
+                    "explanation": "First canonical row.",
+                    "flags": [],
+                    "review_required": False,
+                },
+                {
+                    "row_index": 3,
+                    "row_hash": stable_row_hash("2", "Second rebuild row"),
+                    "assigned_category": "Anti-Israel",
+                    "confidence_score": 0.88,
+                    "explanation": "Second canonical row.",
+                    "flags": ["REVIEW_REQUIRED"],
+                    "review_required": True,
+                },
+            ],
+        )
+
+        rebuilt = rebuild_output_from_canonical(
+            input_path=workbook_path,
+            output_path=run_dir / "output.xlsx",
+            run_id=run_id,
+            run_language="de",
+            review_mode="partial",
+            ssot_path=PROJECT_ROOT / "ssot/ssot.json",
+            canonical_runs_dir=self.runs_dir,
+            canonical_run_id=run_id,
+        )
+        self.assertEqual(rebuilt, 2)
+        queue = build_review_queue(runs_dir=self.runs_dir, run_id=run_id)
+        self.assertEqual(len((queue or {}).get("rows", [])), 1)
+        self.assertEqual((queue or {}).get("rows", [])[0]["assigned_category"], "Anti-Israel")
 
     def test_run_classification_persists_canonical_rows_during_execution(self) -> None:
         workbook_path = self.runs_dir / "canonical-input.xlsx"

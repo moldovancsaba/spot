@@ -136,6 +136,24 @@ Historical note:
   - `.venv/bin/python -m unittest backend.ops_queue_regression.OpsQueueRegressionTests.test_resume_segment_attempt_uses_committed_progress_not_checkpoint_presence` => passed
   - `.venv/bin/python backend/ops_queue_regression.py` => passed
 
+## 2026-05-10 Europe/Budapest - Codex ({spot} P0 Canonical Segment Output Rebuild On Child Failure)
+
+- Objective: continue `#18` by removing one more child-run filesystem dependency from segment completion: when a child classify process dies after fully committing its rows, rebuild the segment workbook from canonical `run_rows` instead of failing solely because the child output file is missing.
+- Changes:
+  - added `rebuild_output_from_canonical(...)` in `src/pipeline.py` to reconstruct a governed output workbook from canonical committed rows
+  - changed `backend/segment_worker.py` so a non-zero child exit can recover by rebuilding the segment output from canonical state when the committed row count already covers the full segment
+  - added regression coverage proving canonical output rebuild works and remains compatible with review queue projection
+- Files touched:
+  - `src/pipeline.py`
+  - `backend/segment_worker.py`
+  - `backend/backend_contract_regression.py`
+  - `docs/HANDOVER.md`
+- Validation:
+  - `python3 -m py_compile src/pipeline.py backend/segment_worker.py backend/backend_contract_regression.py` => passed
+  - `.venv/bin/python -m unittest backend.backend_contract_regression.BackendContractRegressionTests.test_rebuild_output_from_canonical_recreates_segment_output` => passed
+  - `.venv/bin/python backend/backend_contract_regression.py` => passed
+  - `.venv/bin/python backend/ops_queue_regression.py` => passed
+
 ## 2026-05-10 Europe/Budapest - Codex ({spot} P0 Canonical Run-Row Migration Start)
 
 - Objective: start `#17` by making canonical `run_rows` backfill explicit for legacy and interrupted runs while preserving read-path backfill as a temporary compatibility bridge.
