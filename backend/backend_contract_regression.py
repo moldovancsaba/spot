@@ -145,6 +145,40 @@ class BackendContractRegressionTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 404, response.text)
 
+    def test_run_read_surface_prefers_canonical_progress_over_stale_progress_file(self) -> None:
+        self._login_admin()
+        run_id = f"contract-run-progress-{uuid.uuid4().hex[:8]}"
+        run_path = _prepare_synthetic_run(self.runs_dir, run_id)
+        (run_path / "progress.json").write_text(
+            json.dumps({"run_id": run_id, "state": "COMPLETED", "progress_percentage": 100.0, "processed_rows": 5, "total_rows": 5}),
+            encoding="utf-8",
+        )
+        upsert_run_rows(
+            runs_dir=self.runs_dir,
+            run_id=run_id,
+            upload_id=None,
+            rows=[
+                {
+                    "row_index": 2,
+                    "assigned_category": "Anti-Israel",
+                    "confidence_score": 0.41,
+                    "explanation": "Committed canonical row.",
+                    "flags": ["REVIEW_REQUIRED"],
+                    "review_required": True,
+                }
+            ],
+        )
+
+        response = self.client.get(f"/runs/{run_id}")
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["processed_rows"], 1)
+        self.assertEqual(payload["progress"]["processed_rows"], 1)
+        self.assertEqual(payload["progress"]["total_rows"], 5)
+        self.assertEqual(payload["progress"]["progress_percentage"], 20.0)
+        self.assertEqual(payload["review_summary"]["review_required_rows"], 1)
+        self.assertEqual(payload["review_summary"]["pending_rows"], 1)
+
     def test_signoff_requires_review_completion(self) -> None:
         self._login_admin()
         run_id = f"contract-run-{uuid.uuid4().hex[:8]}"
@@ -1047,7 +1081,7 @@ class BackendContractRegressionTests(unittest.TestCase):
         self.assertEqual((stored_row or {}).get("assigned_category"), "Not Antisemitic")
         self.assertFalse(bool((stored_row or {}).get("review_required")))
 
-    def test_review_queue_reads_live_checkpoint_rows(self) -> None:
+    def test_review_queue_does_not_import_live_checkpoint_rows_without_explicit_sync(self) -> None:
         upload_id = "live-review-upload"
         record = intake_workbook(
             runs_dir=self.runs_dir,
@@ -1088,7 +1122,15 @@ class BackendContractRegressionTests(unittest.TestCase):
         )
         queue = build_review_queue(runs_dir=self.runs_dir, run_id=run_id)
         self.assertIsNotNone(queue)
-        rows = queue["rows"]
+        self.assertEqual(queue["rows"], [])
+        self.assertIsNone(fetch_run_row(runs_dir=self.runs_dir, run_id=run_id, row_index=2))
+        self.assertFalse((run_path / "review_state.json").exists())
+
+        synced = run_state_service.sync_review_rows_from_output(runs_dir=self.runs_dir, run_id=run_id)
+        self.assertEqual(len((synced or {}).get("rows", {})), 1)
+
+        queue_after = build_review_queue(runs_dir=self.runs_dir, run_id=run_id)
+        rows = queue_after["rows"]
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["row_index"], 2)
         self.assertEqual(rows[0]["review_state"], "pending")

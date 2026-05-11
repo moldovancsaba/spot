@@ -5,6 +5,62 @@ Historical note:
 - older entries intentionally preserve the browser-phase and `app/spot-app` wording that was true when those entries were written
 - current operator and startup guidance lives in [`README.md`](/Users/moldovancsaba/Projects/spot/README.md), [`READMEDEV.md`](/Users/moldovancsaba/Projects/spot/READMEDEV.md), and [`docs/LOCAL_APPLIANCE_RUNBOOK.md`](/Users/moldovancsaba/Projects/spot/docs/LOCAL_APPLIANCE_RUNBOOK.md)
 
+## 2026-05-11 Europe/Budapest - Codex ({spot} P0 Run Presentation Canonicalization)
+
+- Objective: finish the current `#19` cleanup pass by making run-list, run-state, detail, and artifact-center presentation fields inherit canonicalized progress and review summaries instead of raw `progress.json` counters.
+- Changes:
+  - added resolved row-counter helpers to `run_state_service` so run presentation fields now use canonical `run_rows` first, segment summaries second, and stale file counters last
+  - changed `refresh_run_record(...)` to rewrite presented `progress`, `processing_stats`, top-level progress counters, and review summary from the canonical projection layer
+  - kept raw lifecycle metadata such as `started_at`, `completed_at`, and messages from `progress.json`, while replacing only the drift-prone numeric counters
+  - added regression coverage proving `/runs/{run_id}` no longer trusts stale `progress.json` row counts over committed canonical row state
+- Files touched:
+  - `backend/services/run_state_service.py`
+  - `backend/backend_contract_regression.py`
+  - `docs/HANDOVER.md`
+- Validation:
+  - `python3 -m py_compile backend/services/run_state_service.py backend/backend_contract_regression.py backend/main.py` => passed
+  - `.venv/bin/python -m unittest backend.backend_contract_regression.BackendContractRegressionTests.test_run_read_surface_prefers_canonical_progress_over_stale_progress_file` => passed
+  - `.venv/bin/python backend/backend_contract_regression.py` => passed
+
+## 2026-05-11 Europe/Budapest - Codex ({spot} P0 Canonical Progress Precedence Cleanup)
+
+- Objective: continue `#19` by normalizing run/upload summary precedence so queue and dashboard surfaces stop trusting file-derived progress counters over canonical DB state.
+- Changes:
+  - added centralized helpers in `ops_db_service` for resolving total rows, processed rows, and processing stats
+  - changed resolved run snapshots to derive row counters from canonical `run_rows` first, segment counters second, and indexed run snapshot data last
+  - stopped using `progress.json` as a higher-priority source for processed row counts in queue and dashboard summaries
+  - changed upload queue summaries to derive row progress and processing stats from the same canonical precedence contract used by resolved run snapshots
+  - added regression coverage proving stale `progress.json` row counts do not outrank canonical committed row state
+- Files touched:
+  - `backend/services/ops_db_service.py`
+  - `backend/ops_queue_regression.py`
+  - `docs/HANDOVER.md`
+- Validation:
+  - `python3 -m py_compile backend/services/ops_db_service.py backend/ops_queue_regression.py` => passed
+  - `.venv/bin/python -m unittest backend.ops_queue_regression.OpsQueueRegressionTests.test_upload_queue_summary_does_not_trust_stale_progress_rows_over_canonical_state` => passed
+  - `.venv/bin/python backend/ops_queue_regression.py` => passed
+  - `.venv/bin/python backend/backend_contract_regression.py` => passed
+
+## 2026-05-11 Europe/Budapest - Codex ({spot} P0 Read-Path Side-Effect Purification)
+
+- Objective: start `#19` by removing hidden checkpoint/output repair work from normal review and detail reads while preserving explicit migration/sync paths for legacy runs.
+- Changes:
+  - changed canonical review-state projection so projecting from `run_rows` no longer writes `review_state.json` as a side effect
+  - restricted `review_state.json` persistence to explicit sync and review-write paths instead of GET-driven read paths
+  - changed `refresh_run_record`, `build_run_detail`, `build_review_queue`, and `build_row_inspector` to use pure canonical projections without automatic checkpoint backfill
+  - preserved the explicit compatibility bridge in `sync_review_rows_from_output(...)` and the explicit `POST /runs/{run_id}/migrate-row-state` endpoint for legacy/output-backed runs
+  - fixed the review-row POST path so, after an explicit migration, it reprojects review state instead of rereading a stale persisted file
+  - updated backend regressions to prove review reads no longer import live checkpoint rows unless an explicit sync is invoked
+- Files touched:
+  - `backend/main.py`
+  - `backend/services/run_state_service.py`
+  - `backend/backend_contract_regression.py`
+  - `docs/HANDOVER.md`
+- Validation:
+  - `python3 -m py_compile backend/main.py backend/services/run_state_service.py backend/backend_contract_regression.py` => passed
+  - `.venv/bin/python -m unittest backend.backend_contract_regression.BackendContractRegressionTests.test_signoff_requires_review_completion backend.backend_contract_regression.BackendContractRegressionTests.test_review_queue_does_not_import_live_checkpoint_rows_without_explicit_sync` => passed
+  - `.venv/bin/python backend/backend_contract_regression.py` => passed
+
 ## 2026-05-11 Europe/Budapest - Codex ({spot} P0 Canonical Final Merge Recovery)
 
 - Objective: reduce another remaining child-run filesystem dependency in `#18` by making final run assembly recover missing segment outputs from committed canonical state.

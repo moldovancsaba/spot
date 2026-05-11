@@ -14,6 +14,7 @@ from backend.services.ops_db_service import (
     fetch_upload_rows_by_row_indices,
     latest_run_attempt,
     register_run,
+    summarize_run_rows,
     update_latest_run_attempt_status,
     update_run_row_review,
     update_run_snapshot,
@@ -93,6 +94,27 @@ def _fallback_processing_stats(record: dict, progress: dict | list | None) -> di
         "second_pass_completed": None,
         "second_pass_overrides": None,
     }
+
+
+def _resolved_total_rows(*, record: dict, progress: dict | None, segment_summary: dict | None) -> int:
+    segment_total_rows = int((segment_summary or {}).get("total_rows") or 0)
+    if segment_total_rows > 0:
+        return segment_total_rows
+    if isinstance(progress, dict) and progress.get("total_rows") not in {None, ""}:
+        return int(progress.get("total_rows"))
+    return int(record.get("total_rows") or 0)
+
+
+def _resolved_processed_rows(*, record: dict, progress: dict | None, canonical_stats: dict | None, segment_summary: dict | None) -> int:
+    canonical_processed_rows = int((canonical_stats or {}).get("processed_rows") or 0)
+    if canonical_processed_rows > 0:
+        return canonical_processed_rows
+    segment_processed_rows = int((segment_summary or {}).get("processed_rows") or 0)
+    if segment_processed_rows > 0:
+        return segment_processed_rows
+    if isinstance(progress, dict):
+        return int(progress.get("processed_rows") or 0)
+    return int(record.get("processed_rows") or 0)
 
 
 def append_action(
@@ -256,9 +278,7 @@ def _project_review_state_from_run_rows(*, runs_dir: Path, run_id: str) -> dict:
             "reviewer_note": str(row.get("reviewer_note") or ""),
             "updated_at": int(row.get("updated_at") or time.time()),
         }
-    state = {"run_id": run_id, "rows": projected_rows}
-    write_review_state(runs_dir=runs_dir, run_id=run_id, state=state)
-    return state
+    return {"run_id": run_id, "rows": projected_rows}
 
 
 def _review_state_from_canonical(
@@ -472,7 +492,8 @@ def sync_review_rows_from_output(*, runs_dir: Path, run_id: str) -> dict:
     # only use checkpoint import as a temporary bridge for in-flight older runs.
     # Output workbook import remains an explicit migration command so reads stop
     # depending on parsing `output.xlsx` as live truth.
-    return _review_state_from_canonical(runs_dir=runs_dir, run_id=run_id, allow_checkpoint_backfill=True)
+    state = _review_state_from_canonical(runs_dir=runs_dir, run_id=run_id, allow_checkpoint_backfill=True)
+    return write_review_state(runs_dir=runs_dir, run_id=run_id, state=state)
 
 
 def _pid_alive(pid: int | None) -> bool:
@@ -541,6 +562,7 @@ def upsert_review_row(
         reviewer_note=reviewer_note,
     )
     state = _project_review_state_from_run_rows(runs_dir=runs_dir, run_id=run_id)
+    write_review_state(runs_dir=runs_dir, run_id=run_id, state=state)
     existing = state.get("rows", {}).get(str(row_index), {"row_index": row_index, "review_required": True})
     append_action(
         runs_dir=runs_dir,
@@ -556,7 +578,7 @@ def refresh_run_record(*, runs_dir: Path, run_id: str, sync_review_rows: bool = 
     record = read_run_record(runs_dir=runs_dir, run_id=run_id)
     if not record:
         return None
-    progress = safe_read_json(run_dir(runs_dir, run_id) / "progress.json")
+    raw_progress = safe_read_json(run_dir(runs_dir, run_id) / "progress.json")
     processing_stats = safe_read_json(run_dir(runs_dir, run_id) / "processing_stats.json")
     control = safe_read_json(run_dir(runs_dir, run_id) / "control.json")
     control = control if isinstance(control, dict) else {}
@@ -571,25 +593,45 @@ def refresh_run_record(*, runs_dir: Path, run_id: str, sync_review_rows: bool = 
         control.pop("shutdown_requested_at", None)
         control.pop("shutdown_mode", None)
     signoff = read_signoff(runs_dir=runs_dir, run_id=run_id)
-    review_state = (
-        sync_review_rows_from_output(runs_dir=runs_dir, run_id=run_id)
-        if sync_review_rows
-        else read_review_state(runs_dir=runs_dir, run_id=run_id)
-    )
+    review_state = _project_review_state_from_run_rows(runs_dir=runs_dir, run_id=run_id)
+    if sync_review_rows:
+        write_review_state(runs_dir=runs_dir, run_id=run_id, state=review_state)
 
     rows = review_state.get("rows", {})
     detected_review = int(processing_stats.get("review_required_rows_detected") or 0) if isinstance(processing_stats, dict) else 0
     total_review = max(len(rows), detected_review)
     reviewed = sum(1 for row in rows.values() if row.get("review_state") not in {None, "", "pending"})
-    record["state"] = _resolve_run_state(run_id=run_id, existing_state=record.get("state"), progress=progress, control=control)
+    record["state"] = _resolve_run_state(run_id=run_id, existing_state=record.get("state"), progress=raw_progress, control=control)
     segment_summary = build_run_segment_summary(runs_dir=runs_dir, run_id=run_id, effective_run_state=record["state"])
     record["state"] = normalize_state_from_segments(state=record["state"], segment_summary=segment_summary)
-    if isinstance(progress, dict):
-        progress = dict(progress)
-        if str(progress.get("state") or "").upper() == "COMPLETED" and record["state"] != "COMPLETED":
-            progress["state"] = record["state"]
+    canonical_stats = summarize_run_rows(runs_dir=runs_dir, run_id=run_id)
+    total_rows = _resolved_total_rows(record=record, progress=raw_progress if isinstance(raw_progress, dict) else None, segment_summary=segment_summary)
+    processed_rows = _resolved_processed_rows(
+        record=record,
+        progress=raw_progress if isinstance(raw_progress, dict) else None,
+        canonical_stats=canonical_stats,
+        segment_summary=segment_summary,
+    )
+    progress = dict(raw_progress) if isinstance(raw_progress, dict) else {}
+    if str(progress.get("state") or "").upper() == "COMPLETED" and record["state"] != "COMPLETED":
+        progress["state"] = record["state"]
+    elif "state" not in progress:
+        progress["state"] = record["state"]
+    progress["processed_rows"] = processed_rows
+    progress["total_rows"] = total_rows
+    progress["progress_percentage"] = round((processed_rows / total_rows) * 100, 2) if total_rows > 0 else (100.0 if record["state"] == "COMPLETED" else 0.0)
     record["progress"] = progress
-    record["processing_stats"] = processing_stats if isinstance(processing_stats, dict) else _fallback_processing_stats(record, progress)
+    base_processing_stats = processing_stats if isinstance(processing_stats, dict) else _fallback_processing_stats(record, progress)
+    record["processing_stats"] = {
+        **(base_processing_stats or {}),
+        **canonical_stats,
+        "processed_rows": processed_rows,
+        "total_rows": total_rows,
+    }
+    record["processed_rows"] = processed_rows
+    record["total_rows"] = total_rows
+    record["progress_percentage"] = progress["progress_percentage"]
+    record["row_progress_percentage"] = progress["progress_percentage"]
     record["control"] = control
     record["signoff"] = signoff
     record["review_summary"] = {
@@ -605,7 +647,7 @@ def refresh_run_record(*, runs_dir: Path, run_id: str, sync_review_rows: bool = 
         language=str(record.get("language")) if record.get("language") else None,
         review_mode=str(record.get("review_mode")) if record.get("review_mode") else None,
         state=str(record.get("state", "UNKNOWN")),
-        progress=progress if isinstance(progress, dict) else None,
+        progress=progress,
         created_at=int(record.get("created_at")) if record.get("created_at") else None,
     )
     update_latest_run_attempt_status(
@@ -858,7 +900,7 @@ def build_run_detail(*, runs_dir: Path, run_id: str) -> dict | None:
     progress = record.get("progress") or {}
     processing_stats = record.get("processing_stats") or {}
     signoff = record.get("signoff")
-    review_state = _review_state_from_canonical(runs_dir=runs_dir, run_id=run_id, allow_checkpoint_backfill=True)
+    review_state = _review_state_from_canonical(runs_dir=runs_dir, run_id=run_id, allow_checkpoint_backfill=False)
     review_rows = sorted(review_state.get("rows", {}).values(), key=lambda row: row.get("row_index", 0))
     review_required_target = max(
         len(review_rows),
@@ -1009,10 +1051,10 @@ def build_review_queue(
     sort_by: str = "row_index",
     sort_order: str = "asc",
 ) -> dict | None:
-    record = refresh_run_record(runs_dir=runs_dir, run_id=run_id)
+    record = refresh_run_record(runs_dir=runs_dir, run_id=run_id, sync_review_rows=False)
     if not record:
         return None
-    state = _review_state_from_canonical(runs_dir=runs_dir, run_id=run_id, allow_checkpoint_backfill=True)
+    state = _review_state_from_canonical(runs_dir=runs_dir, run_id=run_id, allow_checkpoint_backfill=False)
     rows = list(state.get("rows", {}).values())
 
     if review_state_filter and review_state_filter != "all":
@@ -1045,10 +1087,10 @@ def build_review_queue(
 
 
 def build_row_inspector(*, runs_dir: Path, run_id: str, row_index: int) -> dict | None:
-    record = refresh_run_record(runs_dir=runs_dir, run_id=run_id)
+    record = refresh_run_record(runs_dir=runs_dir, run_id=run_id, sync_review_rows=False)
     if not record:
         return None
-    state = _review_state_from_canonical(runs_dir=runs_dir, run_id=run_id, allow_checkpoint_backfill=True)
+    state = _review_state_from_canonical(runs_dir=runs_dir, run_id=run_id, allow_checkpoint_backfill=False)
     row = fetch_run_row(runs_dir=runs_dir, run_id=run_id, row_index=row_index)
     if row:
         row = {

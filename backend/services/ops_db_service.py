@@ -243,6 +243,59 @@ def _resolved_run_state(*, run_id: str, indexed_state: str | None, progress: dic
     )
 
 
+def _resolved_total_rows(
+    *,
+    indexed_run: sqlite3.Row | None,
+    progress: dict | None,
+    segment_summary: dict[str, Any] | None = None,
+) -> int | None:
+    segment_total_rows = int((segment_summary or {}).get("total_rows") or 0)
+    if segment_total_rows > 0:
+        return segment_total_rows
+    if isinstance(progress, dict) and progress.get("total_rows") not in {None, ""}:
+        return int(progress.get("total_rows"))
+    if indexed_run and indexed_run["total_rows"] is not None:
+        return int(indexed_run["total_rows"])
+    return None
+
+
+def _resolved_processed_rows(
+    *,
+    indexed_run: sqlite3.Row | None,
+    canonical_stats: dict[str, Any] | None,
+    segment_summary: dict[str, Any] | None = None,
+) -> int:
+    canonical_processed_rows = int((canonical_stats or {}).get("processed_rows") or 0)
+    if canonical_processed_rows > 0:
+        return canonical_processed_rows
+    segment_processed_rows = int((segment_summary or {}).get("processed_rows") or 0)
+    if segment_processed_rows > 0:
+        return segment_processed_rows
+    if indexed_run:
+        return int(indexed_run["processed_rows"] or 0)
+    return 0
+
+
+def _resolved_processing_stats(
+    *,
+    indexed_run: sqlite3.Row | None,
+    processing_stats: dict | None,
+    canonical_stats: dict[str, Any] | None,
+    processed_rows: int,
+    total_rows: int | None,
+) -> dict[str, Any]:
+    base = dict(processing_stats) if isinstance(processing_stats, dict) else {}
+    if not base:
+        base = dict(_fallback_processing_stats(indexed_run) or {})
+    resolved = {
+        **base,
+        **(canonical_stats or {}),
+        "processed_rows": processed_rows,
+        "total_rows": total_rows,
+    }
+    return resolved
+
+
 def _resolved_run_snapshot(runs_dir: Path, run_id: str, indexed_run: sqlite3.Row | None) -> dict | None:
     if not indexed_run:
         return None
@@ -265,20 +318,17 @@ def _resolved_run_snapshot(runs_dir: Path, run_id: str, indexed_run: sqlite3.Row
     state = _resolved_run_state(run_id=run_id, indexed_state=str(indexed_run["state"] or ""), progress=progress, control=control)
     segment_summary = build_run_segment_summary(runs_dir=runs_dir, run_id=run_id, effective_run_state=state)
     state = normalize_state_from_segments(state=state, segment_summary=segment_summary)
-    processed_rows = max(
-        int((canonical_stats or {}).get("processed_rows") or 0),
-        int(progress.get("processed_rows") or 0) if isinstance(progress, dict) else int(indexed_run["processed_rows"] or 0),
+    processed_rows = _resolved_processed_rows(
+        indexed_run=indexed_run,
+        canonical_stats=canonical_stats,
+        segment_summary=segment_summary,
     )
-    total_rows = (
-        int(progress.get("total_rows"))
-        if isinstance(progress, dict) and progress.get("total_rows") not in {None, ""}
-        else (int(indexed_run["total_rows"]) if indexed_run["total_rows"] is not None else None)
+    total_rows = _resolved_total_rows(
+        indexed_run=indexed_run,
+        progress=progress,
+        segment_summary=segment_summary,
     )
-    progress_percentage = (
-        float(progress.get("progress_percentage") or 0.0)
-        if isinstance(progress, dict)
-        else float(indexed_run["progress_percentage"] or 0.0)
-    )
+    progress_percentage = round((processed_rows / total_rows) * 100, 2) if total_rows else (100.0 if state == "COMPLETED" else 0.0)
     return {
         "run_id": run_id,
         "state": state,
@@ -287,11 +337,14 @@ def _resolved_run_snapshot(runs_dir: Path, run_id: str, indexed_run: sqlite3.Row
         "progress_percentage": progress_percentage,
         "row_progress_percentage": round((processed_rows / total_rows) * 100, 2) if total_rows else (100.0 if state == "COMPLETED" else 0.0),
         "estimated_remaining_seconds": _estimate_remaining_seconds(indexed_run if state in ACTIVE_RUN_STATES else None),
-        "processing_stats": processing_stats or {
-            **(_fallback_processing_stats(indexed_run) or {}),
-            **canonical_stats,
-            "total_rows": total_rows,
-        },
+        "segment_summary": segment_summary,
+        "processing_stats": _resolved_processing_stats(
+            indexed_run=indexed_run,
+            processing_stats=processing_stats,
+            canonical_stats=canonical_stats,
+            processed_rows=processed_rows,
+            total_rows=total_rows,
+        ),
     }
 
 
@@ -1255,26 +1308,24 @@ def build_upload_queue_summary(*, runs_dir: Path, upload_id: str) -> dict:
         total_segment_rows = sum(int(segment["row_count"] or 0) for segment in segments)
         resolved_run = _resolved_run_snapshot(runs_dir, str(run["run_id"]), run) if run else None
         canonical_stats = summarize_run_rows(runs_dir=runs_dir, run_id=str(run["run_id"])) if run else {}
-        run_processed_rows = int(
-            (canonical_stats or {}).get("processed_rows")
-            or ((resolved_run or {}).get("processing_stats") or {}).get("processed_rows")
-            or ((resolved_run or {}).get("progress") or {}).get("processed_rows")
-            or ((resolved_run or {}).get("processed_rows") or 0)
-            or (run["processed_rows"] if run else 0)
-            or 0
+        run_processed_rows = _resolved_processed_rows(
+            indexed_run=run,
+            canonical_stats=canonical_stats,
+            segment_summary=(resolved_run or {}).get("segment_summary"),
         )
-        effective_processed_rows = max(segment_processed_rows, run_processed_rows)
+        effective_processed_rows = max(run_processed_rows, segment_processed_rows)
         row_progress_pct = (
             round((effective_processed_rows / total_segment_rows) * 100, 2)
             if total_segment_rows
             else (resolved_run or {}).get("row_progress_percentage", _row_progress_percentage(run))
         )
         eta_seconds = (resolved_run or {}).get("estimated_remaining_seconds", _estimate_remaining_seconds(run))
-        processing_stats = (
-            (resolved_run or {}).get("processing_stats")
-            or ({**(_fallback_processing_stats(run) or {}), **canonical_stats} if run else None)
-            or _read_processing_stats(runs_dir, str(run["run_id"]) if run else None)
-            or _fallback_processing_stats(run)
+        processing_stats = _resolved_processing_stats(
+            indexed_run=run,
+            processing_stats=_read_processing_stats(runs_dir, str(run["run_id"]) if run else None),
+            canonical_stats=canonical_stats,
+            processed_rows=effective_processed_rows,
+            total_rows=total_segment_rows or ((resolved_run or {}).get("total_rows") if resolved_run else None),
         )
         return {
             "upload_id": upload_id,

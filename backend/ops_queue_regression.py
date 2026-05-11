@@ -647,6 +647,77 @@ class OpsQueueRegressionTests(unittest.TestCase):
         self.assertEqual(summary["processing_stats"]["processed_rows"], 1)
         self.assertEqual(summary["processing_stats"]["review_required_rows_detected"], 1)
 
+    def test_upload_queue_summary_does_not_trust_stale_progress_rows_over_canonical_state(self) -> None:
+        accepted_upload_id = "upload-stale-progress"
+        upload_dir = self.runs_dir / "uploads" / accepted_upload_id
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        record = {
+            "upload_id": accepted_upload_id,
+            "filename": "stale-progress.xlsx",
+            "stored_path": str(upload_dir / "stale-progress.xlsx"),
+            "bytes": 1024,
+            "status": "accepted",
+            "created_at": 1770000450,
+            "validation": {"accepted": True, "row_count": 2},
+        }
+        (upload_dir / "upload.json").write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+        record_upload(runs_dir=self.runs_dir, record=record)
+
+        run_id = "stale-progress-run"
+        run_dir = self.runs_dir / run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+        create_run_record(
+            runs_dir=self.runs_dir,
+            run_id=run_id,
+            input_path=str(upload_dir / "stale-progress.xlsx"),
+            output_path=str(run_dir / "output.xlsx"),
+            upload_id=accepted_upload_id,
+            language="de",
+            review_mode="partial",
+            start_payload={"upload_id": accepted_upload_id, "language": "de", "review_mode": "partial"},
+        )
+        register_run(
+            runs_dir=self.runs_dir,
+            run_id=run_id,
+            upload_id=accepted_upload_id,
+            language="de",
+            review_mode="partial",
+            state="PROCESSING",
+        )
+        (run_dir / "progress.json").write_text(
+            json.dumps(
+                {
+                    "run_id": run_id,
+                    "state": "PROCESSING",
+                    "processed_rows": 2,
+                    "total_rows": 2,
+                    "progress_percentage": 100.0,
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        upsert_run_rows(
+            runs_dir=self.runs_dir,
+            run_id=run_id,
+            upload_id=accepted_upload_id,
+            rows=[
+                {
+                    "row_index": 2,
+                    "assigned_category": "Not Antisemitic",
+                    "confidence_score": 0.93,
+                    "explanation": "Only one committed canonical row.",
+                    "flags": [],
+                    "review_required": False,
+                }
+            ],
+        )
+
+        summary = build_upload_queue_summary(runs_dir=self.runs_dir, upload_id=accepted_upload_id)
+        self.assertEqual(summary["processed_rows"], 1)
+        self.assertEqual(summary["row_progress_percentage"], 50.0)
+        self.assertEqual(summary["processing_stats"]["processed_rows"], 1)
+
     def test_run_detail_read_does_not_reconcile_segments_on_interrupt(self) -> None:
         self._login_admin()
         accepted_upload_id = "upload-read-no-reconcile"
