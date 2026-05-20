@@ -333,6 +333,32 @@ struct SpotWorkspaceView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         VStack(alignment: .leading, spacing: 6) {
+                            Text("UNFINISHED RUNS")
+                                .font(.headline)
+                                .tracking(1.5)
+                                .foregroundStyle(.teal)
+                            Text("Startup recovery inventory built from persisted state and the latest run logs.")
+                                .font(.title3)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button("Refresh Inventory") { Task { await service.refreshRuntimeSnapshot() } }
+                    }
+                    if service.unfinishedRuns.isEmpty {
+                        emptyCard("No unfinished or recoverable runs were found.")
+                    } else {
+                        ForEach(service.unfinishedRuns.prefix(3)) { candidate in
+                            unfinishedRunCard(candidate)
+                        }
+                    }
+                }
+                .padding(20)
+                .background(Color(NSColor.windowBackgroundColor))
+                .clipShape(RoundedRectangle(cornerRadius: 28))
+
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 6) {
                             Text("RECENT RUNS")
                                 .font(.headline)
                                 .tracking(1.5)
@@ -843,6 +869,72 @@ struct SpotWorkspaceView: View {
             Text(value)
                 .textSelection(.enabled)
         }
+    }
+
+    @ViewBuilder
+    private func unfinishedRunCard(_ candidate: SpotRecoveryCandidate) -> some View {
+        let progressSummary = unfinishedRunProgressSummary(candidate)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(candidate.runID)
+                        .font(.title3)
+                        .fontWeight(.semibold)
+                    Text("State: \(candidate.state) · Continue: \(candidate.continueAction ?? "none")")
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                miniChip(candidate.isBroken ? "BROKEN" : "RECOVERABLE")
+            }
+
+            Text(progressSummary)
+            .foregroundStyle(.secondary)
+
+            if let sourcePath = candidate.sourcePath, !sourcePath.isEmpty {
+                Text("Source: \(sourcePath)")
+                    .font(.caption)
+                    .foregroundStyle(candidate.sourceExists ? Color.secondary : Color.orange)
+                    .lineLimit(2)
+            }
+
+            if let lastLogLine = candidate.lastLogLine, !lastLogLine.isEmpty {
+                Text(lastLogLine)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+
+            if !candidate.brokenReasons.isEmpty {
+                Text(candidate.brokenReasons.joined(separator: " • "))
+                    .foregroundStyle(.orange)
+                    .lineLimit(3)
+            }
+
+            HStack(spacing: 12) {
+                Button("Inspect") {
+                    Task { await service.selectRun(candidate.runID) }
+                }
+                Button("Continue") {
+                    Task { await service.continueRecoveryCandidate(candidate) }
+                }
+                .disabled(!candidate.canContinue)
+                Button("Delete Forever") {
+                    Task { await service.deleteRecoveryCandidate(candidate) }
+                }
+                .tint(.red)
+                .disabled(!candidate.canDelete)
+            }
+        }
+        .padding(18)
+        .background(Color(NSColor.controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 24))
+    }
+
+    private func unfinishedRunProgressSummary(_ candidate: SpotRecoveryCandidate) -> String {
+        let processed = candidate.progress?.processedRows ?? 0
+        let total = candidate.progress?.totalRows ?? 0
+        let progress = formattedPercent(candidate.progress?.progressPercentage)
+        return "\(processed) / \(total) rows · \(progress) · \(candidate.pendingSegments) queued · \(candidate.failedSegments) failed segments"
     }
 
     @ViewBuilder

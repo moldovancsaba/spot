@@ -1,7 +1,13 @@
 # {spot} Code Comment Audit
 
+Historical note:
+- this file is a point-in-time audit snapshot from the early native/queue alignment phase
+- the audit findings remain useful context, but active runtime truth now lives in the codebase plus the current operational docs
+- a follow-up audit on `2026-05-20` corrected stale active-runtime comment wording around `review_state.json` semantics and native auth/access-code guidance
+
 Date: `2026-05-03`
-Workspace baseline: `0.5.1`
+Workspace baseline at audit time: `0.5.1`
+Current workspace baseline: `0.5.2`
 
 ## Scope
 

@@ -23,9 +23,37 @@ The native workspace is implemented in SwiftUI and supervises the loopback FastA
 - SSOT loader and validation: [`src/ssot_loader.py`](/Users/moldovancsaba/Projects/spot/src/ssot_loader.py)
 - Excel ingestion/output: [`src/excel_io.py`](/Users/moldovancsaba/Projects/spot/src/excel_io.py)
 - Evaluation runner: [`src/evaluation/evaluate.py`](/Users/moldovancsaba/Projects/spot/src/evaluation/evaluate.py)
+- Trinity/Train export seam: [`src/trinity_spot_bundle.py`](/Users/moldovancsaba/Projects/spot/src/trinity_spot_bundle.py)
 - Native app supervisor and operator workspace: [`app/macos/`](/Users/moldovancsaba/Projects/spot/app/macos)
 - Monitoring backend: [`backend/main.py`](/Users/moldovancsaba/Projects/spot/backend/main.py)
+- Run state projection and artifact helpers: [`backend/services/run_state_service.py`](/Users/moldovancsaba/Projects/spot/backend/services/run_state_service.py)
 - Local operations index: [`backend/services/ops_db_service.py`](/Users/moldovancsaba/Projects/spot/backend/services/ops_db_service.py)
+- Upload-backed segment worker: [`backend/segment_worker.py`](/Users/moldovancsaba/Projects/spot/backend/segment_worker.py)
+
+## Canonical Persistence Model
+
+The active runtime truth is split across governed files and the local operations database.
+
+Indexed database entities:
+- `uploads`: accepted upload metadata and row counts
+- `upload_rows`: canonical accepted input rows with immutable source provenance
+- `runs`: indexed run snapshots used for dashboard and lifecycle summaries
+- `run_attempts`: explicit start/resume attempt history
+- `segments`: queue ownership and segment progress state
+- `run_rows`: canonical row-level classification and review truth
+- `feedback_items`: reviewer feedback evidence
+- `events`: upload/run lifecycle events
+
+File-backed governed artifacts:
+- `run_record.json`: local run envelope and operator-facing metadata
+- `progress.json`: lifecycle progress emitted by active runtime processes
+- `processing_stats.json`: throughput and review-detection counters
+- `control.json`: local process-control state
+- `policy.json`, `integrity_report.json`, `artifact_manifest.json`, `logs.txt`, `output.xlsx`
+
+Read/write split:
+- explicit write flows use `refresh_run_record(...)`, migration commands, review updates, and queue mutation helpers
+- read-model surfaces use `resolve_run_record(...)` and canonical projections so GET endpoints do not rewrite run state as a side effect
 
 ## Data Flow
 
@@ -37,8 +65,8 @@ The native workspace is implemented in SwiftUI and supervises the loopback FastA
 6. Enforce taxonomy and fallback rules
 7. Apply review policy
 8. Write output workbook
-9. Persist integrity, policy, progress, logs, and queue snapshots
-10. Surface upload, run, review, and segment status through the native macOS operator workspace
+9. Persist canonical row truth, queue ownership, integrity, policy, progress, and logs
+10. Surface upload, run, review, and segment status through non-mutating backend read models consumed by the native macOS operator workspace
 
 ## Runtime Paths
 

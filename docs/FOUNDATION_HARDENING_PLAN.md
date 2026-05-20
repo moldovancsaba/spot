@@ -1,6 +1,6 @@
 # {spot} Foundation Hardening Plan
 
-Current workspace implementation baseline: `0.5.1`
+Current workspace implementation baseline: `0.5.2`
 SSOT baseline: `0.2`
 Document date: `2026-05-03`
 
@@ -183,11 +183,12 @@ Exit gate:
 
 Current status note:
 - the core runtime, native operator baseline, and native acceptance smoke are implemented
-- the remaining delivery gate is fresh live acceptance evidence and release cutover on the current native-only baseline
+- relation hardening slices for explicit row lineage, atomic segment claims, managed-relation fail-fast behavior, and side-effect-free read models are now implemented
+- the remaining delivery gate is fresh live acceptance evidence, transactional execution closure, release cutover, and current-baseline handover proof on the native-only baseline
 
 ## Immediate Next Steps
 
-- add this hardening plan to the documentation map
-- tighten wording in core docs around the actual 3-agent behavior
-- refresh production-facing documents where scope wording is too broad
-- start a concrete local appliance runbook and preflight checklist
+- finish transactional segment execution at row-commit boundaries
+- continue explicit run-attempt lifecycle closure for recovery and suspend-resume
+- refresh active docs whenever runtime/read-model contracts change so the native-only baseline stays coherent
+- gather fresh client-machine acceptance evidence on the current `0.5.2` baseline

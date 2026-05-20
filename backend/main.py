@@ -33,6 +33,7 @@ from backend.services.ops_db_service import (
     start_run_attempt,
 )
 from backend.services.run_state_service import (
+    _run_recovery_candidate,
     append_action,
     build_artifact_center,
     build_run_detail,
@@ -47,6 +48,7 @@ from backend.services.run_state_service import (
     read_review_state,
     read_run_record,
     refresh_run_record,
+    resolve_run_record,
     run_dir,
     run_history_dir,
     sync_review_rows_from_output,
@@ -74,6 +76,15 @@ PYTHON_BIN = Path(os.getenv("SPOT_NATIVE_PYTHON_BIN") or sys.executable)
 BACKEND_ACTIVE_RUN_STATES = {"STARTING", "PENDING", "VALIDATING", "PROCESSING", "WRITING", "PAUSED"}
 SUPERVISOR_PID = int(os.getenv("SPOT_NATIVE_SUPERVISOR_PID", "0") or "0")
 _SUPERVISOR_WATCHDOG_STARTED = False
+
+
+def _ensure_run_is_not_broken_for_resume(*, run_id: str, action: str) -> dict | None:
+    candidate = _run_recovery_candidate(runs_dir=RUNS_DIR, run_id=run_id)
+    if candidate and bool(candidate.get("is_broken")):
+        reasons = [str(reason).strip() for reason in candidate.get("broken_reasons", []) if str(reason).strip()]
+        detail = "; ".join(reasons) if reasons else "run recovery prerequisites are broken"
+        raise HTTPException(status_code=409, detail=f"run cannot be {action} because {detail}")
+    return candidate
 
 
 @app.get("/api/health")
@@ -172,7 +183,7 @@ def _resolve_input_path_from_payload(payload: dict) -> str:
 @app.get("/runs/{run_id}")
 def get_run(run_id: str, request: Request):
     require_permission(request, "view")
-    run = refresh_run_record(runs_dir=RUNS_DIR, run_id=run_id, sync_review_rows=False)
+    run = resolve_run_record(runs_dir=RUNS_DIR, run_id=run_id)
     if run:
         return run
     progress_path = RUNS_DIR / run_id / "progress.json"
@@ -220,7 +231,7 @@ def get_recovery_candidates(request: Request):
 @app.get("/runs/{run_id}/state")
 def get_run_state(run_id: str, request: Request):
     require_permission(request, "view")
-    run = refresh_run_record(runs_dir=RUNS_DIR, run_id=run_id, sync_review_rows=False)
+    run = resolve_run_record(runs_dir=RUNS_DIR, run_id=run_id)
     if not run:
         raise HTTPException(status_code=404, detail="run not found")
     return run
@@ -897,6 +908,7 @@ def run_retry(run_id: str, request: Request):
     control = record.get("control") or {}
     if _resolve_run_process_pid(run_id, control.get("pid")) is not None:
         raise HTTPException(status_code=409, detail="run is still active")
+    _ensure_run_is_not_broken_for_resume(run_id=run_id, action="retried")
     payload = dict(record.get("start_payload") or {})
     if not payload:
         raise HTTPException(status_code=409, detail="run cannot be retried because start payload is unavailable")
@@ -921,6 +933,7 @@ def run_recover(run_id: str, request: Request):
     record = refresh_run_record(runs_dir=RUNS_DIR, run_id=run_id)
     if not record:
         raise HTTPException(status_code=404, detail="run not found")
+    _ensure_run_is_not_broken_for_resume(run_id=run_id, action="recovered")
     control = record.get("control") or {}
     pid = _resolve_run_process_pid(run_id, control.get("pid"))
     segment_summary = build_run_segment_summary(runs_dir=RUNS_DIR, run_id=run_id)
@@ -972,6 +985,7 @@ def run_heal(run_id: str, request: Request):
     record = refresh_run_record(runs_dir=RUNS_DIR, run_id=run_id)
     if not record:
         raise HTTPException(status_code=404, detail="run not found")
+    _ensure_run_is_not_broken_for_resume(run_id=run_id, action="healed")
     payload = dict(record.get("start_payload") or {})
     if not payload:
         raise HTTPException(status_code=409, detail="run cannot be healed because start payload is unavailable")
@@ -1059,7 +1073,7 @@ def delete_run(run_id: str, request: Request, purge_source: bool = Query(default
 @app.get("/classify/status/{run_id}")
 def classify_status(run_id: str, request: Request):
     require_permission(request, "view")
-    record = refresh_run_record(runs_dir=RUNS_DIR, run_id=run_id, sync_review_rows=False)
+    record = resolve_run_record(runs_dir=RUNS_DIR, run_id=run_id)
     if record:
         progress = record.get("progress") if isinstance(record.get("progress"), dict) else None
         control = record.get("control") if isinstance(record.get("control"), dict) else {}

@@ -85,6 +85,39 @@ DEFAULT_ALLOW_REMOTE_OLLAMA = (
 DEFAULT_PRODUCTION_MODE = (_env("SPOT_PRODUCTION_MODE", None, "0") or "0").strip() == "1"
 DEFAULT_LOCKED_SSOT_PATH = _env("SPOT_LOCKED_SSOT_PATH", None, DEFAULT_SSOT_PATH) or DEFAULT_SSOT_PATH
 
+DEFAULT_MODELS_HOME = _env("SPOT_MODELS_HOME", None, "/Users/Shared/Models/spot") or "/Users/Shared/Models/spot"
+DEFAULT_HF_HOME = _env(
+    "SPOT_HF_HOME",
+    None,
+    str(Path(DEFAULT_MODELS_HOME) / "huggingface"),
+) or str(Path(DEFAULT_MODELS_HOME) / "huggingface")
+DEFAULT_HF_HUB_CACHE = _env(
+    "SPOT_HF_HUB_CACHE",
+    None,
+    str(Path(DEFAULT_HF_HOME) / "hub"),
+) or str(Path(DEFAULT_HF_HOME) / "hub")
+DEFAULT_OLLAMA_MODELS = _env(
+    "SPOT_OLLAMA_MODELS",
+    None,
+    str(Path(DEFAULT_MODELS_HOME) / "ollama"),
+) or str(Path(DEFAULT_MODELS_HOME) / "ollama")
+DEFAULT_MLX_MODELS_DIR = _env(
+    "SPOT_MLX_MODELS_DIR",
+    None,
+    str(Path(DEFAULT_MODELS_HOME) / "mlx-local"),
+) or str(Path(DEFAULT_MODELS_HOME) / "mlx-local")
+
+# Keep provider cache roots aligned with {spot} defaults unless the operator explicitly overrides them.
+os.environ.setdefault("SPOT_MODELS_HOME", DEFAULT_MODELS_HOME)
+os.environ.setdefault("SPOT_HF_HOME", DEFAULT_HF_HOME)
+os.environ.setdefault("SPOT_HF_HUB_CACHE", DEFAULT_HF_HUB_CACHE)
+os.environ.setdefault("SPOT_OLLAMA_MODELS", DEFAULT_OLLAMA_MODELS)
+os.environ.setdefault("SPOT_MLX_MODELS_DIR", DEFAULT_MLX_MODELS_DIR)
+os.environ.setdefault("HF_HOME", DEFAULT_HF_HOME)
+os.environ.setdefault("HUGGINGFACE_HUB_CACHE", DEFAULT_HF_HUB_CACHE)
+os.environ.setdefault("HF_HUB_CACHE", DEFAULT_HF_HUB_CACHE)
+os.environ.setdefault("OLLAMA_MODELS", DEFAULT_OLLAMA_MODELS)
+
 DEFAULT_SINGLE_MODEL = _env(
     "SPOT_SINGLE_MODEL",
     None,

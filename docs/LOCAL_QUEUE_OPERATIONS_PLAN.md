@@ -1,48 +1,61 @@
 # {spot} Local Queue Operations Plan
 
 Document date: `2026-05-03`
-Workspace baseline: `0.5.1`
+Workspace baseline: `0.5.2`
 
 ## Purpose
 
-This plan defines the next operational step for `{spot}`: turn local uploads and runs into a durable queue-backed appliance without weakening determinism or auditability.
+This document records the active queue-backed appliance posture for `{spot}` and the remaining execution work that still sits on top of it.
 
 ## Brutal Truth
 
-`{spot}` already had enough persisted files to behave like an early appliance, but it did not yet have a real local operations index.
+`{spot}` now has a real local operations index, but the important remaining work is still about execution correctness, not about adding more dashboard surface area.
 
-That meant:
-- upload and run state existed
-- review state existed
-- artifacts existed
-- but chunk-level progress, queue phases, and segment-wide operational metrics did not
+What is already true:
+- accepted uploads are indexed durably
+- canonical upload rows are persisted with immutable provenance
+- canonical run rows are persisted with upload lineage
+- run attempts and segment ownership are indexed
+- native recovery candidates are projected from backend truth
+- read surfaces no longer mutate run snapshots as a side effect
 
-The result was a browser dashboard that could show runs, but not the actual shape of the work waiting behind those runs.
+What still needs hardening:
+- row commit and segment progress must advance transactionally
+- queue summaries should continue shrinking compatibility bridges to file-era state
+- native/runtime consumers should depend even less on fallback local reconstruction over time
 
 ## Delivered In This Phase
 
-This phase adds a local SQLite-backed operations layer under `runs/spot_ops.sqlite3`.
+The local SQLite-backed operations layer lives under `runs/spot_ops.sqlite3`.
 
 Current schema:
 - `uploads`
 - `runs`
 - `segments`
+- `upload_rows`
+- `run_attempts`
+- `run_rows`
 - `feedback_items`
 - `events`
 
 Current queue behavior:
 - accepted uploads are segmented automatically at intake time
 - the default segment size is `500` rows
-- segment rows are durable and linked back to the upload
+- canonical intake rows are durable and linked back to the upload
 - when a run is created from an upload, the segment set is attached to that run
-- segment phase counts are derived continuously from persisted run progress
+- segment claims are atomic and concurrency-safe
+- upload-backed `run_rows` persist explicit source lineage
+- managed upload drift now fails explicitly instead of silently degrading to `None`
 
-Current browser visibility:
+Current native/backend visibility:
 - total segments across tracked uploads
 - queue progress percentage
 - per-upload segment count
 - per-upload phase breakdown
+- per-run recovery candidate state
+- canonical row-backed review counts
 - queue overview JSON from `/operations/overview`
+- run detail, review queue, artifact center, and classify-status reads resolved without state mutation
 
 ## Why SQLite
 
@@ -56,11 +69,11 @@ A local SQLite file is enough to support queue state, operator metrics, and feed
 
 ## What This Does Not Do Yet
 
-This phase does not introduce:
-- multi-worker background execution
-- true segment-by-segment processing dispatch
-- automatic retry scheduling
-- throughput-tuned ETA modeling
+This queue baseline still does not finish:
+- transactional row-commit execution boundaries
+- full attempt-aware recovery accounting
+- fully normalized metric semantics
+- artifact/audit closure on top of the stabilized queue model
 - autonomous classifier self-learning
 
 Those are separate phases.
@@ -82,24 +95,19 @@ The correct posture is:
 - turn feedback into explicit SSOT, prompt, or release changes
 - ship those changes deliberately
 
-## Next Phases
+## Remaining Queue Work
 
-1. Background worker
-Add a local long-running worker loop that claims queued segments, runs classification for those row ranges, and updates segment lifecycle state directly.
+1. Transactional segment execution
+Make row completion and segment progress advance atomically from canonical state rather than across file and DB seams.
 
-2. Segment-native processing
-Move from run-level progress inference to actual segment dispatch and completion records so the queue reflects real execution units rather than derived approximations.
+2. Attempt-aware recovery closure
+Finish explicit attempt lifecycle semantics so retry, recover, heal, and suspend-resume are attributable across one run history.
 
-3. Better ETA and throughput metrics
-Persist per-segment timings and use them to estimate time remaining based on recent local throughput instead of a simple run-level heuristic.
+3. Metric normalization
+Finish normalizing progress, ETA, and lifecycle fields so every consumer reads the same semantics from one backend contract.
 
-4. War-room expansion
-Add first-class dashboard panels for:
-- queued segments
-- failed segments
-- reviewer backlog
-- soft-signal backlog
-- sign-off blockers
+4. Native/backend consolidation
+Reduce native-side fallback reconstruction as backend truth surfaces become more complete and faster.
 
-5. Feedback operations
-Persist reviewer overrides and notes as explicit feedback items, then expose them as governed operational evidence rather than as live runtime learning.
+5. Audit closure
+Project the stabilized queue and canonical row model outward into manifests and acceptance evidence without relying on legacy compatibility bridges.

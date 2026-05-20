@@ -574,10 +574,10 @@ def upsert_review_row(
     return existing
 
 
-def refresh_run_record(*, runs_dir: Path, run_id: str, sync_review_rows: bool = True) -> dict | None:
+def _build_resolved_run_record(*, runs_dir: Path, run_id: str) -> tuple[dict, dict] | tuple[None, None]:
     record = read_run_record(runs_dir=runs_dir, run_id=run_id)
     if not record:
-        return None
+        return None, None
     raw_progress = safe_read_json(run_dir(runs_dir, run_id) / "progress.json")
     processing_stats = safe_read_json(run_dir(runs_dir, run_id) / "processing_stats.json")
     control = safe_read_json(run_dir(runs_dir, run_id) / "control.json")
@@ -594,8 +594,6 @@ def refresh_run_record(*, runs_dir: Path, run_id: str, sync_review_rows: bool = 
         control.pop("shutdown_mode", None)
     signoff = read_signoff(runs_dir=runs_dir, run_id=run_id)
     review_state = _project_review_state_from_run_rows(runs_dir=runs_dir, run_id=run_id)
-    if sync_review_rows:
-        write_review_state(runs_dir=runs_dir, run_id=run_id, state=review_state)
 
     rows = review_state.get("rows", {})
     detected_review = int(processing_stats.get("review_required_rows_detected") or 0) if isinstance(processing_stats, dict) else 0
@@ -639,6 +637,21 @@ def refresh_run_record(*, runs_dir: Path, run_id: str, sync_review_rows: bool = 
         "reviewed_rows": reviewed,
         "pending_rows": max(total_review - reviewed, 0),
     }
+    return record, review_state
+
+
+def resolve_run_record(*, runs_dir: Path, run_id: str) -> dict | None:
+    record, _ = _build_resolved_run_record(runs_dir=runs_dir, run_id=run_id)
+    return record
+
+
+def refresh_run_record(*, runs_dir: Path, run_id: str, sync_review_rows: bool = True) -> dict | None:
+    record, review_state = _build_resolved_run_record(runs_dir=runs_dir, run_id=run_id)
+    if not record:
+        return None
+    progress = record.get("progress") if isinstance(record.get("progress"), dict) else {}
+    if sync_review_rows and review_state is not None:
+        write_review_state(runs_dir=runs_dir, run_id=run_id, state=review_state)
     persisted = write_run_record(runs_dir=runs_dir, run_id=run_id, record=record)
     update_run_snapshot(
         runs_dir=runs_dir,
@@ -649,6 +662,7 @@ def refresh_run_record(*, runs_dir: Path, run_id: str, sync_review_rows: bool = 
         state=str(record.get("state", "UNKNOWN")),
         progress=progress,
         created_at=int(record.get("created_at")) if record.get("created_at") else None,
+        require_managed_upload=False,
     )
     update_latest_run_attempt_status(
         runs_dir=runs_dir,
@@ -665,7 +679,7 @@ def list_run_records(*, runs_dir: Path) -> list[dict]:
     for child in sorted(runs_dir.iterdir(), reverse=True):
         if not child.is_dir() or child.name in {"uploads", RUN_HISTORY_DIRNAME}:
             continue
-        record = refresh_run_record(runs_dir=runs_dir, run_id=child.name, sync_review_rows=False) or read_run_record(runs_dir=runs_dir, run_id=child.name)
+        record = resolve_run_record(runs_dir=runs_dir, run_id=child.name) or read_run_record(runs_dir=runs_dir, run_id=child.name)
         if record:
             items.append(record)
     return items
@@ -721,7 +735,7 @@ def _path_is_within(path: Path, parent: Path) -> bool:
 
 
 def _run_recovery_candidate(*, runs_dir: Path, run_id: str) -> dict | None:
-    record = refresh_run_record(runs_dir=runs_dir, run_id=run_id, sync_review_rows=False)
+    record = resolve_run_record(runs_dir=runs_dir, run_id=run_id)
     if not record:
         return None
     state = str(record.get("state") or "UNKNOWN").upper()
@@ -842,7 +856,7 @@ def list_recovery_candidates(*, runs_dir: Path) -> list[dict]:
 
 
 def purge_run_state(*, runs_dir: Path, run_id: str, purge_source: bool = False) -> dict | None:
-    record = refresh_run_record(runs_dir=runs_dir, run_id=run_id, sync_review_rows=False)
+    record = resolve_run_record(runs_dir=runs_dir, run_id=run_id)
     if not record:
         return None
     control = record.get("control") if isinstance(record.get("control"), dict) else {}
@@ -893,7 +907,7 @@ def purge_run_state(*, runs_dir: Path, run_id: str, purge_source: bool = False) 
 
 
 def build_run_detail(*, runs_dir: Path, run_id: str) -> dict | None:
-    record = refresh_run_record(runs_dir=runs_dir, run_id=run_id, sync_review_rows=False)
+    record = resolve_run_record(runs_dir=runs_dir, run_id=run_id)
     if not record:
         return None
     run_path = run_dir(runs_dir, run_id)
@@ -1005,7 +1019,7 @@ def list_run_artifacts(*, runs_dir: Path, run_id: str) -> list[dict]:
 
 
 def build_artifact_center(*, runs_dir: Path, run_id: str) -> dict | None:
-    record = refresh_run_record(runs_dir=runs_dir, run_id=run_id, sync_review_rows=False)
+    record = resolve_run_record(runs_dir=runs_dir, run_id=run_id)
     if not record:
         return None
     artifacts = list_run_artifacts(runs_dir=runs_dir, run_id=run_id)
@@ -1020,7 +1034,7 @@ def build_artifact_center(*, runs_dir: Path, run_id: str) -> dict | None:
             "logs.txt": "Execution log for the run lifecycle",
             "progress.json": "Lifecycle progress record",
             "processing_stats.json": "Live row/time/threat snapshot during processing",
-            "review_state.json": "Persistent browser review state",
+            "review_state.json": "Persistent explicit review-state snapshot",
             "signoff.json": "Acceptance decision record",
             "action_log.jsonl": "Operator action log",
             "disagreement_report.json": "Disagreement evidence when produced",
@@ -1051,7 +1065,7 @@ def build_review_queue(
     sort_by: str = "row_index",
     sort_order: str = "asc",
 ) -> dict | None:
-    record = refresh_run_record(runs_dir=runs_dir, run_id=run_id, sync_review_rows=False)
+    record = resolve_run_record(runs_dir=runs_dir, run_id=run_id)
     if not record:
         return None
     state = _review_state_from_canonical(runs_dir=runs_dir, run_id=run_id, allow_checkpoint_backfill=False)
@@ -1087,7 +1101,7 @@ def build_review_queue(
 
 
 def build_row_inspector(*, runs_dir: Path, run_id: str, row_index: int) -> dict | None:
-    record = refresh_run_record(runs_dir=runs_dir, run_id=run_id, sync_review_rows=False)
+    record = resolve_run_record(runs_dir=runs_dir, run_id=run_id)
     if not record:
         return None
     state = _review_state_from_canonical(runs_dir=runs_dir, run_id=run_id, allow_checkpoint_backfill=False)

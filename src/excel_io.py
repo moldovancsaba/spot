@@ -8,7 +8,14 @@ from typing import List, Set
 from openpyxl import Workbook, load_workbook
 from openpyxl.utils.cell import range_boundaries
 
-from .models import ClassificationResult, InputRow, SSOT
+from .models import (
+    CANONICAL_INPUT_SCHEMA_VERSION,
+    CanonicalInputRow,
+    ClassificationResult,
+    InputRow,
+    InputRowProvenance,
+    SSOT,
+)
 
 
 class InputFileError(RuntimeError):
@@ -120,40 +127,108 @@ def stable_row_hash(item_number: str, post_text: str) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-def build_row_manifest_entries(rows: List[InputRow]) -> List[dict]:
+def build_row_manifest_entries(
+    rows: List[InputRow],
+    *,
+    source_name: str = "input.xlsx",
+    source_sheet: str = "__first_worksheet__",
+) -> List[dict]:
     entries: List[dict] = []
-    for sequence_index, row in enumerate(rows, start=1):
-        text = row.post_text or ""
+    for row in canonicalize_xlsx_input_rows(rows, source_name=source_name, source_sheet=source_sheet):
         entries.append(
             {
-                "sequence_index": sequence_index,
-                "row_index": int(row.row_index),
+                "schema_version": row.schema_version,
+                "sequence_index": row.sequence_index,
+                "row_index": row.row_index,
                 "item_number": row.item_number,
-                "row_hash": stable_row_hash(row.item_number, text),
-                "post_text_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
-                "post_text_length": len(text),
+                "row_hash": row.row_hash,
+                "post_text_sha256": row.post_text_sha256,
+                "post_text_length": row.post_text_length,
+                "normalization_status": row.normalization_status,
+                "provenance": {
+                    "source_type": row.provenance.source_type,
+                    "source_name": row.provenance.source_name,
+                    "source_sheet": row.provenance.source_sheet,
+                    "source_row_index": row.provenance.source_row_index,
+                },
             }
         )
     return entries
 
 
-def build_stored_row_entries(rows: List[InputRow]) -> List[dict]:
+def build_stored_row_entries(
+    rows: List[InputRow],
+    *,
+    source_name: str = "input.xlsx",
+    source_sheet: str = "__first_worksheet__",
+) -> List[dict]:
     entries: List[dict] = []
-    for sequence_index, row in enumerate(rows, start=1):
-        text = row.post_text or ""
+    for row in canonicalize_xlsx_input_rows(rows, source_name=source_name, source_sheet=source_sheet):
         entries.append(
             {
-                "sequence_index": sequence_index,
-                "row_index": int(row.row_index),
+                "schema_version": row.schema_version,
+                "sequence_index": row.sequence_index,
+                "row_index": row.row_index,
                 "item_number": row.item_number,
-                "post_text": text,
-                "source_category": "",
-                "row_hash": stable_row_hash(row.item_number, text),
-                "post_text_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
-                "post_text_length": len(text),
+                "post_text": row.post_text,
+                "source_category": row.source_category,
+                "row_hash": row.row_hash,
+                "post_text_sha256": row.post_text_sha256,
+                "post_text_length": row.post_text_length,
+                "normalization_status": row.normalization_status,
+                "source_type": row.provenance.source_type,
+                "source_name": row.provenance.source_name,
+                "source_sheet": row.provenance.source_sheet,
+                "source_row_index": row.provenance.source_row_index,
             }
         )
     return entries
+
+
+def canonicalize_xlsx_input_rows(
+    rows: List[InputRow],
+    *,
+    source_name: str = "input.xlsx",
+    source_sheet: str = "__first_worksheet__",
+) -> List[CanonicalInputRow]:
+    canonical_rows: List[CanonicalInputRow] = []
+    for sequence_index, row in enumerate(rows, start=1):
+        text = row.post_text or ""
+        canonical_rows.append(
+            CanonicalInputRow(
+                schema_version=CANONICAL_INPUT_SCHEMA_VERSION,
+                sequence_index=sequence_index,
+                row_index=int(row.row_index),
+                item_number=row.item_number,
+                post_text=text,
+                source_category="",
+                row_hash=stable_row_hash(row.item_number, text),
+                post_text_sha256=hashlib.sha256(text.encode("utf-8")).hexdigest(),
+                post_text_length=len(text),
+                normalization_status="accepted",
+                provenance=InputRowProvenance(
+                    source_type="xlsx",
+                    source_name=source_name,
+                    source_sheet=source_sheet,
+                    source_row_index=int(row.row_index),
+                ),
+            )
+        )
+    return canonical_rows
+
+
+def summarize_canonical_input_rows(rows: List[CanonicalInputRow]) -> dict:
+    normalization_statuses = sorted({row.normalization_status for row in rows})
+    source_types = sorted({row.provenance.source_type for row in rows})
+    return {
+        "canonical_schema_version": CANONICAL_INPUT_SCHEMA_VERSION,
+        "accepted_row_count": len(rows),
+        "quarantined_row_count": 0,
+        "rejected_row_count": 0,
+        "normalization_statuses": normalization_statuses,
+        "source_types": source_types,
+        "quarantine_supported": False,
+    }
 
 
 def write_row_manifest(path: Path, entries: List[dict]) -> None:

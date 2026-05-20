@@ -46,6 +46,9 @@ Key locations:
 - native app source: `app/macos/`
 - run artifacts: `runs/`
 - environment: `.venv/`
+- shared model root: `/Users/Shared/Models/spot/`
+- shared Hugging Face cache: `/Users/Shared/Models/spot/huggingface/`
+- shared Ollama store: `/Users/Shared/Models/spot/ollama/`
 
 ## Preflight Checklist
 
@@ -55,7 +58,7 @@ Before first use, confirm:
 2. Python virtual environment exists at `.venv/`
 3. dependencies from `requirements.txt` are installed
 4. `mlx_lm` is available for MLX inference
-5. required local model weights are available
+5. required local model weights are available under `/Users/Shared/Models/spot/` or an explicitly configured `SPOT_*` model root override
 6. Ollama is installed if fallback and support lanes are required
 7. the configured Ollama endpoint resolves to loopback only
 8. `ssot/ssot.json` loads without validation failure
@@ -96,6 +99,49 @@ python3 -m src.cli bootstrap \
   --logs-dir logs \
   --skip-install
 ```
+
+## Shared Model Install On A New Machine
+
+Use this when provisioning `{spot}` on another Apple Silicon machine.
+
+Target shared layout:
+- `/Users/Shared/Models/spot/huggingface/`
+- `/Users/Shared/Models/spot/ollama/`
+- `/Users/Shared/Models/spot/mlx-local/`
+- `/Users/Shared/Models/spot/manifest/`
+
+Expected runtime environment:
+- `SPOT_MODELS_HOME=/Users/Shared/Models/spot`
+- `SPOT_HF_HOME=/Users/Shared/Models/spot/huggingface`
+- `SPOT_HF_HUB_CACHE=/Users/Shared/Models/spot/huggingface/hub`
+- `SPOT_OLLAMA_MODELS=/Users/Shared/Models/spot/ollama`
+- `SPOT_MLX_MODELS_DIR=/Users/Shared/Models/spot/mlx-local`
+- `HF_HOME=/Users/Shared/Models/spot/huggingface`
+- `HF_HUB_CACHE=/Users/Shared/Models/spot/huggingface/hub`
+- `OLLAMA_MODELS=/Users/Shared/Models/spot/ollama`
+
+Recommended install order:
+1. check out the repo and create `.venv/`
+2. run `python3 -m src.cli bootstrap ...`
+3. populate `/Users/Shared/Models/spot/huggingface/` with the required MLX/Hugging Face cache content, including `mlx-community/Apertus-8B-Instruct-2509-4bit`
+4. populate `/Users/Shared/Models/spot/ollama/` with the required Ollama model store content
+5. optionally replace `~/.cache/huggingface` with a symlink to `/Users/Shared/Models/spot/huggingface` for compatibility with tools that still probe the legacy per-user cache path
+6. run `.venv/bin/python -m src.cli preflight --ssot ssot/ssot.json --runs-dir runs --port 8765` and require `warnings=0` before operator use
+
+Required `{spot}` model set on a fresh machine:
+- MLX primary: `mlx-community/Apertus-8B-Instruct-2509-4bit`
+- Ollama: `qwen2.5:7b`
+- Ollama: `granite4:350m`
+- Ollama: `gemma3:1b`
+- Ollama: `llama3.2:1b`
+- Ollama: `llama3.2:3b`
+- Ollama: `gemma2:2b`
+- Ollama evaluation: `gemma2:9b`
+- Ollama evaluation: `llama3.1:8b`
+
+Current maintainer note:
+- on this machine the legacy `~/.cache/huggingface` path is now a symlink to `/Users/Shared/Models/spot/huggingface`
+- preflight is the canonical verification step for confirming that the shared model roots are complete and that the required model set is available
 
 ## Start Procedure
 
@@ -138,6 +184,8 @@ Current native dashboard capabilities:
 - inspect accepted uploads and their queue segmentation summary
 - monitor run state, row progress, segment progress, elapsed time, and average seconds per row
 - pause, resume, or stop the active run from the main dashboard
+- inspect unfinished runs, including resumable, retryable, and broken recovery candidates
+- delete an inactive unfinished run and purge its managed source workbook when no other run still depends on that upload
 - open review-required rows and retrieve artifacts locally
 
 Native app note:
@@ -146,7 +194,24 @@ Native app note:
 - generated native build folders `.build/` and `dist/` under `app/macos/` are disposable and intentionally untracked
 - native runtime shutdown is now expected to suspend active segment-worker runs for later recovery instead of cancelling them
 - relaunching `spot.app` is expected to restart the loopback backend and recover an interrupted resumable run when segment state remains queued
+- native settings now surface the effective shared model-root paths for `SPOT_MODELS_HOME`, `SPOT_HF_HOME`, `SPOT_HF_HUB_CACHE`, `SPOT_OLLAMA_MODELS`, and `SPOT_MLX_MODELS_DIR`
 - this runbook describes the supported native dashboard recovery logic and watched-folder automation contract
+
+## Interrupted Run Recovery
+
+The native workspace now exposes unfinished runs as recovery candidates instead of treating them as hidden backend state.
+
+Recovery-candidate semantics:
+- `resume`: an attached paused worker still exists and can continue in place
+- `recover`: the run is upload-backed, queued segment state remains, and the native app can restart the segment worker against the same canonical run state
+- `retry`: the run is not upload-backed but the source workbook and start payload still exist for a clean restart
+- `broken`: the native app found missing source state, missing start payload, or stale run metadata and cannot continue safely without operator repair
+
+Operator expectations:
+- use the unfinished-run list after relaunch to verify whether a stopped run is resumable, retryable, or broken
+- prefer `recover` for interrupted upload-backed runs because it preserves committed canonical row and segment state
+- use deletion only for inactive runs you intentionally want to discard
+- if deletion is requested with managed intake data, `{spot}` only purges the stored upload when no other run still references that upload
 
 ## Preflight Command
 

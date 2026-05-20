@@ -90,6 +90,7 @@ def _init_db(conn: sqlite3.Connection) -> None:
 
         CREATE TABLE IF NOT EXISTS upload_rows (
             upload_id TEXT NOT NULL,
+            schema_version TEXT NOT NULL DEFAULT '',
             sequence_index INTEGER NOT NULL,
             row_index INTEGER NOT NULL,
             item_number TEXT NOT NULL,
@@ -98,6 +99,11 @@ def _init_db(conn: sqlite3.Connection) -> None:
             row_hash TEXT NOT NULL,
             post_text_sha256 TEXT NOT NULL,
             post_text_length INTEGER NOT NULL,
+            normalization_status TEXT NOT NULL DEFAULT 'accepted',
+            source_type TEXT NOT NULL DEFAULT 'xlsx',
+            source_name TEXT NOT NULL DEFAULT '',
+            source_sheet TEXT NOT NULL DEFAULT '',
+            source_row_index INTEGER,
             created_at INTEGER NOT NULL,
             PRIMARY KEY (upload_id, sequence_index),
             FOREIGN KEY (upload_id) REFERENCES uploads(upload_id)
@@ -122,6 +128,8 @@ def _init_db(conn: sqlite3.Connection) -> None:
             upload_id TEXT,
             attempt_id TEXT,
             sequence_index INTEGER,
+            source_row_index INTEGER,
+            source_row_hash TEXT,
             item_number TEXT NOT NULL DEFAULT '',
             post_text TEXT NOT NULL DEFAULT '',
             row_hash TEXT,
@@ -148,7 +156,8 @@ def _init_db(conn: sqlite3.Connection) -> None:
             PRIMARY KEY (run_id, row_index),
             FOREIGN KEY (run_id) REFERENCES runs(run_id),
             FOREIGN KEY (upload_id) REFERENCES uploads(upload_id),
-            FOREIGN KEY (attempt_id) REFERENCES run_attempts(attempt_id)
+            FOREIGN KEY (attempt_id) REFERENCES run_attempts(attempt_id),
+            FOREIGN KEY (upload_id, sequence_index) REFERENCES upload_rows(upload_id, sequence_index)
         );
 
         CREATE TABLE IF NOT EXISTS feedback_items (
@@ -185,6 +194,14 @@ def _init_db(conn: sqlite3.Connection) -> None:
     _ensure_column(conn, "segments", "started_at", "INTEGER")
     _ensure_column(conn, "segments", "completed_at", "INTEGER")
     _ensure_column(conn, "segments", "last_error", "TEXT")
+    _ensure_column(conn, "upload_rows", "schema_version", "TEXT NOT NULL DEFAULT ''")
+    _ensure_column(conn, "upload_rows", "normalization_status", "TEXT NOT NULL DEFAULT 'accepted'")
+    _ensure_column(conn, "upload_rows", "source_type", "TEXT NOT NULL DEFAULT 'xlsx'")
+    _ensure_column(conn, "upload_rows", "source_name", "TEXT NOT NULL DEFAULT ''")
+    _ensure_column(conn, "upload_rows", "source_sheet", "TEXT NOT NULL DEFAULT ''")
+    _ensure_column(conn, "upload_rows", "source_row_index", "INTEGER")
+    if _run_rows_lineage_rebuild_required(conn):
+        _rebuild_run_rows_table(conn)
     conn.commit()
 
 
@@ -193,6 +210,154 @@ def _ensure_column(conn: sqlite3.Connection, table: str, column: str, definition
     if column in columns:
         return
     conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
+def _resolve_managed_upload(
+    conn: sqlite3.Connection,
+    *,
+    upload_id: str | None,
+    run_id: str,
+    operation: str,
+    require_exists: bool,
+) -> sqlite3.Row | None:
+    if not upload_id:
+        return None
+    upload_row = conn.execute("SELECT upload_id, row_count FROM uploads WHERE upload_id = ?", (upload_id,)).fetchone()
+    if not upload_row and require_exists:
+        raise RuntimeError(f"Managed upload relation is missing for run {run_id} during {operation}: {upload_id}")
+    return upload_row
+
+
+def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    return {str(row["name"]) for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+
+
+def _run_rows_lineage_rebuild_required(conn: sqlite3.Connection) -> bool:
+    columns = _table_columns(conn, "run_rows")
+    if "source_row_index" not in columns or "source_row_hash" not in columns:
+        return True
+    foreign_keys = conn.execute("PRAGMA foreign_key_list(run_rows)").fetchall()
+    has_composite_upload_fk = False
+    grouped: dict[int, set[tuple[str, str, str]]] = {}
+    for row in foreign_keys:
+        grouped.setdefault(int(row["id"]), set()).add((str(row["table"]), str(row["from"]), str(row["to"])))
+    for refs in grouped.values():
+        if (
+            ("upload_rows", "upload_id", "upload_id") in refs
+            and ("upload_rows", "sequence_index", "sequence_index") in refs
+        ):
+            has_composite_upload_fk = True
+            break
+    schema_row = conn.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'run_rows'").fetchone()
+    schema_sql = str(schema_row["sql"] or "") if schema_row else ""
+    return (
+        not has_composite_upload_fk
+        or "FOREIGN KEY (upload_id, sequence_index) REFERENCES upload_rows(upload_id, sequence_index)" not in schema_sql
+    )
+
+
+def _rebuild_run_rows_table(conn: sqlite3.Connection) -> None:
+    old_columns = _table_columns(conn, "run_rows")
+    existing_source_row_index = "r.source_row_index" if "source_row_index" in old_columns else "NULL"
+    existing_source_row_hash = "r.source_row_hash" if "source_row_hash" in old_columns else "NULL"
+    conn.executescript(
+        """
+        DROP TABLE IF EXISTS run_rows__new;
+        CREATE TABLE run_rows__new (
+            run_id TEXT NOT NULL,
+            row_index INTEGER NOT NULL,
+            upload_id TEXT,
+            attempt_id TEXT,
+            sequence_index INTEGER,
+            source_row_index INTEGER,
+            source_row_hash TEXT,
+            item_number TEXT NOT NULL DEFAULT '',
+            post_text TEXT NOT NULL DEFAULT '',
+            row_hash TEXT,
+            assigned_category TEXT,
+            confidence_score REAL,
+            explanation TEXT,
+            flags_json TEXT NOT NULL DEFAULT '[]',
+            fallback_events_json TEXT NOT NULL DEFAULT '[]',
+            soft_signal_score REAL,
+            soft_signal_flags_json TEXT NOT NULL DEFAULT '[]',
+            soft_signal_evidence_json TEXT NOT NULL DEFAULT '[]',
+            review_required INTEGER NOT NULL DEFAULT 0,
+            review_state TEXT,
+            review_decision TEXT,
+            reviewer_note TEXT NOT NULL DEFAULT '',
+            judge_score REAL,
+            judge_verdict TEXT,
+            consensus_tier TEXT,
+            minority_label TEXT,
+            model_votes_json TEXT,
+            drafted_text TEXT,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            PRIMARY KEY (run_id, row_index),
+            FOREIGN KEY (run_id) REFERENCES runs(run_id),
+            FOREIGN KEY (upload_id) REFERENCES uploads(upload_id),
+            FOREIGN KEY (attempt_id) REFERENCES run_attempts(attempt_id),
+            FOREIGN KEY (upload_id, sequence_index) REFERENCES upload_rows(upload_id, sequence_index)
+        );
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO run_rows__new (
+            run_id, row_index, upload_id, attempt_id, sequence_index, source_row_index, source_row_hash,
+            item_number, post_text, row_hash, assigned_category, confidence_score, explanation,
+            flags_json, fallback_events_json, soft_signal_score, soft_signal_flags_json, soft_signal_evidence_json,
+            review_required, review_state, review_decision, reviewer_note, judge_score, judge_verdict,
+            consensus_tier, minority_label, model_votes_json, drafted_text, created_at, updated_at
+        )
+        SELECT
+            r.run_id,
+            r.row_index,
+            r.upload_id,
+            r.attempt_id,
+            COALESCE(r.sequence_index, u.sequence_index) AS sequence_index,
+            COALESCE({existing_source_row_index}, u.row_index) AS source_row_index,
+            COALESCE({existing_source_row_hash}, u.row_hash) AS source_row_hash,
+            r.item_number,
+            r.post_text,
+            r.row_hash,
+            r.assigned_category,
+            r.confidence_score,
+            r.explanation,
+            r.flags_json,
+            r.fallback_events_json,
+            r.soft_signal_score,
+            r.soft_signal_flags_json,
+            r.soft_signal_evidence_json,
+            r.review_required,
+            r.review_state,
+            r.review_decision,
+            r.reviewer_note,
+            r.judge_score,
+            r.judge_verdict,
+            r.consensus_tier,
+            r.minority_label,
+            r.model_votes_json,
+            r.drafted_text,
+            r.created_at,
+            r.updated_at
+        FROM run_rows AS r
+        LEFT JOIN upload_rows AS u
+          ON u.upload_id = r.upload_id
+         AND (
+            (r.sequence_index IS NOT NULL AND u.sequence_index = r.sequence_index)
+            OR (r.sequence_index IS NULL AND u.row_index = r.row_index)
+         )
+        """.format(
+            existing_source_row_index=existing_source_row_index,
+            existing_source_row_hash=existing_source_row_hash,
+        )
+    )
+    conn.execute("DROP TABLE run_rows")
+    conn.execute("ALTER TABLE run_rows__new RENAME TO run_rows")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_run_rows_run_id ON run_rows(run_id, row_index)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_run_rows_review_required ON run_rows(run_id, review_required, review_state)")
 
 
 def _now_ts() -> int:
@@ -439,13 +604,15 @@ def replace_upload_rows(*, runs_dir: Path, upload_id: str, rows: list[dict]) -> 
             conn.execute(
                 """
                 INSERT INTO upload_rows (
-                    upload_id, sequence_index, row_index, item_number, post_text, source_category,
-                    row_hash, post_text_sha256, post_text_length, created_at
+                    upload_id, schema_version, sequence_index, row_index, item_number, post_text, source_category,
+                    row_hash, post_text_sha256, post_text_length, normalization_status,
+                    source_type, source_name, source_sheet, source_row_index, created_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     upload_id,
+                    str(row.get("schema_version") or ""),
                     int(row["sequence_index"]),
                     int(row["row_index"]),
                     str(row.get("item_number") or ""),
@@ -454,6 +621,11 @@ def replace_upload_rows(*, runs_dir: Path, upload_id: str, rows: list[dict]) -> 
                     str(row["row_hash"]),
                     str(row["post_text_sha256"]),
                     int(row["post_text_length"]),
+                    str(row.get("normalization_status") or "accepted"),
+                    str(row.get("source_type") or "xlsx"),
+                    str(row.get("source_name") or ""),
+                    str(row.get("source_sheet") or ""),
+                    int(row["source_row_index"]) if row.get("source_row_index") not in {None, ""} else None,
                     now,
                 ),
             )
@@ -464,8 +636,9 @@ def fetch_upload_rows_for_segment(*, runs_dir: Path, upload_id: str, row_start: 
     with _connect(runs_dir) as conn:
         rows = conn.execute(
             """
-            SELECT upload_id, sequence_index, row_index, item_number, post_text, source_category,
-                   row_hash, post_text_sha256, post_text_length
+            SELECT upload_id, schema_version, sequence_index, row_index, item_number, post_text, source_category,
+                   row_hash, post_text_sha256, post_text_length, normalization_status,
+                   source_type, source_name, source_sheet, source_row_index
             FROM upload_rows
             WHERE upload_id = ? AND sequence_index BETWEEN ? AND ?
             ORDER BY sequence_index ASC
@@ -492,8 +665,9 @@ def fetch_upload_rows_by_row_indices(*, runs_dir: Path, upload_id: str, row_indi
     with _connect(runs_dir) as conn:
         rows = conn.execute(
             f"""
-            SELECT upload_id, sequence_index, row_index, item_number, post_text, source_category,
-                   row_hash, post_text_sha256, post_text_length
+            SELECT upload_id, schema_version, sequence_index, row_index, item_number, post_text, source_category,
+                   row_hash, post_text_sha256, post_text_length, normalization_status,
+                   source_type, source_name, source_sheet, source_row_index
             FROM upload_rows
             WHERE upload_id = ? AND row_index IN ({placeholders})
             ORDER BY row_index ASC
@@ -584,6 +758,8 @@ def _decode_run_row(row: sqlite3.Row) -> dict[str, Any]:
         "upload_id": str(row["upload_id"]) if row["upload_id"] else None,
         "attempt_id": str(row["attempt_id"]) if row["attempt_id"] else None,
         "sequence_index": int(row["sequence_index"]) if row["sequence_index"] is not None else None,
+        "source_row_index": int(row["source_row_index"]) if row["source_row_index"] is not None else None,
+        "source_row_hash": str(row["source_row_hash"]) if row["source_row_hash"] else None,
         "item_number": str(row["item_number"] or ""),
         "post_text": str(row["post_text"] or ""),
         "row_hash": str(row["row_hash"]) if row["row_hash"] else None,
@@ -625,7 +801,8 @@ def upsert_run_rows(
     with _connect(runs_dir) as conn:
         existing_rows = conn.execute(
             f"""
-            SELECT run_id, row_index, review_state, review_decision, reviewer_note
+            SELECT run_id, row_index, upload_id, sequence_index, source_row_index, source_row_hash,
+                   review_state, review_decision, reviewer_note
             FROM run_rows
             WHERE run_id = ? AND row_index IN ({",".join("?" for _ in normalized_row_indices)})
             """,
@@ -638,9 +815,16 @@ def upsert_run_rows(
                 continue
             source_row = upload_row_map.get(row_index, {})
             existing = existing_map.get(row_index, {})
+            resolved_upload_id = upload_id or (str(existing.get("upload_id")) if existing.get("upload_id") else None)
+            if resolved_upload_id and not source_row:
+                raise RuntimeError(
+                    f"Canonical upload lineage is missing for run {run_id} row {row_index} under upload {resolved_upload_id}."
+                )
             item_number = str(row.get("item_number") or source_row.get("item_number") or "")
             post_text = str(row.get("post_text") or source_row.get("post_text") or "")
-            sequence_index = row.get("sequence_index", source_row.get("sequence_index"))
+            sequence_index = row.get("sequence_index", source_row.get("sequence_index", existing.get("sequence_index")))
+            source_row_index = row.get("source_row_index", source_row.get("row_index", existing.get("source_row_index")))
+            source_row_hash = str(row.get("source_row_hash") or source_row.get("row_hash") or existing.get("source_row_hash") or "") or None
             review_required = row.get("review_required")
             if review_required is None:
                 review_required = "REVIEW_REQUIRED" in {str(flag) for flag in row.get("flags", [])}
@@ -656,18 +840,21 @@ def upsert_run_rows(
             conn.execute(
                 """
                 INSERT INTO run_rows (
-                    run_id, row_index, upload_id, attempt_id, sequence_index, item_number, post_text, row_hash,
+                    run_id, row_index, upload_id, attempt_id, sequence_index, source_row_index, source_row_hash,
+                    item_number, post_text, row_hash,
                     assigned_category, confidence_score, explanation, flags_json, fallback_events_json,
                     soft_signal_score, soft_signal_flags_json, soft_signal_evidence_json,
                     review_required, review_state, review_decision, reviewer_note,
                     judge_score, judge_verdict, consensus_tier, minority_label, model_votes_json, drafted_text,
                     created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(run_id, row_index) DO UPDATE SET
                     upload_id=COALESCE(excluded.upload_id, run_rows.upload_id),
                     attempt_id=COALESCE(excluded.attempt_id, run_rows.attempt_id),
                     sequence_index=COALESCE(excluded.sequence_index, run_rows.sequence_index),
+                    source_row_index=COALESCE(excluded.source_row_index, run_rows.source_row_index),
+                    source_row_hash=COALESCE(excluded.source_row_hash, run_rows.source_row_hash),
                     item_number=COALESCE(NULLIF(excluded.item_number, ''), run_rows.item_number),
                     post_text=COALESCE(NULLIF(excluded.post_text, ''), run_rows.post_text),
                     row_hash=COALESCE(excluded.row_hash, run_rows.row_hash),
@@ -694,9 +881,11 @@ def upsert_run_rows(
                 (
                     run_id,
                     row_index,
-                    upload_id,
+                    resolved_upload_id,
                     attempt_id,
                     int(sequence_index) if sequence_index not in {None, ""} else None,
+                    int(source_row_index) if source_row_index not in {None, ""} else None,
+                    source_row_hash,
                     item_number,
                     post_text,
                     str(row.get("row_hash") or source_row.get("row_hash") or "") or None,
@@ -835,12 +1024,13 @@ def register_run(*, runs_dir: Path, run_id: str, upload_id: str | None, language
     now = _now_ts()
     with _connect(runs_dir) as conn:
         resolved_upload_id = upload_id
-        if resolved_upload_id:
-            upload_row = conn.execute("SELECT row_count FROM uploads WHERE upload_id = ?", (resolved_upload_id,)).fetchone()
-            if not upload_row:
-                resolved_upload_id = None
-        else:
-            upload_row = None
+        upload_row = _resolve_managed_upload(
+            conn,
+            upload_id=resolved_upload_id,
+            run_id=run_id,
+            operation="run registration",
+            require_exists=True,
+        )
         total_rows = None
         if upload_row and upload_row["row_count"] is not None:
             total_rows = int(upload_row["row_count"])
@@ -895,6 +1085,7 @@ def update_run_snapshot(
     state: str,
     progress: dict | None,
     created_at: int | None = None,
+    require_managed_upload: bool = True,
 ) -> None:
     now = _now_ts()
     processed_rows = int(progress.get("processed_rows") or 0) if isinstance(progress, dict) else 0
@@ -902,10 +1093,15 @@ def update_run_snapshot(
     progress_percentage = float(progress.get("progress_percentage") or 0) if isinstance(progress, dict) else 0.0
     with _connect(runs_dir) as conn:
         resolved_upload_id = upload_id
-        if resolved_upload_id:
-            upload_row = conn.execute("SELECT upload_id FROM uploads WHERE upload_id = ?", (resolved_upload_id,)).fetchone()
-            if not upload_row:
-                resolved_upload_id = None
+        upload_row = _resolve_managed_upload(
+            conn,
+            upload_id=resolved_upload_id,
+            run_id=run_id,
+            operation="run snapshot update",
+            require_exists=require_managed_upload,
+        )
+        if resolved_upload_id and not upload_row:
+            resolved_upload_id = None
         existing = conn.execute("SELECT created_at, total_rows FROM runs WHERE run_id = ?", (run_id,)).fetchone()
         resolved_created = int(created_at or (existing["created_at"] if existing else now))
         resolved_total = int(total_rows) if total_rows not in {None, ""} else (int(existing["total_rows"]) if existing and existing["total_rows"] is not None else None)
@@ -942,31 +1138,37 @@ def update_run_snapshot(
 def claim_next_segment(*, runs_dir: Path, run_id: str, worker_id: str) -> dict | None:
     now = _now_ts()
     with _connect(runs_dir) as conn:
-        segment = conn.execute(
-            """
-            SELECT * FROM segments
-            WHERE run_id = ? AND state IN ('QUEUED', 'READY')
-            ORDER BY segment_index ASC
-            LIMIT 1
-            """,
-            (run_id,),
-        ).fetchone()
-        if not segment:
-            return None
-        conn.execute(
-            """
-            UPDATE segments
-            SET state = 'PROCESSING',
-                worker_id = ?,
-                claimed_at = COALESCE(claimed_at, ?),
-                started_at = COALESCE(started_at, ?),
-                updated_at = ?
-            WHERE segment_id = ?
-            """,
-            (worker_id, now, now, now, segment["segment_id"]),
-        )
-        conn.commit()
-        updated = conn.execute("SELECT * FROM segments WHERE segment_id = ?", (segment["segment_id"],)).fetchone()
+        conn.execute("BEGIN IMMEDIATE")
+        while True:
+            segment = conn.execute(
+                """
+                SELECT * FROM segments
+                WHERE run_id = ? AND state IN ('QUEUED', 'READY')
+                ORDER BY segment_index ASC
+                LIMIT 1
+                """,
+                (run_id,),
+            ).fetchone()
+            if not segment:
+                conn.commit()
+                return None
+            claim_result = conn.execute(
+                """
+                UPDATE segments
+                SET state = 'PROCESSING',
+                    worker_id = ?,
+                    claimed_at = COALESCE(claimed_at, ?),
+                    started_at = COALESCE(started_at, ?),
+                    updated_at = ?
+                WHERE segment_id = ?
+                  AND state IN ('QUEUED', 'READY')
+                """,
+                (worker_id, now, now, now, segment["segment_id"]),
+            )
+            if claim_result.rowcount == 1:
+                updated = conn.execute("SELECT * FROM segments WHERE segment_id = ?", (segment["segment_id"],)).fetchone()
+                conn.commit()
+                break
     return dict(updated) if updated else None
 
 

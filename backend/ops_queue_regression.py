@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -31,6 +33,7 @@ from backend.services.ops_db_service import (
 )
 from backend.services.run_state_service import create_run_record
 from backend.services.run_state_service import sync_review_rows_from_output
+from backend.services.run_state_service import write_run_record
 from fastapi.testclient import TestClient
 from openpyxl import Workbook, load_workbook
 from src.classifier import stable_row_hash
@@ -157,15 +160,21 @@ class OpsQueueRegressionTests(unittest.TestCase):
         run_id = "historical-run-no-upload"
         run_dir = self.runs_dir / run_id
         run_dir.mkdir(parents=True, exist_ok=True)
-        create_run_record(
+        write_run_record(
             runs_dir=self.runs_dir,
             run_id=run_id,
-            input_path="samples/sample_germany.xlsx",
-            output_path=str(run_dir / "output.xlsx"),
-            upload_id="missing-upload-id",
-            language="de",
-            review_mode="partial",
-            start_payload={"upload_id": "missing-upload-id", "language": "de", "review_mode": "partial"},
+            record={
+                "run_id": run_id,
+                "input_path": "samples/sample_germany.xlsx",
+                "output_path": str(run_dir / "output.xlsx"),
+                "upload_id": "missing-upload-id",
+                "language": "de",
+                "review_mode": "partial",
+                "start_payload": {"upload_id": "missing-upload-id", "language": "de", "review_mode": "partial"},
+                "state": "COMPLETED",
+                "created_at": 1770000000,
+                "updated_at": 1770000000,
+            },
         )
         (run_dir / "progress.json").write_text(
             json.dumps({"run_id": run_id, "state": "COMPLETED", "processed_rows": 1, "total_rows": 1, "progress_percentage": 100.0}),
@@ -176,6 +185,96 @@ class OpsQueueRegressionTests(unittest.TestCase):
         data = response.json()
         matched = next(item for item in data if item["run_id"] == run_id)
         self.assertEqual(matched["run_id"], run_id)
+
+    def test_claim_next_segment_does_not_steal_segment_after_competing_claim(self) -> None:
+        accepted_upload_id = "upload-claim-race"
+        upload_dir = self.runs_dir / "uploads" / accepted_upload_id
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        record = {
+            "upload_id": accepted_upload_id,
+            "filename": "claim-race.xlsx",
+            "stored_path": str(upload_dir / "claim-race.xlsx"),
+            "bytes": 1024,
+            "status": "accepted",
+            "created_at": 1770000100,
+            "validation": {"accepted": True, "row_count": 1200},
+        }
+        (upload_dir / "upload.json").write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+        record_upload(runs_dir=self.runs_dir, record=record)
+        run_id = "claim-race-run"
+        register_run(
+            runs_dir=self.runs_dir,
+            run_id=run_id,
+            upload_id=accepted_upload_id,
+            language="de",
+            review_mode="partial",
+            state="PROCESSING",
+        )
+
+        from backend.services import ops_db_service
+
+        with sqlite3.connect(ops_db_service.db_path(self.runs_dir)) as conn:
+            conn.row_factory = sqlite3.Row
+            first_segment = conn.execute(
+                "SELECT segment_id FROM segments WHERE run_id = ? ORDER BY segment_index ASC LIMIT 1",
+                (run_id,),
+            ).fetchone()
+        self.assertIsNotNone(first_segment)
+        competing_segment_id = str(first_segment["segment_id"])
+
+        class _RacingConnection:
+            def __init__(self, conn: sqlite3.Connection) -> None:
+                self._conn = conn
+                self._raced = False
+
+            def __enter__(self) -> "_RacingConnection":
+                self._conn.__enter__()
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool | None:
+                return self._conn.__exit__(exc_type, exc, tb)
+
+            def execute(self, sql: str, params: tuple | list = ()):
+                if (
+                    not self._raced
+                    and "UPDATE segments" in sql
+                    and "SET state = 'PROCESSING'" in sql
+                    and params
+                    and str(params[-1]) == competing_segment_id
+                ):
+                    self._conn.execute(
+                        "UPDATE segments SET state = 'PROCESSING', worker_id = ?, updated_at = ? WHERE segment_id = ?",
+                        ("other-worker", 1770000999, competing_segment_id),
+                    )
+                    self._conn.commit()
+                    self._raced = True
+                return self._conn.execute(sql, params)
+
+            def __getattr__(self, name: str):
+                return getattr(self._conn, name)
+
+        original_connect = ops_db_service._connect
+
+        def _racing_connect(runs_dir: Path):
+            return _RacingConnection(original_connect(runs_dir))
+
+        with patch.object(ops_db_service, "_connect", side_effect=_racing_connect):
+            claimed = claim_next_segment(runs_dir=self.runs_dir, run_id=run_id, worker_id="race-worker")
+
+        self.assertIsNotNone(claimed)
+        self.assertNotEqual(str(claimed["segment_id"]), competing_segment_id)
+        self.assertEqual(int(claimed["segment_index"]), 2)
+
+        with sqlite3.connect(ops_db_service.db_path(self.runs_dir)) as conn:
+            conn.row_factory = sqlite3.Row
+            segments = conn.execute(
+                "SELECT segment_index, state, worker_id FROM segments WHERE run_id = ? ORDER BY segment_index ASC LIMIT 2",
+                (run_id,),
+            ).fetchall()
+        self.assertEqual(str(segments[0]["state"]), "PROCESSING")
+        self.assertEqual(str(segments[0]["worker_id"]), "other-worker")
+        self.assertEqual(str(segments[1]["state"]), "PROCESSING")
+        self.assertEqual(str(segments[1]["worker_id"]), "race-worker")
 
     def test_reconcile_run_segments_returns_orphaned_processing_work_to_queue(self) -> None:
         accepted_upload_id = "upload-reconcile"
@@ -662,6 +761,34 @@ class OpsQueueRegressionTests(unittest.TestCase):
         }
         (upload_dir / "upload.json").write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
         record_upload(runs_dir=self.runs_dir, record=record)
+        from backend.services.ops_db_service import replace_upload_rows
+
+        replace_upload_rows(
+            runs_dir=self.runs_dir,
+            upload_id=accepted_upload_id,
+            rows=[
+                {
+                    "sequence_index": 1,
+                    "row_index": 2,
+                    "item_number": "1",
+                    "post_text": "First stale progress row",
+                    "source_category": "",
+                    "row_hash": stable_row_hash("1", "First stale progress row"),
+                    "post_text_sha256": "sha-stale-1",
+                    "post_text_length": 24,
+                },
+                {
+                    "sequence_index": 2,
+                    "row_index": 3,
+                    "item_number": "2",
+                    "post_text": "Second stale progress row",
+                    "source_category": "",
+                    "row_hash": stable_row_hash("2", "Second stale progress row"),
+                    "post_text_sha256": "sha-stale-2",
+                    "post_text_length": 25,
+                },
+            ],
+        )
 
         run_id = "stale-progress-run"
         run_dir = self.runs_dir / run_id

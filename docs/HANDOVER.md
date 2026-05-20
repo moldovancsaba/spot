@@ -5,6 +5,165 @@ Historical note:
 - older entries intentionally preserve the browser-phase and `app/spot-app` wording that was true when those entries were written
 - current operator and startup guidance lives in [`README.md`](/Users/moldovancsaba/Projects/spot/README.md), [`READMEDEV.md`](/Users/moldovancsaba/Projects/spot/READMEDEV.md), and [`docs/LOCAL_APPLIANCE_RUNBOOK.md`](/Users/moldovancsaba/Projects/spot/docs/LOCAL_APPLIANCE_RUNBOOK.md)
 
+## 2026-05-20 Europe/Budapest - Codex ({spot} targeted code-comment audit cleanup)
+
+- Objective: verify the active runtime inline comments against the current native-only and canonical-state contracts, then correct stale wording instead of assuming the documentation pass was sufficient.
+- Changes:
+  - corrected [`backend/services/run_state_service.py`](/Users/moldovancsaba/Projects/spot/backend/services/run_state_service.py) so the artifact label for `review_state.json` no longer describes it as browser-specific state
+  - corrected the generated native config comments in [`app/macos/Sources/SpotCoreService.swift`](/Users/moldovancsaba/Projects/spot/app/macos/Sources/SpotCoreService.swift) so `SPOT_LOCAL_ACCESS_CODE` guidance is now conditional on auth actually being enabled for the runtime
+  - refreshed [`docs/CODE_COMMENT_AUDIT.md`](/Users/moldovancsaba/Projects/spot/docs/CODE_COMMENT_AUDIT.md) to record the follow-up audit result
+- Validation:
+  - rescanned active code comments for the stale `browser` / `review_state.json` / native-auth wording that triggered the follow-up
+  - `python3 -m py_compile backend/services/run_state_service.py src/trinity_spot_bundle.py` => passed
+
+## 2026-05-20 Europe/Budapest - Codex ({spot} active documentation hardening pass)
+
+- Objective: remove active documentation drift across the current `0.5.2` native-only baseline, including stale queue/native wording, missing runtime surfaces, and outdated planning references.
+- Changes:
+  - updated [`README.md`](/Users/moldovancsaba/Projects/spot/README.md) so the documentation map, active implementation summary, and backend endpoint inventory now reflect the current queue, recovery, intake, and native-runtime surface
+  - expanded [`docs/ARCHITECTURE.md`](/Users/moldovancsaba/Projects/spot/docs/ARCHITECTURE.md) with the canonical persistence model, current indexed entities, and the current read/write split in runtime state resolution
+  - rewrote [`docs/LOCAL_QUEUE_OPERATIONS_PLAN.md`](/Users/moldovancsaba/Projects/spot/docs/LOCAL_QUEUE_OPERATIONS_PLAN.md) around the current queue-backed appliance baseline instead of the earlier browser-dashboard transition framing
+  - refreshed [`docs/FOUNDATION_HARDENING_PLAN.md`](/Users/moldovancsaba/Projects/spot/docs/FOUNDATION_HARDENING_PLAN.md) and [`docs/PROJECT_MANAGEMENT.md`](/Users/moldovancsaba/Projects/spot/docs/PROJECT_MANAGEMENT.md) so they point at the current remaining execution lane rather than pre-hardening next steps
+  - marked [`docs/CODE_COMMENT_AUDIT.md`](/Users/moldovancsaba/Projects/spot/docs/CODE_COMMENT_AUDIT.md) and [`docs/NATIVE_APP_SCAFFOLD_SPEC.md`](/Users/moldovancsaba/Projects/spot/docs/NATIVE_APP_SCAFFOLD_SPEC.md) more clearly as point-in-time historical documents while aligning their top-level framing with the current `0.5.2` baseline
+  - updated [`docs/NATIVE_APP_BUILD_HANDOFF.md`](/Users/moldovancsaba/Projects/spot/docs/NATIVE_APP_BUILD_HANDOFF.md) to reflect the hardened read-model behavior and explicit `review_state.json` persistence contract
+- Validation:
+  - rescanned active docs for stale `0.5.1`, browser-dashboard, and missing endpoint drift and confirmed the remaining `0.5.1` markers now exist only in explicitly historical notes
+  - rescanned active docs for current queue/recovery/runtime surfaces including `run_rows`, `run_attempts`, `upload_rows`, `heal`, `delete`, recovery candidates, and native runtime suspend
+
+## 2026-05-20 Europe/Budapest - Codex ({spot} issue #19 side-effect-free read-model delivery)
+
+- Objective: move runtime read paths onto an observational resolver so GETs stop mutating canonical run state.
+- Changes:
+  - split [`backend/services/run_state_service.py`](/Users/moldovancsaba/Projects/spot/backend/services/run_state_service.py) into a non-mutating `resolve_run_record(...)` path and a mutating `refresh_run_record(...)` path that is now reserved for explicit write-oriented flows
+  - switched read builders and recovery-candidate listing to consume the non-mutating resolver, including run detail, artifact center, review queue, row inspector, run listing, and recovery-candidate projection
+  - switched GET read endpoints in [`backend/main.py`](/Users/moldovancsaba/Projects/spot/backend/main.py) onto the non-mutating resolver, including `/runs/{run_id}`, `/runs/{run_id}/state`, and `/classify/status/{run_id}`
+  - updated [`src/trinity_spot_bundle.py`](/Users/moldovancsaba/Projects/spot/src/trinity_spot_bundle.py) to consume resolved run state without rewriting the run record as a side effect
+  - extended [`backend/backend_contract_regression.py`](/Users/moldovancsaba/Projects/spot/backend/backend_contract_regression.py) to prove stale runs can be projected for reads without rewriting `run_record.json`, creating `review_state.json`, or bumping the indexed `runs` snapshot
+- Validation:
+  - `python3 -m py_compile backend/services/run_state_service.py backend/main.py backend/backend_contract_regression.py backend/ops_queue_regression.py src/trinity_spot_bundle.py` => passed
+  - `.venv/bin/python backend/backend_contract_regression.py` => passed
+  - `.venv/bin/python backend/ops_queue_regression.py` => passed
+
+## 2026-05-19 Europe/Budapest - Codex ({spot} issues #62 and #63 relation hardening delivery)
+
+- Objective: finish the remaining relation-hardening slices by making segment claims atomic and by refusing to silently downgrade broken managed upload relations.
+- Changes:
+  - hardened [`backend/services/ops_db_service.py`](/Users/moldovancsaba/Projects/spot/backend/services/ops_db_service.py) so `claim_next_segment(...)` now claims work under a write lock with a conditional state guard and retry loop instead of a bare select-then-update sequence
+  - added strict managed-upload resolution to `register_run(...)` and `update_run_snapshot(...)` so upload-backed runtime records fail explicitly when the referenced `uploads` row is missing instead of being downgraded to `None`
+  - kept passive historical reads compatible by letting [`backend/services/run_state_service.py`](/Users/moldovancsaba/Projects/spot/backend/services/run_state_service.py) refresh legacy run records without forcing a managed-upload rewrite on every list/detail read
+  - gated `/runs/{run_id}/retry`, `/recover`, and `/heal` in [`backend/main.py`](/Users/moldovancsaba/Projects/spot/backend/main.py) through the recovery-candidate audit so broken managed runs now return an explicit `409` with the integrity reason
+  - extended [`backend/ops_queue_regression.py`](/Users/moldovancsaba/Projects/spot/backend/ops_queue_regression.py) with a competing-claim regression and updated [`backend/backend_contract_regression.py`](/Users/moldovancsaba/Projects/spot/backend/backend_contract_regression.py) to cover strict managed-upload enforcement plus the new API refusal behavior
+- Validation:
+  - `python3 -m py_compile backend/services/ops_db_service.py backend/services/run_state_service.py backend/main.py backend/ops_queue_regression.py backend/backend_contract_regression.py` => passed
+  - `.venv/bin/python backend/ops_queue_regression.py` => passed
+  - `.venv/bin/python backend/backend_contract_regression.py` => passed
+
+## 2026-05-19 Europe/Budapest - Codex ({spot} issue #61 immutable run-row lineage delivery)
+
+- Objective: deliver the first relation-hardening slice by making upload-backed canonical run rows carry explicit source-row lineage instead of relying on best-effort reconstruction.
+- Changes:
+  - rebuilt the `run_rows` schema in [`backend/services/ops_db_service.py`](/Users/moldovancsaba/Projects/spot/backend/services/ops_db_service.py) so upload-backed run rows now carry `source_row_index` and `source_row_hash` and keep a composite foreign-key relation on `(upload_id, sequence_index)` back to `upload_rows`
+  - added automatic table-rebuild migration logic so older local DBs are promoted onto the stronger lineage-aware schema when missing the new relation shape
+  - tightened `upsert_run_rows(...)` so upload-backed writes now fail explicitly when canonical upload lineage cannot be resolved for the target row
+  - extended backend and queue regressions so upload-backed canonical rows prove persisted lineage and so missing lineage now fails as an explicit integrity error
+- Validation:
+  - `python3 -m py_compile backend/services/ops_db_service.py backend/backend_contract_regression.py backend/services/run_state_service.py src/pipeline.py` => passed
+  - `.venv/bin/python backend/backend_contract_regression.py` => passed
+  - `.venv/bin/python backend/ops_queue_regression.py` => passed
+
+## 2026-05-19 Europe/Budapest - Codex ({spot} relation hardening implementation plan and GitHub issue sync)
+
+- Objective: turn the May 2026 relation audit into a concrete implementation plan, deliverable issues, and dependency-aware GitHub board order.
+- Changes:
+  - added [`docs/RELATION_HARDENING_IMPLEMENTATION_PLAN.md`](/Users/moldovancsaba/Projects/spot/docs/RELATION_HARDENING_IMPLEMENTATION_PLAN.md) with the scoped hardening phases, deliverable issue map, recommended delivery order, and explicit gate in front of the DB-first ingest lane
+  - added the relation-hardening plan to the [`README.md`](/Users/moldovancsaba/Projects/spot/README.md) documentation map
+  - created GitHub issues `#61` through `#63` for immutable row lineage, atomic segment claiming, and fail-fast managed relation handling
+  - updated GitHub issues `#3`, `#17`, `#18`, `#22`, `#23`, `#24`, `#50`, and `#54` so their dependency sections and execution notes now reflect the audited delivery order
+  - synced the new issues to GitHub Project `{spot} - From IDEA to LIVE`
+- Validation:
+  - `gh issue create` => created `#61`, `#62`, and `#63`
+  - `gh issue edit` => updated `#3`, `#17`, `#18`, `#22`, `#23`, `#24`, `#50`, and `#54`
+  - `gh project item-add 5 --owner moldovancsaba --url ...` => added `#61`, `#62`, and `#63` to the project board
+  - `gh project item-list 5 --owner moldovancsaba --limit 250 --format json` => confirmed project sync
+
+## 2026-05-19 Europe/Budapest - Codex ({spot} native recovery surface and shared model-root health-check documentation)
+
+- Objective: document the now-implemented native recovery candidate surface and record the current health-check status for the shared model-root and unfinished-run relations.
+- Changes:
+  - expanded [`docs/LOCAL_APPLIANCE_RUNBOOK.md`](/Users/moldovancsaba/Projects/spot/docs/LOCAL_APPLIANCE_RUNBOOK.md) so the operator contract now includes unfinished-run recovery candidates, deletion semantics for inactive runs, and the native settings exposure of the shared model-root paths
+  - recorded the recovery-action semantics explicitly: `resume` for attached paused workers, `recover` for upload-backed queued segment recovery, `retry` for non-upload restarts, and `broken` for runs missing required restart state
+  - confirmed the shared model-root contract is now wired end to end across bootstrap, preflight, bundled launch, and the native SwiftUI settings surface
+- Validation:
+  - `python3 -m py_compile src/*.py src/ensemble/*.py src/evaluation/*.py backend/main.py backend/models/*.py backend/routes/*.py backend/services/*.py backend/backend_contract_regression.py backend/ops_queue_regression.py backend/segment_worker.py src/benchmark.py src/targeted_adjudication_regression.py` => passed
+  - `.venv/bin/python backend/backend_contract_regression.py` => passed
+  - `.venv/bin/python backend/ops_queue_regression.py` => passed
+  - `.venv/bin/python src/targeted_adjudication_regression.py` => passed
+  - `python3 -m src.cli bootstrap --project-root . --venv-path .venv --requirements requirements.txt --ssot ssot/ssot.json --runs-dir runs --logs-dir logs --skip-install` => passed
+  - `.venv/bin/python -m src.cli preflight --ssot ssot/ssot.json --runs-dir runs --port 8765` => passed with `errors=0`, `warnings=0`
+  - `cd app/macos && swift package dump-package >/dev/null && swift build && bash -n ./build-icon.sh && bash -n ./build-bundle.sh && bash -n ./install-bundle.sh && plutil -lint ./Info.plist` => passed
+
+## 2026-05-18 Europe/Budapest - Codex ({spot} shared model root standardization and machine-install documentation)
+
+- Objective: standardize `{spot}` model storage under `/Users/Shared/Models/spot`, migrate the current machine onto that layout, and document the install pattern for future Apple Silicon machines.
+- Changes:
+  - added explicit shared model-root defaults and native launch wiring so `{spot}` now targets `/Users/Shared/Models/spot/huggingface` and `/Users/Shared/Models/spot/ollama`
+  - migrated the active MLX/Hugging Face cache and Ollama store into the new `{spot}` shared roots
+  - pulled the missing Ollama fallback tag `llama3.2:1b` into the shared `{spot}` store
+  - replaced the legacy per-user Hugging Face cache path `~/.cache/huggingface` with a symlink to `/Users/Shared/Models/spot/huggingface`
+  - expanded [`docs/LOCAL_APPLIANCE_RUNBOOK.md`](/Users/moldovancsaba/Projects/spot/docs/LOCAL_APPLIANCE_RUNBOOK.md) and [`READMEDEV.md`](/Users/moldovancsaba/Projects/spot/READMEDEV.md) so future machine installs have a concrete shared-model provisioning checklist
+- Validation:
+  - `python3 -m py_compile src/defaults.py src/bootstrap.py src/preflight.py src/classifier.py src/cli.py backend/main.py` => passed
+  - `bash -n app/macos/build-bundle.sh` => passed
+  - `cd app/macos && swift build` => passed
+  - `.venv/bin/python -m src.cli bootstrap --project-root . --venv-path .venv --requirements requirements.txt --ssot ssot/ssot.json --runs-dir runs --logs-dir logs --skip-install` => passed
+  - `.venv/bin/python -m src.cli preflight --ssot ssot/ssot.json --runs-dir runs --port 8765` => passed with `errors=0`, `warnings=0`
+
+## 2026-05-13 Europe/Budapest - Codex ({spot} DB-first ingest and bounded self-learning planning lane)
+
+- Objective: turn the repo discussion about canonical-schema-first ingest, DB-backed runtime truth, and bounded model improvement into an executable `{spot}` implementation lane.
+- Changes:
+  - added [`docs/DB_FIRST_SELF_LEARNING_EXECUTION_PLAN.md`](/Users/moldovancsaba/Projects/spot/docs/DB_FIRST_SELF_LEARNING_EXECUTION_PLAN.md) with the target architecture, guardrails, delivery phases, and recommended local training stack
+  - created milestone `{spot} v0.6.0 DB-First Ingest & Learning Loop`
+  - created GitHub epic `#50` plus concrete delivery issues `#51` through `#60` covering canonical intake schema, importer/exporter adapters, DB-first classification, governed feedback capture, offline evaluation, Apple Silicon fine-tuning, candidate registry, and active learning
+  - added the new issues to GitHub Project `{spot} - From IDEA to LIVE` and placed them in dependency-aware status lanes behind the active canonical-state hardening work
+- Validation:
+  - `gh issue list --limit 100` => confirmed new issues `#50` through `#60`
+  - `gh project item-list 5 --owner moldovancsaba --limit 100 --format json` => confirmed new board items and statuses
+
+## 2026-05-13 Europe/Budapest - Codex ({spot} Apple-Silicon-only learning lane correction)
+
+- Objective: remove accidental secondary-framework framing from the new planning lane and make the training/runtime roadmap explicitly Apple-Silicon-only.
+- Changes:
+  - updated [`docs/DB_FIRST_SELF_LEARNING_EXECUTION_PLAN.md`](/Users/moldovancsaba/Projects/spot/docs/DB_FIRST_SELF_LEARNING_EXECUTION_PLAN.md) so the active `{spot}` learning plan uses `mlx-lm` only and excludes `Axolotl`, `LLaMA-Factory`, and `Unsloth` from the delivery lane
+  - updated GitHub issues `#50` and `#58` so the public implementation plan now states that the active training path is Apple Silicon only
+- Validation:
+  - `gh issue view 50`
+  - `gh issue view 58`
+
+## 2026-05-13 Europe/Budapest - Codex ({spot} canonical intake schema first implementation slice)
+
+- Objective: start issue `#51` by making the intake contract explicit in code and by persisting source-row provenance in the DB-backed upload layer.
+- Changes:
+  - added canonical intake schema definitions to [`src/models.py`](/Users/moldovancsaba/Projects/spot/src/models.py) with schema version `spot.input-row.v1alpha1`
+  - changed [`src/excel_io.py`](/Users/moldovancsaba/Projects/spot/src/excel_io.py) so workbook intake rows are canonicalized into a structured row shape before manifest/storage projection
+  - extended `upload_rows` in [`backend/services/ops_db_service.py`](/Users/moldovancsaba/Projects/spot/backend/services/ops_db_service.py) with schema version, normalization status, and source provenance fields
+  - changed [`backend/services/excel_service.py`](/Users/moldovancsaba/Projects/spot/backend/services/excel_service.py) to persist the canonical schema version in upload validation metadata and to write canonicalized intake rows into the DB
+  - rewrote [`docs/INGESTION.md`](/Users/moldovancsaba/Projects/spot/docs/INGESTION.md) around the canonical-row contract instead of only the workbook header order
+- Validation:
+  - `python3 -m py_compile src/models.py src/excel_io.py backend/services/excel_service.py backend/services/ops_db_service.py` => passed
+
+## 2026-05-13 Europe/Budapest - Codex ({spot} canonical intake validation summary and importer scaffold)
+
+- Objective: continue issues `#51` and `#52` by formalizing canonical intake validation summaries and introducing the first source-adapter abstraction for the existing workbook path.
+- Changes:
+  - added `summarize_canonical_input_rows(...)` in [`src/excel_io.py`](/Users/moldovancsaba/Projects/spot/src/excel_io.py) so accepted-row, quarantine, rejection, schema-version, and source-type semantics are explicit in code
+  - changed [`backend/services/excel_service.py`](/Users/moldovancsaba/Projects/spot/backend/services/excel_service.py) so upload validation metadata now carries canonical validation summary fields instead of only workbook-specific counters
+  - added [`src/intake_adapters.py`](/Users/moldovancsaba/Projects/spot/src/intake_adapters.py) with the first importer abstraction and `.xlsx` implementation, so the current workbook path now flows through a source-adapter seam
+  - extended [`backend/backend_contract_regression.py`](/Users/moldovancsaba/Projects/spot/backend/backend_contract_regression.py) to assert schema version, normalization status, provenance, and canonical validation summary fields for both fresh intake and legacy materialization
+- Validation:
+  - `python3 -m py_compile src/intake_adapters.py src/models.py src/excel_io.py backend/services/excel_service.py backend/services/ops_db_service.py backend/backend_contract_regression.py` => passed
+  - `.venv/bin/python -m unittest backend.backend_contract_regression.BackendContractRegressionTests.test_intake_writes_row_manifest_for_accepted_upload backend.backend_contract_regression.BackendContractRegressionTests.test_ensure_upload_rows_materialized_backfills_legacy_upload` => passed
+
 ## 2026-05-11 Europe/Budapest - Codex ({spot} 0.5.2 bounded export docs promotion)
 
 - Objective: promote the active workspace baseline after the bounded `{trinity}` / `{train}` Spot export seam landed, and align maintainer-facing install/update docs to that new current state.

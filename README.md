@@ -17,6 +17,9 @@ Documentation map:
 - [README Brief](/Users/moldovancsaba/Projects/spot/README_BRIEF.md)
 - [Architecture](/Users/moldovancsaba/Projects/spot/docs/ARCHITECTURE.md)
 - [Production Plan](/Users/moldovancsaba/Projects/spot/docs/PRODUCTION_PLAN.md)
+- [Foundation Hardening Plan](/Users/moldovancsaba/Projects/spot/docs/FOUNDATION_HARDENING_PLAN.md)
+- [Relation Hardening Implementation Plan](/Users/moldovancsaba/Projects/spot/docs/RELATION_HARDENING_IMPLEMENTATION_PLAN.md)
+- [DB-First Self-Learning Execution Plan](/Users/moldovancsaba/Projects/spot/docs/DB_FIRST_SELF_LEARNING_EXECUTION_PLAN.md)
 - [Client Package](/Users/moldovancsaba/Projects/spot/docs/CLIENT_PACKAGE.md)
 - [Local Appliance Runbook](/Users/moldovancsaba/Projects/spot/docs/LOCAL_APPLIANCE_RUNBOOK.md)
 - [Local Queue Operations Plan](/Users/moldovancsaba/Projects/spot/docs/LOCAL_QUEUE_OPERATIONS_PLAN.md)
@@ -60,6 +63,8 @@ Current implementation stage:
 - native macOS operator workflow is implemented
 - native macOS supervisor shell is implemented
 - queue-backed local operations dashboard is implemented
+- canonical upload-row, run-row, run-attempt, and segment relations are implemented in the local operations DB
+- read-model surfaces now resolve runtime state without mutating `run_record.json` or indexed run snapshots as a side effect
 - productionization verification is in progress
 - bounded `{trinity}` / `{train}` review-policy export is now implemented and locally validated
 - live client acceptance on the current workspace baseline is still pending
@@ -232,6 +237,7 @@ Intake and queue endpoints:
 
 Run, review, and artifact endpoints:
 
+- `GET /runs/recovery-candidates/list`
 - `GET /runs/{run_id}/state`
 - `GET /runs/{run_id}/detail`
 - `GET /runs/{run_id}/review-rows`
@@ -243,10 +249,13 @@ Run, review, and artifact endpoints:
 - `POST /runs/{run_id}/cancel`
 - `POST /runs/{run_id}/retry`
 - `POST /runs/{run_id}/recover`
+- `POST /runs/{run_id}/heal`
 - `POST /runs/{run_id}/migrate-row-state` to backfill canonical `run_rows` from checkpoint and/or output artifacts for legacy or interrupted runs
+- `DELETE /runs/{run_id}` to purge an inactive run and optionally purge its managed upload when no other run still references it
 
-Active run-control endpoints:
+Native runtime and active-run endpoints:
 
+- `POST /native/runtime/suspend`
 - `POST /classify/pause/{run_id}`
 - `POST /classify/resume/{run_id}`
 - `POST /classify/stop/{run_id}`
@@ -277,7 +286,7 @@ Auth and permission endpoints:
 - `POST /auth/login`
 - `POST /auth/logout`
 
-Local browser auth defaults:
+Local auth defaults:
 
 - auth is enabled by default with `SPOT_AUTH_ENABLED=1`
 - local shared access code defaults to `spot-local`

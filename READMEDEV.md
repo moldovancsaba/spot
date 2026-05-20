@@ -81,6 +81,13 @@ Security posture:
 - production mode via `SPOT_PRODUCTION_MODE=1`
 - locked SSOT path via `SPOT_LOCKED_SSOT_PATH`
 
+Shared model install baseline:
+- shared model root: `/Users/Shared/Models/spot`
+- shared Hugging Face cache: `/Users/Shared/Models/spot/huggingface`
+- shared Ollama store: `/Users/Shared/Models/spot/ollama`
+- use `preflight` as the final gate after populating those roots on a new machine
+- if compatibility with legacy user-cache probing is needed, point `~/.cache/huggingface` at the shared Hugging Face root via symlink
+
 ## Current Delivery Baseline
 
 The repo already includes:

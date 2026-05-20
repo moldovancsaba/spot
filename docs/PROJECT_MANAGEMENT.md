@@ -28,6 +28,7 @@ The active implementation contract for the next milestone is the native-only har
 - Core runtime: implemented
 - Native macOS supervisor baseline: implemented
 - Queue-backed local operations dashboard: implemented
+- Relation hardening slices `#19`, `#61`, `#62`, and `#63`: implemented
 - Native-only delivery baseline: in progress
 - Live client acceptance on the native-only baseline: pending
-- Current remaining milestone focus: foundation hardening, DB-centered execution migration, release cutover, and post-release handover
+- Current remaining milestone focus: transactional execution closure, attempt-aware recovery closure, DB-centered execution migration, release cutover, and post-release handover

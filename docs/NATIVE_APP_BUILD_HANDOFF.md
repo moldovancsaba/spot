@@ -199,6 +199,8 @@ The dashboard does not rely only on the backend summary endpoints. It also falls
 This fallback exists so the native dashboard can still show run and intake state when a heavy workbook makes one backend route slow or unavailable.
 
 The backend summary routes were also hardened so `/runs` no longer rescans `output.xlsx` for every run refresh. Workbook review synchronization is restricted to review-specific endpoints.
+Run-state read models were further hardened so backend GET surfaces now resolve state without rewriting `run_record.json`, `review_state.json`, or indexed run snapshots as a side effect.
+`review_state.json` is now an explicit sync/write artifact rather than a file created by ordinary GET-driven reads.
 
 The preferred bundled runtime port is:
 

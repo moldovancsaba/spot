@@ -38,6 +38,7 @@ final class SpotCoreService: ObservableObject {
     @Published var activeRunSummary: SpotRuntimeSummary = .empty
     @Published var pendingReviewCount: Int = 0
     @Published var availableRuns: [SpotRunRecord] = []
+    @Published var unfinishedRuns: [SpotRecoveryCandidate] = []
     @Published var reviewPreviewRows: [SpotReviewRowPreview] = []
     @Published var reviewQueueRows: [SpotReviewRowPreview] = []
     @Published var selectedReviewRowIndex: Int?
@@ -94,6 +95,21 @@ final class SpotCoreService: ObservableObject {
         }
         if nativeConfig.logsDir.isEmpty {
             nativeConfig.logsDir = spotLogHome.path
+        }
+        if nativeConfig.modelsHome.isEmpty {
+            nativeConfig.modelsHome = "/Users/Shared/Models/spot"
+        }
+        if nativeConfig.huggingFaceHome.isEmpty {
+            nativeConfig.huggingFaceHome = URL(fileURLWithPath: nativeConfig.modelsHome).appending(path: "huggingface").path
+        }
+        if nativeConfig.huggingFaceHubCache.isEmpty {
+            nativeConfig.huggingFaceHubCache = URL(fileURLWithPath: nativeConfig.huggingFaceHome).appending(path: "hub").path
+        }
+        if nativeConfig.ollamaModelsDir.isEmpty {
+            nativeConfig.ollamaModelsDir = URL(fileURLWithPath: nativeConfig.modelsHome).appending(path: "ollama").path
+        }
+        if nativeConfig.mlxModelsDir.isEmpty {
+            nativeConfig.mlxModelsDir = URL(fileURLWithPath: nativeConfig.modelsHome).appending(path: "mlx-local").path
         }
         if nativeConfig.lockedSSOTPath.isEmpty {
             nativeConfig.lockedSSOTPath = bundledCoreRootURL()?.appending(path: "ssot/ssot.json").path ?? ""
@@ -354,6 +370,21 @@ final class SpotCoreService: ObservableObject {
         }
         if nativeConfig.logsDir.isEmpty {
             nativeConfig.logsDir = spotLogHome.path
+        }
+        if nativeConfig.modelsHome.isEmpty {
+            nativeConfig.modelsHome = "/Users/Shared/Models/spot"
+        }
+        if nativeConfig.huggingFaceHome.isEmpty {
+            nativeConfig.huggingFaceHome = URL(fileURLWithPath: nativeConfig.modelsHome).appending(path: "huggingface").path
+        }
+        if nativeConfig.huggingFaceHubCache.isEmpty {
+            nativeConfig.huggingFaceHubCache = URL(fileURLWithPath: nativeConfig.huggingFaceHome).appending(path: "hub").path
+        }
+        if nativeConfig.ollamaModelsDir.isEmpty {
+            nativeConfig.ollamaModelsDir = URL(fileURLWithPath: nativeConfig.modelsHome).appending(path: "ollama").path
+        }
+        if nativeConfig.mlxModelsDir.isEmpty {
+            nativeConfig.mlxModelsDir = URL(fileURLWithPath: nativeConfig.modelsHome).appending(path: "mlx-local").path
         }
         if nativeConfig.lockedSSOTPath.isEmpty {
             nativeConfig.lockedSSOTPath = bundledCoreRootURL()?.appending(path: "ssot/ssot.json").path ?? ""
@@ -623,6 +654,44 @@ final class SpotCoreService: ObservableObject {
             await refreshOperationsOverview()
         } catch {
             artifactMessage = "Run operation failed: \(error.localizedDescription)"
+        }
+    }
+
+    func continueRecoveryCandidate(_ candidate: SpotRecoveryCandidate) async {
+        guard let action = candidate.continueAction, candidate.canContinue else { return }
+        selectedRunID = candidate.runID
+        await performRunOperation(action)
+    }
+
+    func deleteRecoveryCandidate(_ candidate: SpotRecoveryCandidate) async {
+        guard let baseURL else { return }
+        guard candidate.canDelete else {
+            artifactMessage = "Run \(candidate.runID) is still active and cannot be deleted."
+            return
+        }
+        do {
+            _ = try await ensureAuthenticated(baseURL: baseURL)
+            guard var components = URLComponents(url: baseURL.appending(path: "runs/\(candidate.runID)"), resolvingAgainstBaseURL: false) else {
+                return
+            }
+            components.queryItems = [URLQueryItem(name: "purge_source", value: "true")]
+            guard let url = components.url else { return }
+            var request = URLRequest(url: url)
+            request.httpMethod = "DELETE"
+            let response: SpotRunDeleteResponse = try await requestJSON(request: request)
+            artifactMessage = "Deleted \(response.runID). Removed \(response.removedPaths.count) path(s)."
+            if selectedRunID == candidate.runID {
+                selectedRunID = ""
+                latestRunDetail = nil
+                reviewPreviewRows = []
+                reviewQueueRows = []
+                activeArtifacts = []
+            }
+            await refreshHealth()
+            await refreshOperationsOverview()
+            await refreshUploads()
+        } catch {
+            artifactMessage = "Could not delete run \(candidate.runID): \(error.localizedDescription)"
         }
     }
 
@@ -1412,6 +1481,15 @@ final class SpotCoreService: ObservableObject {
         env["SPOT_NATIVE_PYTHON_BIN"] = nativeConfig.pythonBin
         env["SPOT_NATIVE_RUNS_DIR"] = nativeConfig.runsDir
         env["SPOT_NATIVE_LOGS_DIR"] = nativeConfig.logsDir
+        env["SPOT_MODELS_HOME"] = nativeConfig.modelsHome
+        env["SPOT_HF_HOME"] = nativeConfig.huggingFaceHome
+        env["SPOT_HF_HUB_CACHE"] = nativeConfig.huggingFaceHubCache
+        env["SPOT_OLLAMA_MODELS"] = nativeConfig.ollamaModelsDir
+        env["SPOT_MLX_MODELS_DIR"] = nativeConfig.mlxModelsDir
+        env["HF_HOME"] = nativeConfig.huggingFaceHome
+        env["HUGGINGFACE_HUB_CACHE"] = nativeConfig.huggingFaceHubCache
+        env["HF_HUB_CACHE"] = nativeConfig.huggingFaceHubCache
+        env["OLLAMA_MODELS"] = nativeConfig.ollamaModelsDir
         env["SPOT_LOCKED_SSOT_PATH"] = nativeConfig.lockedSSOTPath
         env["SPOT_PRODUCTION_MODE"] = "1"
         env["SPOT_RUN_PREFLIGHT"] = "1"
@@ -1518,10 +1596,13 @@ final class SpotCoreService: ObservableObject {
         }
         let candidateRuns = mergeRunRecords(primary: runs, fallback: fallbackRunsFromLocalState())
         availableRuns = candidateRuns
+        let recoveryCandidates = ((try? await requestJSON(url: rootURL.appending(path: "runs/recovery-candidates/list"), timeoutInterval: 3)) as SpotRecoveryCandidatesResponse?)?.runs ?? []
+        unfinishedRuns = recoveryCandidates
 
         if await autoResumeInterruptedRunIfNeeded(baseURL: rootURL, runs: candidateRuns) {
             let resumedRuns = ((try? await requestJSON(url: rootURL.appending(path: "runs"), timeoutInterval: 2.5)) as [SpotRunRecord]?) ?? candidateRuns
             availableRuns = mergeRunRecords(primary: resumedRuns, fallback: fallbackRunsFromLocalState())
+            unfinishedRuns = (((try? await requestJSON(url: rootURL.appending(path: "runs/recovery-candidates/list"), timeoutInterval: 3)) as SpotRecoveryCandidatesResponse?)?.runs ?? unfinishedRuns)
         }
 
         let overview = try? await requestJSON(url: rootURL.appending(path: "operations/overview"), timeoutInterval: 2.5) as SpotOperationsOverview
@@ -1548,6 +1629,7 @@ final class SpotCoreService: ObservableObject {
                 nextActions: [],
                 outputReady: false
             )
+            unfinishedRuns = recoveryCandidates
             return
         }
 
@@ -2332,6 +2414,11 @@ final class SpotCoreService: ObservableObject {
     private func nativeConfigTemplate() -> String {
         let defaultRuns = spotDataHome.appending(path: "runs").path
         let defaultLogs = spotLogHome.path
+        let defaultModelsHome = "/Users/Shared/Models/spot"
+        let defaultHFHome = URL(fileURLWithPath: defaultModelsHome).appending(path: "huggingface").path
+        let defaultHFHubCache = URL(fileURLWithPath: defaultHFHome).appending(path: "hub").path
+        let defaultOllamaModels = URL(fileURLWithPath: defaultModelsHome).appending(path: "ollama").path
+        let defaultMLXModels = URL(fileURLWithPath: defaultModelsHome).appending(path: "mlx-local").path
         let bundledSSOT = bundledCoreRootURL()?.appending(path: "ssot/ssot.json").path ?? ""
         let suggestedPython = ProcessInfo.processInfo.environment["SPOT_NATIVE_PYTHON_BIN"] ?? ""
         return """
@@ -2341,13 +2428,18 @@ final class SpotCoreService: ObservableObject {
         SPOT_NATIVE_PYTHON_BIN="\(suggestedPython)"
         SPOT_NATIVE_RUNS_DIR="\(defaultRuns)"
         SPOT_NATIVE_LOGS_DIR="\(defaultLogs)"
+        SPOT_MODELS_HOME="\(defaultModelsHome)"
+        SPOT_HF_HOME="\(defaultHFHome)"
+        SPOT_HF_HUB_CACHE="\(defaultHFHubCache)"
+        SPOT_OLLAMA_MODELS="\(defaultOllamaModels)"
+        SPOT_MLX_MODELS_DIR="\(defaultMLXModels)"
         SPOT_LOCKED_SSOT_PATH="\(bundledSSOT)"
         SPOT_NATIVE_PORT="8765"
         SPOT_NATIVE_INTAKE_WATCH_DIR="\(defaultIntakeInboxURL.path)"
         SPOT_NATIVE_INTAKE_ARCHIVE_DIR="\(defaultIntakeProcessedURL.path)"
         SPOT_NATIVE_INTAKE_FAILED_DIR="\(defaultIntakeFailedURL.path)"
         SPOT_NATIVE_AUTO_START_WATCH_FOLDER="1"
-        # Set a non-default local access code before real operator use.
+        # If auth is enabled for this runtime, set a non-default local access code before real operator use.
         SPOT_LOCAL_ACCESS_CODE=""
         """
     }
@@ -2371,6 +2463,16 @@ final class SpotCoreService: ObservableObject {
                 config.runsDir = value
             case "SPOT_NATIVE_LOGS_DIR":
                 config.logsDir = value
+            case "SPOT_MODELS_HOME":
+                config.modelsHome = value
+            case "SPOT_HF_HOME":
+                config.huggingFaceHome = value
+            case "SPOT_HF_HUB_CACHE":
+                config.huggingFaceHubCache = value
+            case "SPOT_OLLAMA_MODELS":
+                config.ollamaModelsDir = value
+            case "SPOT_MLX_MODELS_DIR":
+                config.mlxModelsDir = value
             case "SPOT_LOCAL_ACCESS_CODE":
                 config.accessCode = value
             case "SPOT_LOCKED_SSOT_PATH":
@@ -2434,12 +2536,18 @@ final class SpotCoreService: ObservableObject {
         SPOT_NATIVE_PYTHON_BIN="\(nativeConfig.pythonBin)"
         SPOT_NATIVE_RUNS_DIR="\(nativeConfig.runsDir)"
         SPOT_NATIVE_LOGS_DIR="\(nativeConfig.logsDir)"
+        SPOT_MODELS_HOME="\(nativeConfig.modelsHome)"
+        SPOT_HF_HOME="\(nativeConfig.huggingFaceHome)"
+        SPOT_HF_HUB_CACHE="\(nativeConfig.huggingFaceHubCache)"
+        SPOT_OLLAMA_MODELS="\(nativeConfig.ollamaModelsDir)"
+        SPOT_MLX_MODELS_DIR="\(nativeConfig.mlxModelsDir)"
         SPOT_LOCKED_SSOT_PATH="\(nativeConfig.lockedSSOTPath)"
         SPOT_NATIVE_PORT="\(nativeConfig.port)"
         SPOT_NATIVE_INTAKE_WATCH_DIR="\(nativeConfig.intakeWatchDir)"
         SPOT_NATIVE_INTAKE_ARCHIVE_DIR="\(nativeConfig.intakeArchiveDir)"
         SPOT_NATIVE_INTAKE_FAILED_DIR="\(nativeConfig.intakeFailedDir)"
         SPOT_NATIVE_AUTO_START_WATCH_FOLDER="\(boolValue)"
+        # If auth is enabled for this runtime, keep the local access code outside source control.
         SPOT_LOCAL_ACCESS_CODE="\(nativeConfig.accessCode)"
         """
         do {
@@ -2455,6 +2563,11 @@ final class SpotCoreService: ObservableObject {
             pythonBin: primary.pythonBin.isEmpty ? fallback.pythonBin : primary.pythonBin,
             runsDir: primary.runsDir.isEmpty ? fallback.runsDir : primary.runsDir,
             logsDir: primary.logsDir.isEmpty ? fallback.logsDir : primary.logsDir,
+            modelsHome: primary.modelsHome.isEmpty ? fallback.modelsHome : primary.modelsHome,
+            huggingFaceHome: primary.huggingFaceHome.isEmpty ? fallback.huggingFaceHome : primary.huggingFaceHome,
+            huggingFaceHubCache: primary.huggingFaceHubCache.isEmpty ? fallback.huggingFaceHubCache : primary.huggingFaceHubCache,
+            ollamaModelsDir: primary.ollamaModelsDir.isEmpty ? fallback.ollamaModelsDir : primary.ollamaModelsDir,
+            mlxModelsDir: primary.mlxModelsDir.isEmpty ? fallback.mlxModelsDir : primary.mlxModelsDir,
             accessCode: primary.accessCode.isEmpty ? fallback.accessCode : primary.accessCode,
             lockedSSOTPath: primary.lockedSSOTPath.isEmpty ? fallback.lockedSSOTPath : primary.lockedSSOTPath,
             port: primary.port == 0 ? fallback.port : primary.port,
@@ -2469,6 +2582,11 @@ final class SpotCoreService: ObservableObject {
         !config.pythonBin.isEmpty ||
         !config.runsDir.isEmpty ||
         !config.logsDir.isEmpty ||
+        !config.modelsHome.isEmpty ||
+        !config.huggingFaceHome.isEmpty ||
+        !config.huggingFaceHubCache.isEmpty ||
+        !config.ollamaModelsDir.isEmpty ||
+        !config.mlxModelsDir.isEmpty ||
         !config.accessCode.isEmpty ||
         !config.lockedSSOTPath.isEmpty ||
         !config.intakeWatchDir.isEmpty ||
@@ -2520,6 +2638,16 @@ final class SpotCoreService: ObservableObject {
                 config.runsDir = value
             case "logs_dir":
                 config.logsDir = value
+            case "models_home":
+                config.modelsHome = value
+            case "huggingface_home":
+                config.huggingFaceHome = value
+            case "huggingface_hub_cache":
+                config.huggingFaceHubCache = value
+            case "ollama_models_dir":
+                config.ollamaModelsDir = value
+            case "mlx_models_dir":
+                config.mlxModelsDir = value
             case "access_code":
                 config.accessCode = value
             case "locked_ssot_path":
@@ -2583,6 +2711,11 @@ final class SpotCoreService: ObservableObject {
             ("python_bin", config.pythonBin),
             ("runs_dir", config.runsDir),
             ("logs_dir", config.logsDir),
+            ("models_home", config.modelsHome),
+            ("huggingface_home", config.huggingFaceHome),
+            ("huggingface_hub_cache", config.huggingFaceHubCache),
+            ("ollama_models_dir", config.ollamaModelsDir),
+            ("mlx_models_dir", config.mlxModelsDir),
             ("access_code", config.accessCode),
             ("locked_ssot_path", config.lockedSSOTPath),
             ("port", String(config.port)),

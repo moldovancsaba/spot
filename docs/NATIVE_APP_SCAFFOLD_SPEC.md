@@ -3,9 +3,11 @@
 Historical note:
 - this scaffold spec was written during the first native-shell bring-up phase
 - references to browser-era review routing or startup paths below are historical implementation context, not the current delivery contract
+- the active native build, launch, auth, and runtime contract now lives in [`docs/NATIVE_APP_BUILD_HANDOFF.md`](/Users/moldovancsaba/Projects/spot/docs/NATIVE_APP_BUILD_HANDOFF.md) and [`docs/LOCAL_APPLIANCE_RUNBOOK.md`](/Users/moldovancsaba/Projects/spot/docs/LOCAL_APPLIANCE_RUNBOOK.md)
 
 Document date: `2026-05-05`
-Target baseline: `0.5.1`
+Target baseline at scaffold time: `0.5.1`
+Current workspace baseline: `0.5.2`
 
 ## Purpose
 
@@ -73,7 +75,7 @@ Stage 1 security non-goals:
 
 ## Required Files
 
-Create these files:
+Current scaffold files:
 
 - `/Users/moldovancsaba/Projects/spot/app/macos/Package.swift`
 - `/Users/moldovancsaba/Projects/spot/app/macos/Info.plist`
@@ -96,7 +98,7 @@ Only add the helper target if the app genuinely needs a protected local helper f
 These are non-negotiable implementation rules for `spot.app`:
 
 1. The bundled backend must bind to `127.0.0.1` only by default.
-2. The native shell must not disable `{spot}` auth by default.
+2. The native shell must not assume `{spot}` auth is permanently disabled; native-local mode and auth-enabled mode must both remain deliberate and explicit launch postures.
 3. The native shell must not ship a hard-coded production access code in source control as the final production answer.
 4. The app bundle must not contain operator data, prior run artifacts, logs, `.env` files, or mutable secrets.
 5. The native shell must not allow arbitrary SSOT replacement in production-mode launch.
@@ -483,8 +485,8 @@ Actions:
 - launch
 - restart
 - stop
-- open browser workspace
-- open review page for active run
+- open the native workspace
+- open the review queue for the active run
 
 ### Settings window
 
@@ -572,8 +574,8 @@ Required runtime validation after first implementation:
 - bundle builds successfully
 - native app launches
 - bundled runtime reaches loopback readiness
-- browser workspace opens from the native shell
-- review workspace opens from the native shell
+- native workspace opens from the native shell
+- review workflow opens from the native shell
 - logs and runs directory open correctly
 - stop/restart behavior is deterministic
 

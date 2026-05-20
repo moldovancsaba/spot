@@ -6,7 +6,8 @@ import time
 from pathlib import Path
 
 from backend.services.ops_db_service import build_upload_queue_summary, record_upload, replace_upload_rows
-from src.excel_io import InputFileError, MAX_INPUT_ROWS, MAX_POST_TEXT_LENGTH, build_row_manifest_entries, build_stored_row_entries, read_input_rows, write_row_manifest
+from src.excel_io import InputFileError, MAX_INPUT_ROWS, MAX_POST_TEXT_LENGTH, write_row_manifest
+from src.intake_adapters import import_input_file
 from src.ssot_loader import SSOTError, load_ssot
 
 
@@ -54,16 +55,17 @@ def intake_workbook(
 
     try:
         ssot = load_ssot(ssot_path)
-        rows = read_input_rows(workbook_path, ssot)
+        batch = import_input_file(workbook_path, ssot)
         row_manifest_path = intake_dir / "row_manifest.jsonl"
-        write_row_manifest(row_manifest_path, build_row_manifest_entries(rows))
+        write_row_manifest(row_manifest_path, batch.row_manifest_entries)
         record["validation"] = {
             "accepted": True,
-            "row_count": len(rows),
+            "row_count": len(batch.canonical_rows),
             "expected_columns": ssot.policy.expected_columns,
             "max_input_rows": MAX_INPUT_ROWS,
             "max_post_text_length": MAX_POST_TEXT_LENGTH,
             "row_manifest_path": str(row_manifest_path),
+            **batch.validation_summary,
         }
     except (InputFileError, SSOTError) as exc:
         record["status"] = "rejected"
@@ -86,7 +88,7 @@ def intake_workbook(
     )
     record["queue_summary"] = record_upload(runs_dir=runs_dir, record=record)
     if record["status"] == "accepted":
-        replace_upload_rows(runs_dir=runs_dir, upload_id=upload_id, rows=build_stored_row_entries(rows))
+        replace_upload_rows(runs_dir=runs_dir, upload_id=upload_id, rows=batch.stored_row_entries)
     return record
 
 
@@ -129,11 +131,10 @@ def ensure_upload_rows_materialized(
         raise FileNotFoundError(f"Could not locate source workbook for upload {upload_id}. Checked: {searched}")
 
     ssot = load_ssot(ssot_path)
-    rows = read_input_rows(workbook_path, ssot)
-    manifest_entries = build_row_manifest_entries(rows)
+    batch = import_input_file(workbook_path, ssot)
     row_manifest_path = upload_dir(runs_dir, upload_id) / "row_manifest.jsonl"
-    write_row_manifest(row_manifest_path, manifest_entries)
-    replace_upload_rows(runs_dir=runs_dir, upload_id=upload_id, rows=build_stored_row_entries(rows))
+    write_row_manifest(row_manifest_path, batch.row_manifest_entries)
+    replace_upload_rows(runs_dir=runs_dir, upload_id=upload_id, rows=batch.stored_row_entries)
 
     validation = record.get("validation")
     if not isinstance(validation, dict):
@@ -141,11 +142,12 @@ def ensure_upload_rows_materialized(
     validation.update(
         {
             "accepted": True,
-            "row_count": len(rows),
+            "row_count": len(batch.canonical_rows),
             "expected_columns": ssot.policy.expected_columns,
             "max_input_rows": MAX_INPUT_ROWS,
             "max_post_text_length": MAX_POST_TEXT_LENGTH,
             "row_manifest_path": str(row_manifest_path),
+            **batch.validation_summary,
         }
     )
     record["validation"] = validation
@@ -154,7 +156,7 @@ def ensure_upload_rows_materialized(
         json.dumps(record, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
-    return len(rows)
+    return len(batch.canonical_rows)
 
 
 def list_upload_records(*, runs_dir: Path) -> list[dict]:

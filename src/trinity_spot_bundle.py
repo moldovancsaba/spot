@@ -8,7 +8,7 @@ from pathlib import Path
 from uuid import NAMESPACE_URL, uuid5
 
 from backend.services.ops_db_service import fetch_run_rows
-from backend.services.run_state_service import refresh_run_record
+from backend.services.run_state_service import resolve_run_record
 
 
 TRINITY_SPOT_CONTRACT_VERSION = "trinity.spot.v1alpha1"
@@ -33,7 +33,7 @@ def export_trinity_spot_training_bundles(
     output_dir: Path,
     row_indices: list[int] | None = None,
 ) -> ExportSummary:
-    record = refresh_run_record(runs_dir=runs_dir, run_id=run_id, sync_review_rows=False)
+    record = resolve_run_record(runs_dir=runs_dir, run_id=run_id)
     if not record:
         raise RuntimeError(f"Run '{run_id}' was not found.")
 

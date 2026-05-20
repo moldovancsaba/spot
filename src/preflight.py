@@ -13,7 +13,16 @@ import tempfile
 import urllib.parse
 from pathlib import Path
 
-from .defaults import DEFAULT_LOCKED_SSOT_PATH, DEFAULT_OLLAMA_URL, DEFAULT_PRODUCTION_MODE
+from .defaults import (
+    DEFAULT_HF_HOME,
+    DEFAULT_HF_HUB_CACHE,
+    DEFAULT_LOCKED_SSOT_PATH,
+    DEFAULT_MLX_MODELS_DIR,
+    DEFAULT_MODELS_HOME,
+    DEFAULT_OLLAMA_MODELS,
+    DEFAULT_OLLAMA_URL,
+    DEFAULT_PRODUCTION_MODE,
+)
 from .lanes import parse_model_spec
 from .ssot_loader import SSOTError, load_ssot
 
@@ -91,6 +100,44 @@ def _permissions_ok(path: Path, expected_mode: int) -> tuple[bool, str]:
     except FileNotFoundError:
         return False, "path not found"
     return current_mode == expected_mode, f"mode={oct(current_mode)}, expected={oct(expected_mode)}"
+
+
+def _path_within(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _huggingface_repo_cache_path(cache_root: Path, repo_id: str) -> Path:
+    return cache_root / f"models--{repo_id.replace('/', '--')}"
+
+
+def _ollama_manifest_path(models_root: Path, model_tag: str) -> Path:
+    name, _, variant = model_tag.partition(":")
+    manifest_root = models_root / "manifests" / "registry.ollama.ai" / "library" / name
+    return manifest_root / variant if variant else manifest_root
+
+
+def _ollama_model_available(models_root: Path, model_tag: str) -> tuple[bool, str]:
+    manifest_path = _ollama_manifest_path(models_root, model_tag)
+    if manifest_path.exists():
+        return True, f"{model_tag} manifest path: {manifest_path}"
+    try:
+        proc = subprocess.run(
+            ["ollama", "list"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=True,
+            env={**os.environ, "OLLAMA_MODELS": str(models_root)},
+        )
+    except Exception as exc:  # noqa: BLE001
+        return False, f"{model_tag} manifest path: {manifest_path} (ollama list probe failed: {exc})"
+    if model_tag in proc.stdout:
+        return True, f"{model_tag} visible via ollama list under OLLAMA_MODELS={models_root}"
+    return False, f"{model_tag} manifest path: {manifest_path}"
 
 
 def _backend_contract_check() -> tuple[bool, str]:
@@ -215,6 +262,25 @@ def run_preflight(ssot_path: Path, runs_dir: Path, port: int = 8765) -> dict:
         ssot.runtime.classifier.backend,
         ssot.runtime.classifier.model,
     )
+    shared_models_root = Path("/Users/Shared/Models")
+    models_home = Path(DEFAULT_MODELS_HOME)
+    hf_home = Path(DEFAULT_HF_HOME)
+    hf_hub_cache = Path(DEFAULT_HF_HUB_CACHE)
+    ollama_models_root = Path(DEFAULT_OLLAMA_MODELS)
+    mlx_models_dir = Path(DEFAULT_MLX_MODELS_DIR)
+    checks.append(
+        _check(
+            "shared_models_root",
+            _path_within(models_home, shared_models_root),
+            f"SPOT_MODELS_HOME={models_home}",
+            severity="warning",
+        )
+    )
+    checks.append(_check("models_home_exists", models_home.exists(), f"Shared model root: {models_home}", severity="warning"))
+    checks.append(_check("hf_home_exists", hf_home.exists(), f"HF_HOME={hf_home}", severity="warning"))
+    checks.append(_check("hf_hub_cache_exists", hf_hub_cache.exists(), f"HF_HUB_CACHE={hf_hub_cache}", severity="warning"))
+    checks.append(_check("ollama_models_root", ollama_models_root.exists(), f"OLLAMA_MODELS={ollama_models_root}", severity="warning"))
+    checks.append(_check("mlx_models_dir", mlx_models_dir.exists(), f"SPOT_MLX_MODELS_DIR={mlx_models_dir}", severity="warning"))
     checks.append(
         _check(
             "mlx_runtime",
@@ -223,6 +289,14 @@ def run_preflight(ssot_path: Path, runs_dir: Path, port: int = 8765) -> dict:
         )
     )
     if primary_route.backend == "mlx":
+        if Path(primary_route.model_name).exists():
+            mlx_model_available = True
+            mlx_model_detail = f"Primary MLX model path exists: {primary_route.model_name}"
+        else:
+            repo_cache_path = _huggingface_repo_cache_path(hf_hub_cache, primary_route.model_name)
+            mlx_model_available = repo_cache_path.exists()
+            mlx_model_detail = f"Expected MLX repo cache: {repo_cache_path}"
+        checks.append(_check("mlx_model_availability", mlx_model_available, mlx_model_detail, severity="warning"))
         pinned_mlx = pinned_requirements.get("mlx")
         pinned_mlx_lm = pinned_requirements.get("mlx-lm")
         installed_mlx = _python_dependency_version("mlx")
@@ -261,6 +335,28 @@ def run_preflight(ssot_path: Path, runs_dir: Path, port: int = 8765) -> dict:
                 severity="warning",
             )
         )
+        required_ollama_models = {
+            ssot.runtime.classifier.fallback_model,
+            ssot.runtime.drafter.model,
+            ssot.runtime.judge.model,
+            ssot.runtime.judge.fallback_model,
+        }
+        required_ollama_models.update(model.strip() for model in ssot.runtime.drafter.fallback_model.split(",") if model.strip())
+        required_ollama_models.update(
+            route.model_name
+            for route in (parse_model_spec(model_spec, "ollama") for model_spec in ssot.runtime.evaluation.ensemble_models)
+            if route.backend == "ollama"
+        )
+        for model_tag in sorted(required_ollama_models):
+            available, detail = _ollama_model_available(ollama_models_root, model_tag)
+            checks.append(
+                _check(
+                    f"ollama_model_{model_tag.replace(':', '_')}",
+                    available,
+                    detail,
+                    severity="warning",
+                )
+            )
 
     is_loopback, host_detail = _is_loopback_url(DEFAULT_OLLAMA_URL)
     checks.append(

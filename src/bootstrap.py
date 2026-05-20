@@ -7,6 +7,14 @@ import sys
 import venv
 from pathlib import Path
 
+from .defaults import (
+    DEFAULT_HF_HOME,
+    DEFAULT_HF_HUB_CACHE,
+    DEFAULT_MLX_MODELS_DIR,
+    DEFAULT_MODELS_HOME,
+    DEFAULT_OLLAMA_MODELS,
+)
+
 
 def _chmod(path: Path, mode: int) -> None:
     try:
@@ -27,6 +35,12 @@ def _ensure_directory(path: Path) -> dict:
     path.mkdir(parents=True, exist_ok=True)
     _chmod(path, 0o700)
     return _step(f"mkdir_{path.name}", True, f"Ensured directory exists: {path}")
+
+
+def _ensure_shared_models_directory(path: Path) -> dict:
+    path.mkdir(parents=True, exist_ok=True)
+    _chmod(path, 0o755)
+    return _step(f"mkdir_{path.name}", True, f"Ensured shared models directory exists: {path}")
 
 
 def _create_venv(venv_path: Path) -> dict:
@@ -63,6 +77,12 @@ def bootstrap_local_appliance(
 
     steps.append(_ensure_directory(runs_dir))
     steps.append(_ensure_directory(logs_dir))
+    steps.append(_ensure_shared_models_directory(Path(DEFAULT_MODELS_HOME)))
+    steps.append(_ensure_shared_models_directory(Path(DEFAULT_HF_HOME)))
+    steps.append(_ensure_shared_models_directory(Path(DEFAULT_HF_HUB_CACHE)))
+    steps.append(_ensure_shared_models_directory(Path(DEFAULT_OLLAMA_MODELS)))
+    steps.append(_ensure_shared_models_directory(Path(DEFAULT_MLX_MODELS_DIR)))
+    steps.append(_ensure_shared_models_directory(Path(DEFAULT_MODELS_HOME) / "manifest"))
     steps.append(_create_venv(venv_path))
     if ssot_path.exists():
         _chmod(ssot_path, 0o600)
@@ -79,8 +99,9 @@ def bootstrap_local_appliance(
     next_steps = [
         f"Activate the environment: source {venv_path}/bin/activate",
         f"Run bootstrap verification: {venv_python} -m src.cli preflight --ssot ssot/ssot.json --runs-dir {runs_dir} --port 8765",
-        "Ensure local MLX model weights are available for Apertus before production use",
-        "Ensure Ollama is installed locally for fallback and support lanes before production use",
+        f"Use shared model root: SPOT_MODELS_HOME={DEFAULT_MODELS_HOME}",
+        f"Use shared Hugging Face cache: HF_HOME={DEFAULT_HF_HOME} HF_HUB_CACHE={DEFAULT_HF_HUB_CACHE}",
+        f"Use shared Ollama store: OLLAMA_MODELS={DEFAULT_OLLAMA_MODELS}",
     ]
 
     failures = [step for step in steps if not step["ok"]]
@@ -98,6 +119,11 @@ def bootstrap_local_appliance(
             "runs_dir": str(runs_dir),
             "logs_dir": str(logs_dir),
             "ssot_path": str(ssot_path),
+            "models_home": DEFAULT_MODELS_HOME,
+            "hf_home": DEFAULT_HF_HOME,
+            "hf_hub_cache": DEFAULT_HF_HUB_CACHE,
+            "ollama_models": DEFAULT_OLLAMA_MODELS,
+            "mlx_models_dir": DEFAULT_MLX_MODELS_DIR,
             "cwd": os.getcwd(),
             "python": sys.executable,
         },

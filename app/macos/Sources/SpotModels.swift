@@ -589,6 +589,76 @@ struct SpotAvailableOperations: Decodable {
     let recover: Bool
 }
 
+struct SpotRecoveryCandidateProgress: Decodable {
+    let processedRows: Int?
+    let totalRows: Int?
+    let progressPercentage: Double?
+
+    private enum CodingKeys: String, CodingKey {
+        case processedRows = "processed_rows"
+        case totalRows = "total_rows"
+        case progressPercentage = "progress_percentage"
+    }
+}
+
+struct SpotRecoveryCandidate: Decodable, Identifiable {
+    let runID: String
+    let state: String
+    let uploadID: String?
+    let language: String?
+    let reviewMode: String?
+    let updatedAt: Int?
+    let running: Bool
+    let paused: Bool
+    let pid: Int?
+    let progress: SpotRecoveryCandidateProgress?
+    let sourcePath: String?
+    let sourceExists: Bool
+    let sourceManaged: Bool
+    let startPayloadAvailable: Bool
+    let pendingSegments: Int
+    let processingSegments: Int
+    let failedSegments: Int
+    let canContinue: Bool
+    let continueAction: String?
+    let canDelete: Bool
+    let isBroken: Bool
+    let brokenReasons: [String]
+    let lastLogLine: String?
+
+    var id: String { runID }
+
+    private enum CodingKeys: String, CodingKey {
+        case runID = "run_id"
+        case state
+        case uploadID = "upload_id"
+        case language
+        case reviewMode = "review_mode"
+        case updatedAt = "updated_at"
+        case running
+        case paused
+        case pid
+        case progress
+        case sourcePath = "source_path"
+        case sourceExists = "source_exists"
+        case sourceManaged = "source_managed"
+        case startPayloadAvailable = "start_payload_available"
+        case pendingSegments = "pending_segments"
+        case processingSegments = "processing_segments"
+        case failedSegments = "failed_segments"
+        case canContinue = "can_continue"
+        case continueAction = "continue_action"
+        case canDelete = "can_delete"
+        case isBroken = "is_broken"
+        case brokenReasons = "broken_reasons"
+        case lastLogLine = "last_log_line"
+    }
+}
+
+struct SpotRecoveryCandidatesResponse: Decodable {
+    let runs: [SpotRecoveryCandidate]
+}
+
 struct SpotSignoffRecord: Decodable {
     let decision: String
     let note: String?
@@ -681,6 +751,22 @@ struct SpotOperationResponse: Decodable {
     }
 }
 
+struct SpotRunDeleteResponse: Decodable {
+    let status: String
+    let runID: String
+    let removedPaths: [String]
+    let skippedPaths: [String]
+    let purgedSource: Bool
+
+    private enum CodingKeys: String, CodingKey {
+        case status
+        case runID = "run_id"
+        case removedPaths = "removed_paths"
+        case skippedPaths = "skipped_paths"
+        case purgedSource = "purged_source"
+    }
+}
+
 struct SpotRuntimeSuspendResponse: Decodable {
     let status: String
     let count: Int
@@ -735,6 +821,11 @@ struct SpotNativeConfig {
     var pythonBin: String
     var runsDir: String
     var logsDir: String
+    var modelsHome: String
+    var huggingFaceHome: String
+    var huggingFaceHubCache: String
+    var ollamaModelsDir: String
+    var mlxModelsDir: String
     var accessCode: String
     var lockedSSOTPath: String
     var port: Int
@@ -747,6 +838,11 @@ struct SpotNativeConfig {
         pythonBin: "",
         runsDir: "",
         logsDir: "",
+        modelsHome: "",
+        huggingFaceHome: "",
+        huggingFaceHubCache: "",
+        ollamaModelsDir: "",
+        mlxModelsDir: "",
         accessCode: "",
         lockedSSOTPath: "",
         port: 8765,

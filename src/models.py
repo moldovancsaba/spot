@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from typing import Dict
 from typing import Literal, List
 
+CANONICAL_INPUT_SCHEMA_VERSION = "spot.input-row.v1alpha1"
+
 CANONICAL_CATEGORIES = {
     "Anti-Israel",
     "Anti-Judaism",
@@ -19,6 +21,29 @@ class InputRow:
     row_index: int
     item_number: str
     post_text: str
+
+
+@dataclass(frozen=True)
+class InputRowProvenance:
+    source_type: str
+    source_name: str
+    source_sheet: str
+    source_row_index: int
+
+
+@dataclass(frozen=True)
+class CanonicalInputRow:
+    schema_version: str
+    sequence_index: int
+    row_index: int
+    item_number: str
+    post_text: str
+    source_category: str
+    row_hash: str
+    post_text_sha256: str
+    post_text_length: int
+    normalization_status: str
+    provenance: InputRowProvenance
 
 
 @dataclass

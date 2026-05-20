@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import sqlite3
 import shutil
 import sys
 import tempfile
@@ -22,8 +23,18 @@ import backend.main as main_module
 from backend.services import auth_service
 from backend.services.excel_service import ensure_upload_rows_materialized, intake_workbook
 from backend.services.artifact_manifest_service import build_artifact_manifest
-from backend.services.ops_db_service import build_run_segment_summary, claim_next_segment, fetch_run_row, fetch_upload_rows_for_segment, start_run_attempt, upsert_run_rows
-from backend.services.run_state_service import build_review_queue, create_run_record
+from backend.services.ops_db_service import (
+    build_run_segment_summary,
+    claim_next_segment,
+    db_path,
+    fetch_run_row,
+    fetch_upload_rows_for_segment,
+    register_run,
+    start_run_attempt,
+    update_run_snapshot,
+    upsert_run_rows,
+)
+from backend.services.run_state_service import build_review_queue, create_run_record, resolve_run_record
 from backend.services import run_state_service
 from src.excel_io import build_segment_input_workbook_from_entries, read_input_rows
 from src.classifier import stable_row_hash
@@ -41,6 +52,27 @@ def _build_workbook_bytes() -> bytes:
     wb.save(buf)
     wb.close()
     return buf.getvalue()
+
+
+def _create_managed_upload_fixture(runs_dir: Path, upload_id: str, filename: str = "managed.xlsx", row_count: int = 1) -> Path:
+    from backend.services.ops_db_service import record_upload
+
+    upload_dir = runs_dir / "uploads" / upload_id
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    workbook_path = upload_dir / filename
+    workbook_path.write_bytes(_build_workbook_bytes())
+    upload_record = {
+        "upload_id": upload_id,
+        "filename": filename,
+        "stored_path": str(workbook_path),
+        "bytes": workbook_path.stat().st_size,
+        "status": "accepted",
+        "created_at": 1771000000,
+        "validation": {"accepted": True, "row_count": row_count},
+    }
+    (upload_dir / "upload.json").write_text(json.dumps(upload_record, ensure_ascii=False, indent=2), encoding="utf-8")
+    record_upload(runs_dir=runs_dir, record=upload_record)
+    return workbook_path
 
 
 def _prepare_synthetic_run(runs_dir: Path, run_id: str) -> Path:
@@ -234,16 +266,34 @@ class BackendContractRegressionTests(unittest.TestCase):
         self.assertTrue(manifest_path.exists())
         lines = [json.loads(line) for line in manifest_path.read_text(encoding="utf-8").splitlines() if line.strip()]
         self.assertGreaterEqual(len(lines), 1)
+        self.assertEqual(record["validation"]["canonical_schema_version"], "spot.input-row.v1alpha1")
+        self.assertEqual(record["validation"]["accepted_row_count"], record["validation"]["row_count"])
+        self.assertEqual(record["validation"]["quarantined_row_count"], 0)
+        self.assertEqual(record["validation"]["rejected_row_count"], 0)
+        self.assertEqual(record["validation"]["source_types"], ["xlsx"])
+        self.assertEqual(record["validation"]["quarantine_supported"], False)
         self.assertEqual(lines[0]["sequence_index"], 1)
         self.assertEqual(lines[0]["row_index"], 2)
+        self.assertEqual(lines[0]["schema_version"], "spot.input-row.v1alpha1")
+        self.assertEqual(lines[0]["normalization_status"], "accepted")
         self.assertTrue(str(lines[0]["item_number"]).strip())
         self.assertTrue(lines[0]["row_hash"])
         self.assertTrue(lines[0]["post_text_sha256"])
+        self.assertEqual(lines[0]["provenance"]["source_type"], "xlsx")
+        self.assertEqual(lines[0]["provenance"]["source_name"], "manifest.xlsx")
+        self.assertEqual(lines[0]["provenance"]["source_sheet"], "__first_worksheet__")
+        self.assertEqual(lines[0]["provenance"]["source_row_index"], 2)
         stored_rows = fetch_upload_rows_for_segment(runs_dir=self.runs_dir, upload_id=upload_id, row_start=1, row_end=1)
         self.assertEqual(len(stored_rows), 1)
         self.assertEqual(stored_rows[0]["row_index"], 2)
         self.assertEqual(stored_rows[0]["item_number"], lines[0]["item_number"])
         self.assertEqual(stored_rows[0]["row_hash"], lines[0]["row_hash"])
+        self.assertEqual(stored_rows[0]["schema_version"], "spot.input-row.v1alpha1")
+        self.assertEqual(stored_rows[0]["normalization_status"], "accepted")
+        self.assertEqual(stored_rows[0]["source_type"], "xlsx")
+        self.assertEqual(stored_rows[0]["source_name"], "manifest.xlsx")
+        self.assertEqual(stored_rows[0]["source_sheet"], "__first_worksheet__")
+        self.assertEqual(stored_rows[0]["source_row_index"], 2)
 
     def test_segment_input_workbook_from_entries_returns_row_manifest_entries(self) -> None:
         segment_path = self.runs_dir / "segment-input.xlsx"
@@ -305,11 +355,123 @@ class BackendContractRegressionTests(unittest.TestCase):
         self.assertEqual(len(stored_rows), 5)
         self.assertEqual(stored_rows[0]["sequence_index"], 1)
         self.assertEqual(stored_rows[0]["row_index"], 2)
+        self.assertEqual(stored_rows[0]["schema_version"], "spot.input-row.v1alpha1")
+        self.assertEqual(stored_rows[0]["normalization_status"], "accepted")
+        self.assertEqual(stored_rows[0]["source_type"], "xlsx")
+        self.assertEqual(stored_rows[0]["source_name"], "legacy.xlsx")
+        self.assertEqual(stored_rows[0]["source_sheet"], "__first_worksheet__")
         manifest_path = upload_dir / "row_manifest.jsonl"
         self.assertTrue(manifest_path.exists())
         manifest_lines = [json.loads(line) for line in manifest_path.read_text(encoding="utf-8").splitlines() if line.strip()]
         self.assertEqual(len(manifest_lines), expected_count)
         self.assertEqual(manifest_lines[0]["row_index"], 2)
+        self.assertEqual(manifest_lines[0]["schema_version"], "spot.input-row.v1alpha1")
+        refreshed_record = json.loads((upload_dir / "upload.json").read_text(encoding="utf-8"))
+        self.assertEqual(refreshed_record["validation"]["canonical_schema_version"], "spot.input-row.v1alpha1")
+        self.assertEqual(refreshed_record["validation"]["accepted_row_count"], expected_count)
+        self.assertEqual(refreshed_record["validation"]["quarantined_row_count"], 0)
+
+    def test_upload_backed_run_rows_require_resolved_source_lineage(self) -> None:
+        upload_id = "lineage-upload"
+        upload_dir = self.runs_dir / "uploads" / upload_id
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        workbook_path = upload_dir / "lineage.xlsx"
+        workbook_path.write_bytes(_build_workbook_bytes())
+        upload_record = {
+            "upload_id": upload_id,
+            "filename": "lineage.xlsx",
+            "stored_path": str(workbook_path),
+            "bytes": workbook_path.stat().st_size,
+            "status": "accepted",
+            "created_at": 1771000000,
+            "validation": {"accepted": True, "row_count": 1},
+        }
+        from backend.services.ops_db_service import record_upload, replace_upload_rows
+
+        (upload_dir / "upload.json").write_text(json.dumps(upload_record), encoding="utf-8")
+        record_upload(runs_dir=self.runs_dir, record=upload_record)
+        replace_upload_rows(
+            runs_dir=self.runs_dir,
+            upload_id=upload_id,
+            rows=[
+                {
+                    "sequence_index": 1,
+                    "row_index": 2,
+                    "item_number": "1",
+                    "post_text": "Synthetic contract test row",
+                    "source_category": "",
+                    "row_hash": stable_row_hash("1", "Synthetic contract test row"),
+                    "post_text_sha256": "sha-lineage-1",
+                    "post_text_length": 27,
+                    "normalization_status": "accepted",
+                    "source_type": "xlsx",
+                    "source_name": "lineage.xlsx",
+                    "source_sheet": "__first_worksheet__",
+                    "source_row_index": 2,
+                }
+            ],
+        )
+        create_run_record(
+            runs_dir=self.runs_dir,
+            run_id="lineage-run",
+            input_path=str(workbook_path),
+            output_path=str(self.runs_dir / "lineage-run" / "output.xlsx"),
+            upload_id=upload_id,
+            language="de",
+            review_mode="partial",
+            start_payload={"upload_id": upload_id, "language": "de", "review_mode": "partial"},
+        )
+        from backend.services.ops_db_service import register_run
+
+        register_run(
+            runs_dir=self.runs_dir,
+            run_id="lineage-run",
+            upload_id=upload_id,
+            language="de",
+            review_mode="partial",
+            state="PROCESSING",
+        )
+
+        upsert_run_rows(
+            runs_dir=self.runs_dir,
+            run_id="lineage-run",
+            upload_id=upload_id,
+            rows=[
+                {
+                    "row_index": 2,
+                    "assigned_category": "Not Antisemitic",
+                    "confidence_score": 0.91,
+                    "explanation": "Lineage-backed persistence.",
+                    "flags": [],
+                    "review_required": False,
+                }
+            ],
+        )
+
+        stored_row = fetch_run_row(runs_dir=self.runs_dir, run_id="lineage-run", row_index=2)
+        self.assertIsNotNone(stored_row)
+        self.assertEqual((stored_row or {}).get("upload_id"), upload_id)
+        self.assertEqual((stored_row or {}).get("sequence_index"), 1)
+        self.assertEqual((stored_row or {}).get("source_row_index"), 2)
+        self.assertEqual((stored_row or {}).get("source_row_hash"), stable_row_hash("1", "Synthetic contract test row"))
+
+    def test_upload_backed_run_rows_fail_when_source_lineage_is_missing(self) -> None:
+        with self.assertRaises(RuntimeError):
+            upsert_run_rows(
+                runs_dir=self.runs_dir,
+                run_id="broken-lineage-run",
+                upload_id="missing-upload",
+                rows=[
+                    {
+                        "row_index": 2,
+                        "assigned_category": "Not Antisemitic",
+                        "confidence_score": 0.91,
+                        "explanation": "Should fail without upload lineage.",
+                        "flags": [],
+                        "review_required": False,
+                    }
+                ],
+            )
 
     def test_production_payload_restrictions_block_arbitrary_paths(self) -> None:
         main_module.DEFAULT_PRODUCTION_MODE = True
@@ -325,22 +487,8 @@ class BackendContractRegressionTests(unittest.TestCase):
     def test_recover_restarts_interrupted_segment_worker_run(self) -> None:
         self._login_admin()
         upload_id = "recover-upload"
-        upload_dir = self.runs_dir / "uploads" / upload_id
-        upload_dir.mkdir(parents=True, exist_ok=True)
-        workbook_path = upload_dir / "recover.xlsx"
-        workbook_path.write_bytes(_build_workbook_bytes())
-        upload_record = {
-            "upload_id": upload_id,
-            "filename": "recover.xlsx",
-            "stored_path": str(workbook_path),
-            "bytes": workbook_path.stat().st_size,
-            "status": "accepted",
-            "created_at": 1771000000,
-            "validation": {"accepted": True, "row_count": 1},
-        }
-        from backend.services.ops_db_service import record_upload, register_run
-
-        record_upload(runs_dir=self.runs_dir, record=upload_record)
+        workbook_path = _create_managed_upload_fixture(self.runs_dir, upload_id, filename="recover.xlsx")
+        from backend.services.ops_db_service import register_run
         run_id = "recover-run"
         run_path = self.runs_dir / run_id
         run_path.mkdir(parents=True, exist_ok=True)
@@ -383,10 +531,7 @@ class BackendContractRegressionTests(unittest.TestCase):
     def test_heal_restarts_stalled_segment_worker_run(self) -> None:
         self._login_admin()
         upload_id = "heal-upload"
-        upload_dir = self.runs_dir / "uploads" / upload_id
-        upload_dir.mkdir(parents=True, exist_ok=True)
-        workbook_path = upload_dir / "heal.xlsx"
-        workbook_path.write_bytes(_build_workbook_bytes())
+        workbook_path = _create_managed_upload_fixture(self.runs_dir, upload_id, filename="heal.xlsx")
         run_id = "heal-run"
         run_path = self.runs_dir / run_id
         run_path.mkdir(parents=True, exist_ok=True)
@@ -423,13 +568,14 @@ class BackendContractRegressionTests(unittest.TestCase):
 
     def test_native_runtime_suspend_marks_active_run_for_resume(self) -> None:
         self._login_admin()
+        workbook_path = _create_managed_upload_fixture(self.runs_dir, "upload-1", filename="native-suspend.xlsx")
         run_id = "native-suspend-run"
         run_path = self.runs_dir / run_id
         run_path.mkdir(parents=True, exist_ok=True)
         create_run_record(
             runs_dir=self.runs_dir,
             run_id=run_id,
-            input_path="samples/sample_germany.xlsx",
+            input_path=str(workbook_path),
             output_path=str(run_path / "output.xlsx"),
             upload_id="upload-1",
             language="de",
@@ -471,13 +617,14 @@ class BackendContractRegressionTests(unittest.TestCase):
 
     def test_classify_status_does_not_trust_reused_unrelated_pid(self) -> None:
         self._login_admin()
+        workbook_path = _create_managed_upload_fixture(self.runs_dir, "upload-1", filename="status-pid-reuse.xlsx")
         run_id = "status-pid-reuse"
         run_path = self.runs_dir / run_id
         run_path.mkdir(parents=True, exist_ok=True)
         create_run_record(
             runs_dir=self.runs_dir,
             run_id=run_id,
-            input_path="samples/sample_germany.xlsx",
+            input_path=str(workbook_path),
             output_path=str(run_path / "output.xlsx"),
             upload_id="upload-1",
             language="de",
@@ -505,13 +652,14 @@ class BackendContractRegressionTests(unittest.TestCase):
 
     def test_retry_upload_run_resumes_existing_state(self) -> None:
         self._login_admin()
+        workbook_path = _create_managed_upload_fixture(self.runs_dir, "upload-1", filename="retry-upload.xlsx")
         run_id = "retry-upload-run"
         run_path = self.runs_dir / run_id
         run_path.mkdir(parents=True, exist_ok=True)
         create_run_record(
             runs_dir=self.runs_dir,
             run_id=run_id,
-            input_path="samples/sample_germany.xlsx",
+            input_path=str(workbook_path),
             output_path=str(run_path / "output.xlsx"),
             upload_id="upload-1",
             language="de",
@@ -596,6 +744,66 @@ class BackendContractRegressionTests(unittest.TestCase):
         self.assertFalse(candidate["can_continue"])
         self.assertIn("managed source workbook is missing from local storage", candidate["broken_reasons"])
         self.assertEqual(candidate["last_log_line"], "[FAILED] missing source workbook")
+
+    def test_register_run_requires_existing_managed_upload_relation(self) -> None:
+        with self.assertRaises(RuntimeError) as exc:
+            register_run(
+                runs_dir=self.runs_dir,
+                run_id="missing-managed-upload-run",
+                upload_id="missing-upload",
+                language="de",
+                review_mode="partial",
+                state="STARTING",
+            )
+        self.assertIn("Managed upload relation is missing", str(exc.exception))
+
+    def test_update_run_snapshot_requires_existing_managed_upload_relation(self) -> None:
+        with self.assertRaises(RuntimeError) as exc:
+            update_run_snapshot(
+                runs_dir=self.runs_dir,
+                run_id="missing-managed-upload-run",
+                upload_id="missing-upload",
+                language="de",
+                review_mode="partial",
+                state="PROCESSING",
+                progress={"processed_rows": 1, "total_rows": 10, "progress_percentage": 10.0},
+            )
+        self.assertIn("Managed upload relation is missing", str(exc.exception))
+
+    def test_retry_recover_and_heal_block_broken_managed_runs(self) -> None:
+        self._login_admin()
+        run_id = "broken-managed-run"
+        run_path = self.runs_dir / run_id
+        run_path.mkdir(parents=True, exist_ok=True)
+        run_state_service.write_run_record(
+            runs_dir=self.runs_dir,
+            run_id=run_id,
+            record={
+                "run_id": run_id,
+                "input_path": str(run_path / "missing.xlsx"),
+                "output_path": str(run_path / "output.xlsx"),
+                "upload_id": "missing-upload",
+                "language": "de",
+                "review_mode": "partial",
+                "start_payload": {"upload_id": "missing-upload", "language": "de", "review_mode": "partial"},
+                "state": "FAILED",
+                "created_at": 1771000000,
+                "updated_at": 1771000000,
+            },
+        )
+        (run_path / "progress.json").write_text(
+            json.dumps({"run_id": run_id, "state": "FAILED", "processed_rows": 1, "total_rows": 10, "progress_percentage": 10.0}),
+            encoding="utf-8",
+        )
+        (run_path / "control.json").write_text(
+            json.dumps({"run_id": run_id, "pid": None, "paused": False, "output": str(run_path / "output.xlsx")}),
+            encoding="utf-8",
+        )
+
+        for endpoint in ("retry", "recover", "heal"):
+            response = self.client.post(f"/runs/{run_id}/{endpoint}")
+            self.assertEqual(response.status_code, 409, response.text)
+            self.assertIn("managed upload record is missing", response.json()["detail"])
 
     def test_delete_run_purges_run_and_managed_source_when_inactive(self) -> None:
         self._login_admin()
@@ -1080,6 +1288,9 @@ class BackendContractRegressionTests(unittest.TestCase):
         self.assertIsNotNone(stored_row)
         self.assertEqual((stored_row or {}).get("assigned_category"), "Not Antisemitic")
         self.assertFalse(bool((stored_row or {}).get("review_required")))
+        self.assertEqual((stored_row or {}).get("sequence_index"), 1)
+        self.assertEqual((stored_row or {}).get("source_row_index"), 2)
+        self.assertTrue((stored_row or {}).get("source_row_hash"))
 
     def test_review_queue_does_not_import_live_checkpoint_rows_without_explicit_sync(self) -> None:
         upload_id = "live-review-upload"
@@ -1135,6 +1346,94 @@ class BackendContractRegressionTests(unittest.TestCase):
         self.assertEqual(rows[0]["row_index"], 2)
         self.assertEqual(rows[0]["review_state"], "pending")
         self.assertTrue(rows[0]["post_text"])
+
+    def test_resolve_run_record_does_not_rewrite_run_record_or_snapshot(self) -> None:
+        run_id = "resolve-read-only-run"
+        run_path = self.runs_dir / run_id
+        run_path.mkdir(parents=True, exist_ok=True)
+        create_run_record(
+            runs_dir=self.runs_dir,
+            run_id=run_id,
+            input_path="samples/sample_germany.xlsx",
+            output_path=str(run_path / "output.xlsx"),
+            upload_id=None,
+            language="de",
+            review_mode="partial",
+            start_payload={"input": "samples/sample_germany.xlsx", "language": "de", "review_mode": "partial"},
+        )
+        run_record_path = run_path / "run_record.json"
+        initial_record = json.loads(run_record_path.read_text(encoding="utf-8"))
+        initial_record["state"] = "PROCESSING"
+        initial_record["updated_at"] = 1772000000
+        run_record_path.write_text(json.dumps(initial_record, ensure_ascii=False, indent=2), encoding="utf-8")
+        (run_path / "progress.json").write_text(
+            json.dumps({"run_id": run_id, "state": "PROCESSING", "processed_rows": 3, "total_rows": 10, "progress_percentage": 30.0}),
+            encoding="utf-8",
+        )
+        (run_path / "control.json").write_text(
+            json.dumps({"run_id": run_id, "pid": None, "paused": False}),
+            encoding="utf-8",
+        )
+        with sqlite3.connect(db_path(self.runs_dir)) as conn:
+            before_snapshot = conn.execute("SELECT state, processed_rows, progress_percentage, updated_at FROM runs WHERE run_id = ?", (run_id,)).fetchone()
+
+        resolved = resolve_run_record(runs_dir=self.runs_dir, run_id=run_id)
+        self.assertIsNotNone(resolved)
+        self.assertEqual(resolved["state"], "INTERRUPTED")
+        self.assertEqual((resolved.get("progress") or {}).get("processed_rows"), 3)
+        self.assertEqual((resolved.get("progress") or {}).get("total_rows"), 10)
+
+        after_record = run_record_path.read_text(encoding="utf-8")
+        self.assertEqual(after_record, json.dumps(initial_record, ensure_ascii=False, indent=2))
+        self.assertFalse((run_path / "review_state.json").exists())
+        with sqlite3.connect(db_path(self.runs_dir)) as conn:
+            after_snapshot = conn.execute("SELECT state, processed_rows, progress_percentage, updated_at FROM runs WHERE run_id = ?", (run_id,)).fetchone()
+        self.assertEqual(tuple(before_snapshot), tuple(after_snapshot))
+
+    def test_get_run_state_does_not_persist_resolved_projection(self) -> None:
+        self._login_admin()
+        run_id = "get-run-state-read-only"
+        run_path = self.runs_dir / run_id
+        run_path.mkdir(parents=True, exist_ok=True)
+        create_run_record(
+            runs_dir=self.runs_dir,
+            run_id=run_id,
+            input_path="samples/sample_germany.xlsx",
+            output_path=str(run_path / "output.xlsx"),
+            upload_id=None,
+            language="de",
+            review_mode="partial",
+            start_payload={"input": "samples/sample_germany.xlsx", "language": "de", "review_mode": "partial"},
+        )
+        run_record_path = run_path / "run_record.json"
+        initial_record = json.loads(run_record_path.read_text(encoding="utf-8"))
+        initial_record["state"] = "PROCESSING"
+        initial_record["updated_at"] = 1772000100
+        run_record_path.write_text(json.dumps(initial_record, ensure_ascii=False, indent=2), encoding="utf-8")
+        (run_path / "progress.json").write_text(
+            json.dumps({"run_id": run_id, "state": "PROCESSING", "processed_rows": 4, "total_rows": 10, "progress_percentage": 40.0}),
+            encoding="utf-8",
+        )
+        (run_path / "control.json").write_text(
+            json.dumps({"run_id": run_id, "pid": None, "paused": False}),
+            encoding="utf-8",
+        )
+        with sqlite3.connect(db_path(self.runs_dir)) as conn:
+            before_snapshot = conn.execute("SELECT state, processed_rows, progress_percentage, updated_at FROM runs WHERE run_id = ?", (run_id,)).fetchone()
+
+        response = self.client.get(f"/runs/{run_id}/state")
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["state"], "INTERRUPTED")
+        self.assertEqual(payload["progress"]["processed_rows"], 4)
+        self.assertEqual(payload["progress"]["total_rows"], 10)
+
+        after_record = run_record_path.read_text(encoding="utf-8")
+        self.assertEqual(after_record, json.dumps(initial_record, ensure_ascii=False, indent=2))
+        self.assertFalse((run_path / "review_state.json").exists())
+        with sqlite3.connect(db_path(self.runs_dir)) as conn:
+            after_snapshot = conn.execute("SELECT state, processed_rows, progress_percentage, updated_at FROM runs WHERE run_id = ?", (run_id,)).fetchone()
+        self.assertEqual(tuple(before_snapshot), tuple(after_snapshot))
 
     def test_artifact_manifest_catalog_includes_review_and_control_artifacts(self) -> None:
         run_dir = self.runs_dir / "artifact-manifest-run"
