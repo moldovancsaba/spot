@@ -126,6 +126,8 @@ Evaluation defaults remain explicit and deterministic:
 - MLX is intended for locally available Apertus weights
 - No training on client data is part of {spot}
 
+Before using classification results for a consequential decision or external handoff, follow the interim row-by-row safeguard in [Fallback and Failure Handling](docs/LOCAL_APPLIANCE_RUNBOOK.md#fallback-and-failure-handling). A fallback `Not Antisemitic` label or `Review Required = NO` alone does not establish a valid negative result.
+
 ## Maintainer Install From Source
 
 ```bash

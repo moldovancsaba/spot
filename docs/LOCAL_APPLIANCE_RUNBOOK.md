@@ -254,7 +254,7 @@ Expected result:
 
 ## Bounded Trinity/Train Export
 
-Use this after reviewers have saved `confirm` or `adjust` decisions on flagged rows:
+Before exporting or handing off a bundle, complete the [interim classification review safeguard](#interim-classification-review-safeguard). The export reads native review records, not the separate protected review record; external decisions are not automatically incorporated. It can include a row whose native state is `escalated` if a `confirm` or `adjust` decision is present. The acceptance lead must reconcile the actual export rows against the protected record and hold any export containing unresolved cases. Saving decisions on flagged rows alone does not establish that this check is complete.
 
 ```bash
 .venv/bin/python -m src.cli export-trinity-spot-bundles \
@@ -299,6 +299,22 @@ Ensemble disagreement paths should also retain:
 - `disagreement_report.json`
 
 ## Fallback And Failure Handling
+
+### Interim classification review safeguard
+
+Until the failure-outcome contract is corrected and validated, treat every output as a classification proposal requiring human review before a consequential decision or external handoff. A `Not Antisemitic` assignment, a high confidence score, `Review Required = NO`, or an empty native review queue does not establish that analysis succeeded or that content is benign. The current runtime can convert a missing or invalid model category to the fallback without reliably marking the row for review; a missing model category may leave no distinguishable flag in the workbook. An explanation is model-generated and is not independent proof.
+
+Use this procedure for **full, partial, and none** review modes, including existing runs:
+
+1. The operator records the run ID and review mode, obtains the output workbook through the artifact workflow, and preserves the source workbook and run artifacts unchanged according to the organization's approved access and retention policy. Do not make the only copy of evidence an edited workbook. If the output is missing, incomplete, unreadable, or has missing/ambiguous headers, stop the handoff and escalate to the maintainer without sending source text or artifacts through an unauthorized channel.
+2. A designated reviewer examines every processed row against the original `Post text`, not just rows in the native review queue. Inspect `Raw Category`, `Assigned Category`, `Flags`, `Fallback Events`, `Model Version`, `Confidence Score`, `Review Mode`, and `Review Required`. The native queue is populated from rows marked review-required; it can omit rows that this safeguard requires checking. Compare against the original text and preserve context limitations.
+3. Escalate any missing or invalid raw category; any `TAXONOMY_VIOLATION`, `MODEL_REQUEST_FAILED`, `CLASSIFIER_FALLBACK_FAILED`, `CLASSIFIER_FALLBACK`, `UNSTRUCTURED_MODEL_OUTPUT`, `EMPTY_TEXT`, `SKIPPED`, `SECOND_PASS_UNAVAILABLE`, or `JUDGE_UNAVAILABLE` flag; and any non-empty `Fallback Events`. Also escalate disagreement or an unclear explanation. Do not assume an empty flag or apparently valid raw category proves the model actually supplied a valid category: missing output can be normalized without a reliable marker. If the reviewer cannot determine what happened, treat the row as unresolved.
+4. For a row available in the native review queue, the reviewer records the appropriate review state, decision, and note there. An unqueued row cannot be assumed to be editable in that workflow. Record its row identifier, decision and escalation in the organization's approved access-controlled review record; do not alter the original evidence or include source text in operational logs. Native decisions and notes are stored separately and do not rewrite `Assigned Category` in the output workbook. Provide an authorized, linked review record with the workbook so downstream users can distinguish reviewed decisions from original labels; otherwise hold the handoff. If no approved review record or qualified reviewer is available, hold the handoff and contact the run owner.
+5. The run owner or designated acceptance lead reconciles input rows against output and run counts, including any configured row limit. A workbook may retain source rows with blank classification columns when the run was limited; those rows were not analyzed. Hold the handoff if unprocessed rows are not explicitly identified and handled under the organization's policy. Check that every processed row has a documented disposition and that unresolved cases are held or escalated. Record the reviewer, decision, run ID, row identifiers and outstanding limitations in the protected review record. Native sign-off checks the run and queued review state, but does not perform this external cross-check or cover unqueued rows by itself.
+
+For example, a synthetic row with `Raw Category = invalid-label`, `Assigned Category = Not Antisemitic`, `Confidence Score = 0.99`, `Flags = TAXONOMY_VIOLATION`, and `Review Required = NO` must be escalated under step 3. The confidence value and `NO` do not override the violation. This is a synthetic control-flow example, not a measured model prediction.
+
+This is an interim manual control, not an automated guarantee or a legal determination. If examining every row is not feasible, do not represent the run as fully reviewed. Classification-failure handling and consumer contracts are tracked separately in issue #80.
 
 Expected failure classes:
 - malformed workbook schema
