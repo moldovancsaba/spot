@@ -15,11 +15,32 @@ so the artifact can be used now without ever being mistaken for human-adjudicate
 |---|---|
 | Reference | `docs/evaluation/goldset_2026-11-11.jsonl` |
 | Rows | 300 (50 per workbook category, seed 20261110) |
-| Producer | AI assistant (deepseek-flash), blind single pass, `RULES.md` v1 |
+| Producer | **two independent AI annotation passes**, each blind to the other and to the workbook label, then conflicts adjudicated by a third pass |
+| Inter-annotator agreement | **88.3 % raw, Cohen's kappa 0.827** (265 agreed, 35 adjudicated) |
 | Human adjudicated | **No** |
-| Label distribution | Not Antisemitic 140 · Anti-Israel 74 · Conspiracy Theories 52 · Anti-Judaism 20 · Classical Antisemitism 13 · Structural Antisemitism 1 |
+| Label distribution | Not Antisemitic 146 · Anti-Israel 71 · Conspiracy Theories 49 · Anti-Judaism 18 · Classical Antisemitism 14 · Structural Antisemitism 2 |
+| Per-row provenance | `provenance: agreed \| adjudicated` |
 | Contents | `sample_id`, `text_sha256`, accepted `label`, original `workbook_label`. **No post text is committed** — regenerate the sample from the seed to reproduce the texts. |
 | Authority | Project owner, 2026-11-11 |
+
+## 1b. Double-annotation result
+
+Pass 1 and pass 2 ran in separate contexts from the same `RULES.md` and the same blinded input, without
+seeing each other or the workbook label.
+
+| Measure | Value |
+|---|---:|
+| Rows compared | 300 |
+| Agreed | 265 (88.3 %) |
+| Conflicts adjudicated | 35 |
+| **Cohen's kappa** | **0.827** — "almost perfect" |
+
+Agreement concentrated on the categories that actually carry content (Not Antisemitic 134, Anti-Israel 65,
+Conspiracy 41, Anti-Judaism 16, Classical 8). The conflicts were dominated by two boundaries:
+`Conspiracy ↔ Anti-Israel` (7) and `Anti-Israel ↔ Not Antisemitic` (7).
+
+**Structural Antisemitism remains unsupported: 2 rows in 300 after adjudication.** Both passes independently
+reached the same conclusion, so this is a property of the taxonomy as written, not annotator noise.
 
 ## 2. Why it is usable
 
@@ -40,8 +61,9 @@ threshold move the operating point. It is not usable for *claims about reality* 
    therefore an **upper bound relative to a human standard**.
 3. **Shared blind spots are invisible.** The models, the annotator, and the rule text share a training
    distribution. Where all three are wrong together, this reference cannot detect it.
-4. **`Structural Antisemitism` is effectively unused** — assigned once in 300 rows. That is a property of the
-   reference, and it should not be read as proof the category is meaningless in the source corpus.
+4. **`Structural Antisemitism` is effectively unused** — 2 of 300 rows, reached independently by both passes.
+   That is a property of the reference under the current definition; it should not be read as proof the
+   category is meaningless in the source corpus.
 
 **Therefore this reference may not be cited as evidence of classification accuracy in any client-facing or
 regulatory context.** It may be cited as the agreed internal baseline.

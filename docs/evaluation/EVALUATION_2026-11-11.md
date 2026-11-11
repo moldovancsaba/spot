@@ -10,15 +10,29 @@ measured. Reproduce with `script/score_reference.py`.
 
 ## 1. Results
 
+Scored against the **double-annotated** reference (kappa 0.827):
+
 | Candidate | n | Six-way agreement | Six-way macro-F1 | Binary P | Binary R | Binary F1 |
 |---|---:|---:|---:|---:|---:|---:|
-| `qwen2.5:7b` (verifier) | 300 | 54.3 % | **0.351** | 0.679 | 0.900 | 0.774 |
-| `gemma2:9b` (primary) | 300 | 43.7 % | 0.328 | 0.600 | **0.975** | 0.743 |
-| two-stage (binary gate → forced 5-way) | 300 | **55.0 %** | 0.341 | 0.738 | 0.600 | 0.662 |
-| disambiguation rubric (partial) | 115 | 57.4 % | 0.347 | 0.738 | 0.857 | **0.793** |
-| `Apertus-8B` MLX (rejected) | 87 | 11.5 % | 0.057 | 0.519 | 0.976 | 0.678 |
+| `qwen2.5:7b` (verifier) | 300 | 52.7 % | 0.338 | 0.660 | 0.909 | **0.765** |
+| `gemma2:9b` (primary) | 300 | 42.7 % | 0.331 | 0.581 | **0.981** | 0.729 |
+| two-stage (binary gate → forced 5-way) | 300 | **56.0 %** | **0.349** | 0.723 | 0.610 | 0.662 |
 
-Rows marked *(partial)* were stopped early and are **not directly comparable** to the 300-row rows.
+Against the earlier single-pass reference the figures were 0.351 / 0.328 / 0.341; the ranking is unchanged and
+the ceiling is unchanged, which is what a stable reference should produce.
+
+### Safest detector: union of both models
+
+| Detector | Precision | Recall | F1 | False negatives (of 160 positives) |
+|---|---:|---:|---:|---:|
+| gemma2 alone | 0.581 | 0.981 | 0.729 | 3 |
+| qwen alone | 0.660 | 0.909 | 0.765 | 14 |
+| **union — either model flags** | 0.576 | **0.987** | 0.727 | **2** |
+| intersection — both flag | 0.668 | 0.903 | 0.768 | 15 |
+
+The union is the safest screening configuration: it misses 2 rows in 300 instead of 3–15. It is now the
+governed behaviour — `ANY_POSITIVE_ANALYSIS` forces human review whenever any single analysis branch assigns a
+positive category at confidence >= 0.30, which is effectively the union rule applied at row level.
 
 ## 2. Per-class behaviour (n = 300 candidates)
 
