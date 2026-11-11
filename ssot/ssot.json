@@ -1,5 +1,5 @@
 {
-  "ssot_version": "0.2",
+  "ssot_version": "0.4",
   "taxonomy": {
     "version": "taxonomy-v0.1",
     "categories": [
@@ -13,8 +13,8 @@
     "fallback_category": "Not Antisemitic"
   },
   "policy": {
-    "prompt_version": "prompt-v0.2",
-    "model_version": "mlx:mlx-community/Apertus-8B-Instruct-2509-4bit",
+    "prompt_version": "prompt-v0.3-independent-checks",
+    "model_version": "ollama:qwen2.5:7b",
     "expected_columns": [
       "Item number",
       "Post text",
@@ -40,10 +40,10 @@
   },
   "runtime": {
     "classifier": {
-      "backend": "mlx",
-      "model": "mlx-community/Apertus-8B-Instruct-2509-4bit",
+      "backend": "ollama",
+      "model": "qwen2.5:7b",
       "fallback_backend": "ollama",
-      "fallback_model": "qwen2.5:7b"
+      "fallback_model": "gemma2:9b"
     },
     "drafter": {
       "backend": "ollama",
@@ -53,7 +53,7 @@
     },
     "judge": {
       "backend": "ollama",
-      "model": "llama3.2:3b",
+      "model": "llama3.1:8b",
       "fallback_backend": "ollama",
       "fallback_model": "gemma2:2b"
     },
@@ -69,5 +69,13 @@
       "ollama_url": "http://127.0.0.1:11434/api/generate",
       "allow_remote_ollama": false
     }
+  },
+  "automatic_reporting": {
+    "enabled": true,
+    "minimum_positive_confidence": 0.3,
+    "trigger": "any_current_positive_analysis_including_retries",
+    "human_review_required": false,
+    "report_status": "AI-generated, unconfirmed",
+    "human_decisions_take_precedence": true
   }
 }
