@@ -134,8 +134,8 @@ prepared, human annotation is not yet done.
 
 - Governed run: `runs/acceptance-gemma-30-20261111/` (`policy.json`, `integrity_report.json`,
   `processing_stats.json`, `artifact_manifest.json`, `output.xlsx`, `logs.txt`).
-- Prepared sample and scoring: `/tmp/spot-accept-20261111/` (`sample_manifest.json`,
-  `accuracy_report.json`). These are temporary; copy them into `runs/` if retention is required.
+- Prepared sample and scoring: `runs/acceptance-gemma-30-20261111-evidence/` (`sample_manifest.json`,
+  `accuracy_report.json`, the prepared workbook and the CLI log). Earlier copies under `/tmp` were temporary.
 - `policy.json` records `ssot_version 0.4`, `prompt-v0.3-independent-checks`,
   `model_version ollama:gemma2:9b`.
 
@@ -148,8 +148,11 @@ prepared, human annotation is not yet done.
 3. Re-run this same 30-row acceptance after the gold set lands, so the number is measured against coherent
    targets.
 4. Full-volume throughput, interrupted-run recovery at representative scale, and operator usability
-   sign-off remain unestablished. The 62,024-row run is frozen at 1,127 rows and should be restarted
-   under the new route rather than resumed across a model change.
+   sign-off remain unestablished. The 62,024-row run was **archived and purged** on 2026-11-11: its
+   audit evidence (419 automatic AI reports plus policy, recheck, review-history and run logs) is preserved
+   under `runs/_archive/2026-11-11-german-full-system-autoreports/`, the managed source upload and its
+   62,024 canonical rows are retained, and the run itself was removed so it cannot be auto-recovered under
+   a different model route. Any successor run must be started fresh under the current route.
 
 The owner has not issued a formal acceptance decision. Until then: keep open any-positive automatic
 reporting disabled, keep mandatory human review, and avoid consequential automated use.

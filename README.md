@@ -241,12 +241,16 @@ Intake and queue endpoints:
 
 Run, review, and artifact endpoints:
 
+- `GET /runs` (resolved run list)
+- `GET /runs/{run_id}` (single resolved run record)
 - `GET /runs/recovery-candidates/list`
 - `GET /runs/{run_id}/state`
 - `GET /runs/{run_id}/detail`
 - `GET /runs/{run_id}/review-rows`
 - `GET /runs/{run_id}/review-rows/{row_index}`
 - `GET /runs/{run_id}/artifacts`
+- `GET /runs/{run_id}/artifacts/download/{artifact_name}` (permission: `download_artifact`)
+- `GET /runs/{run_id}/events` (append-only run audit trail, newest first; permission: `view`)
 - `POST /runs/{run_id}/review-rows/{row_index}`
 - `GET /runs/{run_id}/actions`
 - `POST /runs/{run_id}/signoff`
@@ -401,7 +405,7 @@ The native **Reports** tab shows per-run case totals and attached reference-labe
 
 Only a current, saved human-confirmed threat can produce an official `{spot}` threat-report PDF. Reviewers, acceptance leads and administrators can export; operators cannot. PDFs contain the original post, human finding and note, original model proposal/flags, report and decision IDs, timestamps and evidence hashes. They are local report snapshots, not digital signatures. The PDF and original Unicode JSON snapshot are retained under the run's `threat_reports/` directory with an export ledger. Later evidence or review changes supersede previous reports and prevent them from being downloaded as current reports.
 
-New local endpoints: `GET /runs/{run_id}/reports`, `GET /runs/{run_id}/cases`, `POST /runs/{run_id}/cases/{row_index}/decision`, `POST /runs/{run_id}/cases/{row_index}/report.pdf`, and `GET /runs/{run_id}/threat-reports/{report_id}.pdf`. Case writes require the case token returned with the current evidence; stale writes return 409. PDF generation requires the pinned `reportlab` dependency.
+New local endpoints: `GET /runs/{run_id}/reports`, `GET /runs/{run_id}/cases`, `POST /runs/{run_id}/cases/{row_index}/decision`, `POST /runs/{run_id}/cases/{row_index}/report.pdf`, `GET /runs/{run_id}/threat-reports/{report_id}.pdf`, `POST /runs/{run_id}/cases/{row_index}/automatic-report.pdf`, and `GET /runs/{run_id}/automatic-reports/{report_id}.pdf`. Case writes require the case token returned with the current evidence; stale writes return 409. Every branded report endpoint (human-confirmed and automatic AI) requires the `export_threat_report` permission. PDF generation requires the pinned `reportlab` dependency.
 
 Independent automatic checks (SSOT 0.3): partial mode obtains two distinct classifier opinions and a third-model quality check. Automatic completion requires agreement, both classifier scores >=0.85, quality PASS >=0.85, valid structured responses, verified original source, and exact source evidence for positive claims. An automatic marker alone is insufficient. Context/format failures and disagreements remain human exceptions. Schema-constrained Ollama responses replace the unreliable primary MLX response path; Apertus remains available for comparison. The generative drafter configuration is legacy and unused; text preparation is deterministic. Model confidence is a self-reported score, not a measured accuracy probability.
 
