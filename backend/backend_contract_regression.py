@@ -978,6 +978,33 @@ class BackendContractRegressionTests(unittest.TestCase):
         self.assertTrue(upload_dir.exists(), "source workbook must survive a default delete")
         self.assertTrue(workbook_path.exists())
 
+    def test_run_events_trail_is_readable(self) -> None:
+        """The append-only event trail had six writers and no reader; it now has an endpoint."""
+        self._login_admin()
+        run_id = "events-run"
+        run_path = self.runs_dir / run_id
+        run_path.mkdir(parents=True, exist_ok=True)
+        create_run_record(
+            runs_dir=self.runs_dir, run_id=run_id, input_path="in.xlsx",
+            output_path=str(run_path / "output.xlsx"), upload_id=None,
+            language="de", review_mode="partial",
+        )
+        from backend.services.ops_db_service import _append_event, _connect
+
+        with _connect(self.runs_dir) as conn:
+            _append_event(conn, "run", run_id, "synthetic_audit_event", {"note": "reader test"})
+            conn.commit()
+
+        response = self.client.get(f"/runs/{run_id}/events")
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertGreaterEqual(payload["count"], 1)
+        self.assertIn("synthetic_audit_event", [e["event_type"] for e in payload["events"]])
+        self.assertTrue(any(e["payload"].get("note") == "reader test" for e in payload["events"]))
+
+    def test_run_events_endpoint_requires_auth(self) -> None:
+        self.assertEqual(self.client.get("/runs/anything/events").status_code, 401)
+
     def test_run_classification_resumes_from_checkpoint(self) -> None:
         workbook_path = self.runs_dir / "resume-input.xlsx"
         wb = Workbook()

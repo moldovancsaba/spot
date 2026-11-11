@@ -445,6 +445,14 @@ def get_run_artifacts(run_id: str, request: Request):
     return center
 
 
+@app.get("/runs/{run_id}/events")
+def get_run_events(run_id: str, request: Request, limit: int = 200):
+    require_permission(request, "view")
+    from backend.services.ops_db_service import list_run_events
+    events = list_run_events(runs_dir=RUNS_DIR, run_id=run_id, limit=limit)
+    return {"run_id": run_id, "count": len(events), "events": events}
+
+
 @app.get("/runs/{run_id}/artifacts/download/{artifact_name}")
 def download_run_artifact(run_id: str, artifact_name: str, request: Request):
     require_permission(request, "download_artifact")

@@ -1486,6 +1486,31 @@ def delete_upload_snapshot(*, runs_dir: Path, upload_id: str) -> None:
         conn.commit()
 
 
+def list_run_events(*, runs_dir: Path, run_id: str, limit: int = 200) -> list[dict]:
+    """Read the append-only event trail for a run.
+
+    Events were written by six call sites (case decisions, threat exports, automatic AI reports,
+    review-policy changes, upload/run lifecycle) but had no reader, so the audit trail was write-only.
+    Newest first; `limit` is clamped.
+    """
+    limit = max(1, min(int(limit), 1000))
+    with _connect(runs_dir) as conn:
+        rows = conn.execute(
+            "SELECT id, event_type, payload_json, created_at FROM events "
+            "WHERE entity_type = 'run' AND entity_id = ? ORDER BY id DESC LIMIT ?",
+            (run_id, limit),
+        ).fetchall()
+    out = []
+    for row in rows:
+        try:
+            payload = json.loads(row["payload_json"])
+        except (TypeError, ValueError):
+            payload = {"_unparsed": row["payload_json"]}
+        out.append({"event_id": row["id"], "event_type": row["event_type"],
+                    "created_at": row["created_at"], "payload": payload})
+    return out
+
+
 def _append_event(conn: sqlite3.Connection, entity_type: str, entity_id: str, event_type: str, payload: dict) -> None:
     conn.execute(
         "INSERT INTO events (entity_type, entity_id, event_type, payload_json, created_at) VALUES (?, ?, ?, ?, ?)",
