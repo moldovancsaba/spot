@@ -1,6 +1,6 @@
 # {spot} UAT Checklist
 
-Document date: `2026-05-03`
+Document date: `2026-11-08`
 Workspace baseline: `0.5.2`
 SSOT: `0.2`
 

@@ -5,29 +5,29 @@ AI-assisted antisemitism classification system with SSOT-governed, auditable loc
 
 Current workspace implementation: `0.5.2`
 Pipeline version: `mvp-0.5.2`
-Authoritative SSOT version: `0.2`
-Latest shipped release notes in repo: [`docs/RELEASE_NOTES_0.3.1.md`](/Users/moldovancsaba/Projects/spot/docs/RELEASE_NOTES_0.3.1.md)
+Authoritative SSOT version: `0.4`
+Latest shipped release notes in repo: [`docs/RELEASE_NOTES_0.3.1.md`](/Users/Shared/Projects/spot/docs/RELEASE_NOTES_0.3.1.md)
 
 Distribution note:
-- native macOS app source lives under [`app/macos/`](/Users/moldovancsaba/Projects/spot/app/macos)
+- native macOS app source lives under [`app/macos/`](/Users/Shared/Projects/spot/app/macos)
 - generated native app outputs live under `app/macos/.build/` and `app/macos/dist/` and are intentionally not source-controlled
 - this repository currently has no declared open-source license file; treat it as a private maintainer workspace, not an open-source distribution
 
 Documentation map:
-- [README Brief](/Users/moldovancsaba/Projects/spot/README_BRIEF.md)
-- [Architecture](/Users/moldovancsaba/Projects/spot/docs/ARCHITECTURE.md)
-- [Production Plan](/Users/moldovancsaba/Projects/spot/docs/PRODUCTION_PLAN.md)
-- [Foundation Hardening Plan](/Users/moldovancsaba/Projects/spot/docs/FOUNDATION_HARDENING_PLAN.md)
-- [Relation Hardening Implementation Plan](/Users/moldovancsaba/Projects/spot/docs/RELATION_HARDENING_IMPLEMENTATION_PLAN.md)
-- [DB-First Self-Learning Execution Plan](/Users/moldovancsaba/Projects/spot/docs/DB_FIRST_SELF_LEARNING_EXECUTION_PLAN.md)
-- [Client Package](/Users/moldovancsaba/Projects/spot/docs/CLIENT_PACKAGE.md)
-- [Local Appliance Runbook](/Users/moldovancsaba/Projects/spot/docs/LOCAL_APPLIANCE_RUNBOOK.md)
-- [Local Queue Operations Plan](/Users/moldovancsaba/Projects/spot/docs/LOCAL_QUEUE_OPERATIONS_PLAN.md)
-- [Benchmark Checklist](/Users/moldovancsaba/Projects/spot/docs/BENCHMARK_CHECKLIST.md)
-- [UAT Checklist](/Users/moldovancsaba/Projects/spot/docs/UAT_CHECKLIST.md)
-- [Acceptance Evidence Template](/Users/moldovancsaba/Projects/spot/docs/ACCEPTANCE_EVIDENCE_TEMPLATE.md)
-- [Release Notes 0.3.1](/Users/moldovancsaba/Projects/spot/docs/RELEASE_NOTES_0.3.1.md)
-- [Release Notes 0.3.0 (Historical)](/Users/moldovancsaba/Projects/spot/docs/RELEASE_NOTES_0.3.0.md)
+- [README Brief](/Users/Shared/Projects/spot/README_BRIEF.md)
+- [Architecture](/Users/Shared/Projects/spot/docs/ARCHITECTURE.md)
+- [Production Plan](/Users/Shared/Projects/spot/docs/PRODUCTION_PLAN.md)
+- [Foundation Hardening Plan](/Users/Shared/Projects/spot/docs/FOUNDATION_HARDENING_PLAN.md)
+- [Relation Hardening Implementation Plan](/Users/Shared/Projects/spot/docs/RELATION_HARDENING_IMPLEMENTATION_PLAN.md)
+- [DB-First Self-Learning Execution Plan](/Users/Shared/Projects/spot/docs/DB_FIRST_SELF_LEARNING_EXECUTION_PLAN.md)
+- [Client Package](/Users/Shared/Projects/spot/docs/CLIENT_PACKAGE.md)
+- [Local Appliance Runbook](/Users/Shared/Projects/spot/docs/LOCAL_APPLIANCE_RUNBOOK.md)
+- [Local Queue Operations Plan](/Users/Shared/Projects/spot/docs/LOCAL_QUEUE_OPERATIONS_PLAN.md)
+- [Benchmark Checklist](/Users/Shared/Projects/spot/docs/BENCHMARK_CHECKLIST.md)
+- [UAT Checklist](/Users/Shared/Projects/spot/docs/UAT_CHECKLIST.md)
+- [Acceptance Evidence Template](/Users/Shared/Projects/spot/docs/ACCEPTANCE_EVIDENCE_TEMPLATE.md)
+- [Release Notes 0.3.1](/Users/Shared/Projects/spot/docs/RELEASE_NOTES_0.3.1.md)
+- [Release Notes 0.3.0 (Historical)](/Users/Shared/Projects/spot/docs/RELEASE_NOTES_0.3.0.md)
 
 {spot} is a deterministic, auditable classification platform for large Excel batches of social media posts.
 It enforces a strict closed-set taxonomy, produces explainable metadata, and writes governed outputs to Excel.
@@ -80,12 +80,12 @@ Current implementation stage:
 
 ## Production Runtime Truth
 
-Primary classifier route is SSOT-governed and Apertus-first:
-- `classifier`: `mlx://mlx-community/Apertus-8B-Instruct-2509-4bit`
-- `classifier fallback`: `ollama://qwen2.5:7b`
+Primary classification and independent verification are SSOT-governed:
+- `classifier`: `ollama://qwen2.5:7b`
+- `classifier fallback / independent verifier`: `ollama://gemma2:9b`
 - `drafter`: `ollama://granite4:350m`
 - `drafter fallbacks`: `ollama://gemma3:1b` -> `ollama://llama3.2:1b`
-- `judge`: `ollama://llama3.2:3b`
+- `judge`: `ollama://llama3.1:8b`
 - `judge fallback`: `ollama://gemma2:2b`
 
 Evaluation defaults remain explicit and deterministic:
@@ -99,7 +99,7 @@ Evaluation defaults remain explicit and deterministic:
 
 ## Pipeline
 
-1. Load and validate SSOT from [`ssot/ssot.json`](/Users/moldovancsaba/Projects/spot/ssot/ssot.json)
+1. Load and validate SSOT from [`ssot/ssot.json`](/Users/Shared/Projects/spot/ssot/ssot.json)
 2. Validate `.xlsx` schema against required columns
 3. Read row text into deterministic batch processing
 4. Normalize text through the internal `drafter` lane
@@ -126,12 +126,14 @@ Evaluation defaults remain explicit and deterministic:
 - MLX is intended for locally available Apertus weights
 - No training on client data is part of {spot}
 
+New runs mark missing/invalid classifier categories as failed analysis with zero confidence and mandatory review, including `none` mode. The closed-taxonomy fallback is a placeholder, not a successful negative result. Existing artifacts are unchanged.
+
 Before using classification results for a consequential decision or external handoff, follow the interim row-by-row safeguard in [Fallback and Failure Handling](docs/LOCAL_APPLIANCE_RUNBOOK.md#fallback-and-failure-handling). A fallback `Not Antisemitic` label or `Review Required = NO` alone does not establish a valid negative result.
 
 ## Maintainer Install From Source
 
 ```bash
-cd /Users/moldovancsaba/Projects/spot
+cd /Users/Shared/Projects/spot
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -161,7 +163,7 @@ Validate the machine before first launch:
 Native macOS build and install entrypoints:
 
 ```bash
-cd /Users/moldovancsaba/Projects/spot/app/macos
+cd /Users/Shared/Projects/spot/app/macos
 swift build
 bash build-bundle.sh
 bash install-bundle.sh
@@ -265,12 +267,12 @@ Native runtime and active-run endpoints:
 
 ## Repo Layout
 
-- [`app/macos/`](/Users/moldovancsaba/Projects/spot/app/macos): native macOS shell, bundle scripts, SwiftUI sources
-- [`backend/`](/Users/moldovancsaba/Projects/spot/backend): FastAPI appliance backend and queue/runtime services
-- [`src/`](/Users/moldovancsaba/Projects/spot/src): classification pipeline, CLI, evaluation, benchmarking
-- [`ssot/`](/Users/moldovancsaba/Projects/spot/ssot): governed taxonomy and runtime contract
-- [`docs/`](/Users/moldovancsaba/Projects/spot/docs): active operational, architecture, and handover documentation
-- [`script/`](/Users/moldovancsaba/Projects/spot/script): dev wrappers such as native build-and-run
+- [`app/macos/`](/Users/Shared/Projects/spot/app/macos): native macOS shell, bundle scripts, SwiftUI sources
+- [`backend/`](/Users/Shared/Projects/spot/backend): FastAPI appliance backend and queue/runtime services
+- [`src/`](/Users/Shared/Projects/spot/src): classification pipeline, CLI, evaluation, benchmarking
+- [`ssot/`](/Users/Shared/Projects/spot/ssot): governed taxonomy and runtime contract
+- [`docs/`](/Users/Shared/Projects/spot/docs): active operational, architecture, and handover documentation
+- [`script/`](/Users/Shared/Projects/spot/script): dev wrappers such as native build-and-run
 
 Current native operator surface:
 
@@ -291,7 +293,8 @@ Auth and permission endpoints:
 Local auth defaults:
 
 - auth is enabled by default with `SPOT_AUTH_ENABLED=1`
-- local shared access code defaults to `spot-local`
+- the native app generates a per-install local access code when empty or set to the historical default
+- standalone backend compatibility still defaults to `spot-local`; set `SPOT_LOCAL_ACCESS_CODE` before using that path
 - rotate the shared local code with `SPOT_LOCAL_ACCESS_CODE`
 - role gates currently distinguish `operator`, `reviewer`, `acceptance_lead`, and `admin`
 - upload, run start, run recovery actions, review updates, sign-off, and artifact downloads are permission-gated
@@ -299,7 +302,7 @@ Local auth defaults:
 Current verification boundary:
 - backend regressions validate the runtime/API contract behind the native shell
 - it does not replace a live client acceptance run on the target machine
-- the historical `0.3.2` acceptance record is archived in [`docs/ACCEPTANCE_EVIDENCE_2026-03-18.md`](/Users/moldovancsaba/Projects/spot/docs/ACCEPTANCE_EVIDENCE_2026-03-18.md)
+- the historical `0.3.2` acceptance record is archived in [`docs/ACCEPTANCE_EVIDENCE_2026-03-18.md`](/Users/Shared/Projects/spot/docs/ACCEPTANCE_EVIDENCE_2026-03-18.md)
 
 ## Monitoring URLs
 
@@ -307,15 +310,15 @@ Current verification boundary:
 
 ## Runtime Configuration
 
-{spot} now resolves runtime defaults from [`ssot/ssot.json`](/Users/moldovancsaba/Projects/spot/ssot/ssot.json). Environment variables still override them when explicitly set.
+{spot} now resolves runtime defaults from [`ssot/ssot.json`](/Users/Shared/Projects/spot/ssot/ssot.json). Environment variables still override them when explicitly set.
 
 Supported overrides:
 
 ```bash
-export SPOT_ROUTE_CLASSIFIER_BACKEND=mlx
-export SPOT_ROUTE_CLASSIFIER_MODEL=mlx-community/Apertus-8B-Instruct-2509-4bit
+export SPOT_ROUTE_CLASSIFIER_BACKEND=ollama
+export SPOT_ROUTE_CLASSIFIER_MODEL=qwen2.5:7b
 export SPOT_ROUTE_CLASSIFIER_FALLBACK_BACKEND=ollama
-export SPOT_ROUTE_CLASSIFIER_FALLBACK_MODEL=qwen2.5:7b
+export SPOT_ROUTE_CLASSIFIER_FALLBACK_MODEL=gemma2:9b
 
 export SPOT_ROUTE_DRAFTER_BACKEND=ollama
 export SPOT_ROUTE_DRAFTER_MODEL=granite4:350m
@@ -323,7 +326,7 @@ export SPOT_ROUTE_DRAFTER_FALLBACK_BACKEND=ollama
 export SPOT_ROUTE_DRAFTER_FALLBACK_MODEL=gemma3:1b,llama3.2:1b
 
 export SPOT_ROUTE_JUDGE_BACKEND=ollama
-export SPOT_ROUTE_JUDGE_MODEL=llama3.2:3b
+export SPOT_ROUTE_JUDGE_MODEL=llama3.1:8b
 export SPOT_ROUTE_JUDGE_FALLBACK_BACKEND=ollama
 export SPOT_ROUTE_JUDGE_FALLBACK_MODEL=gemma2:2b
 ```
@@ -377,17 +380,29 @@ Each evaluation run in `runs/<evaluation-run-id>/` stores:
 
 ## Documentation Map
 
-- Project brief: [`README_BRIEF.md`](/Users/moldovancsaba/Projects/spot/README_BRIEF.md)
-- Client package: [`docs/CLIENT_PACKAGE.md`](/Users/moldovancsaba/Projects/spot/docs/CLIENT_PACKAGE.md)
-- Foundation hardening plan: [`docs/FOUNDATION_HARDENING_PLAN.md`](/Users/moldovancsaba/Projects/spot/docs/FOUNDATION_HARDENING_PLAN.md)
-- Local appliance runbook: [`docs/LOCAL_APPLIANCE_RUNBOOK.md`](/Users/moldovancsaba/Projects/spot/docs/LOCAL_APPLIANCE_RUNBOOK.md)
-- SSOT contract: [`ssot/SSOT.md`](/Users/moldovancsaba/Projects/spot/ssot/SSOT.md)
-- SSOT machine config: [`ssot/ssot.json`](/Users/moldovancsaba/Projects/spot/ssot/ssot.json)
-- Architecture: [`docs/ARCHITECTURE.md`](/Users/moldovancsaba/Projects/spot/docs/ARCHITECTURE.md)
-- Ingestion contract: [`docs/INGESTION.md`](/Users/moldovancsaba/Projects/spot/docs/INGESTION.md)
-- Operational notes: [`docs/BRAIN_DUMP.md`](/Users/moldovancsaba/Projects/spot/docs/BRAIN_DUMP.md)
-- Monitoring/UI: [`MONITORING_UI.md`](/Users/moldovancsaba/Projects/spot/MONITORING_UI.md)
-- Foundation baseline: [`FOUNDATION.md`](/Users/moldovancsaba/Projects/spot/FOUNDATION.md)
-- Design baseline: [`DESIGN.md`](/Users/moldovancsaba/Projects/spot/DESIGN.md)
-- Handover log: [`docs/HANDOVER.md`](/Users/moldovancsaba/Projects/spot/docs/HANDOVER.md)
-- Changelog: [`CHANGELOG.md`](/Users/moldovancsaba/Projects/spot/CHANGELOG.md)
+- Project brief: [`README_BRIEF.md`](/Users/Shared/Projects/spot/README_BRIEF.md)
+- Client package: [`docs/CLIENT_PACKAGE.md`](/Users/Shared/Projects/spot/docs/CLIENT_PACKAGE.md)
+- Foundation hardening plan: [`docs/FOUNDATION_HARDENING_PLAN.md`](/Users/Shared/Projects/spot/docs/FOUNDATION_HARDENING_PLAN.md)
+- Local appliance runbook: [`docs/LOCAL_APPLIANCE_RUNBOOK.md`](/Users/Shared/Projects/spot/docs/LOCAL_APPLIANCE_RUNBOOK.md)
+- SSOT contract: [`ssot/SSOT.md`](/Users/Shared/Projects/spot/ssot/SSOT.md)
+- SSOT machine config: [`ssot/ssot.json`](/Users/Shared/Projects/spot/ssot/ssot.json)
+- Architecture: [`docs/ARCHITECTURE.md`](/Users/Shared/Projects/spot/docs/ARCHITECTURE.md)
+- Ingestion contract: [`docs/INGESTION.md`](/Users/Shared/Projects/spot/docs/INGESTION.md)
+- Operational notes: [`docs/BRAIN_DUMP.md`](/Users/Shared/Projects/spot/docs/BRAIN_DUMP.md)
+- Monitoring/UI: [`MONITORING_UI.md`](/Users/Shared/Projects/spot/MONITORING_UI.md)
+- Foundation baseline: [`FOUNDATION.md`](/Users/Shared/Projects/spot/FOUNDATION.md)
+- Design baseline: [`DESIGN.md`](/Users/Shared/Projects/spot/DESIGN.md)
+- Handover log: [`docs/HANDOVER.md`](/Users/Shared/Projects/spot/docs/HANDOVER.md)
+- Changelog: [`CHANGELOG.md`](/Users/Shared/Projects/spot/CHANGELOG.md)
+
+## Human case decisions and threat reports
+
+The native **Reports** tab shows per-run case totals and attached reference-label evaluations. **Review** lists all classified posts in pages of 100, including posts the model did not flag. Reviewers can record **Confirm threat**, **False alarm**, or **Leave unresolved**. A confirmed threat requires a selected closed-taxonomy category. The human decision is saved separately from the original model proposal, with actor, timestamp, evidence fingerprint and immutable decision history.
+
+Only a current, saved human-confirmed threat can produce an official `{spot}` threat-report PDF. Reviewers, acceptance leads and administrators can export; operators cannot. PDFs contain the original post, human finding and note, original model proposal/flags, report and decision IDs, timestamps and evidence hashes. They are local report snapshots, not digital signatures. The PDF and original Unicode JSON snapshot are retained under the run's `threat_reports/` directory with an export ledger. Later evidence or review changes supersede previous reports and prevent them from being downloaded as current reports.
+
+New local endpoints: `GET /runs/{run_id}/reports`, `GET /runs/{run_id}/cases`, `POST /runs/{run_id}/cases/{row_index}/decision`, `POST /runs/{run_id}/cases/{row_index}/report.pdf`, and `GET /runs/{run_id}/threat-reports/{report_id}.pdf`. Case writes require the case token returned with the current evidence; stale writes return 409. PDF generation requires the pinned `reportlab` dependency.
+
+Independent automatic checks (SSOT 0.3): partial mode obtains two distinct classifier opinions and a third-model quality check. Automatic completion requires agreement, both classifier scores >=0.85, quality PASS >=0.85, valid structured responses, verified original source, and exact source evidence for positive claims. An automatic marker alone is insufficient. Context/format failures and disagreements remain human exceptions. Schema-constrained Ollama responses replace the unreliable primary MLX response path; Apertus remains available for comparison. The generative drafter configuration is legacy and unused; text preparation is deterministic. Model confidence is a self-reported score, not a measured accuracy probability.
+
+Automatic AI reporting (SSOT 0.4): under the approved any-positive rule, any current canonical, primary, independent, or structured-retry analysis assigning a positive antisemitism category at confidence >=0.30 routes directly to AI reports and generates a branded PDF. No human review or cross-model agreement is required for that reporting route; warnings, disagreement, failed quality checks and a negative final classification remain visible in the report. Confidence is the score for a category, not calibrated probability of harm. Only the closed antisemitism taxonomy is scored; generic harmful-content categories are not inferred. Reports are explicitly AI-generated and unconfirmed. Saved human decisions, including false alarms and follow-up decisions, take precedence and suppress automatic reports. Later analyses may supersede a report; all exported snapshots remain in audit history. Human-confirmed reports retain their separate confirmation and permission gates. The policy is snapshotted per run; new native runs inherit it automatically, and current runs require explicit activation/backfill.

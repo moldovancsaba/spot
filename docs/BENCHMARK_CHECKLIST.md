@@ -1,6 +1,6 @@
 # {spot} Benchmark Checklist
 
-Document date: `2026-05-03`
+Document date: `2026-11-08`
 Workspace baseline: `0.5.2`
 SSOT: `0.2`
 
@@ -14,7 +14,7 @@ This checklist is used to benchmark `{spot}` on the target Apple Silicon product
 - local runtime bootstrap completed
 - preflight passes
 - supported native app build/install path is available under `app/macos`
-- native acceptance smoke passes: `.venv/bin/python app/macos/native_acceptance_smoke.py`
+- native acceptance smoke passes: `.venv/bin/python app/macos/native_acceptance_smoke.py --run-id <actual-run-id> --check-intake`
 - benchmark workbook satisfies runtime input guardrails: `.xlsx`, <= `25 MiB`, <= `100000` rows, <= `20000` characters per `Post text` cell
 - Apertus MLX model weights are available locally
 - Ollama fallback and support models are available locally
@@ -42,7 +42,7 @@ Record before execution:
 Run before benchmark execution:
 - build and install `/Applications/spot.app`
 - launch `/Applications/spot.app`
-- run `.venv/bin/python app/macos/native_acceptance_smoke.py`
+- run `.venv/bin/python app/macos/native_acceptance_smoke.py --run-id <actual-run-id> --check-intake`
 
 Validate:
 - native workspace launches
@@ -122,3 +122,11 @@ Benchmark is considered acceptable when:
 - disagreement path is auditable
 - output metadata is correct
 - operator can retrieve all artefacts without engineering help
+
+## Reproducible German acceptance sample
+
+The project owner approved `samples/sample_germany.xlsx` for acceptance on 2026-11-08 and is the designated reviewer. `script/acceptance_german.py prepare` selects five unique, labelled, nonempty posts per canonical category using seed 20261108. Label spelling/case variants are normalized using the runtime taxonomy mapping; Holocaust Denial maps to Classical Antisemitism. Existing reference labels are kept separately and hidden from classifier input. Unlabelled/empty posts and duplicate text are excluded.
+
+Run the sample through the native watched inbox and use `full` review. Score the actual output with the script's `score` command. Failed-analysis fallback placeholders must not count as correct negatives. Report the confusion matrix, failures and review burden, and obtain reviewer adjudication before treating source-label agreement as accuracy. A balanced 30-row sample is preliminary evidence; it does not estimate natural prevalence or establish production accuracy.
+
+The native acceptance smoke attaches to an actual run and validates auth, review access, output download and hashes. It does not construct fictitious completed/recoverable runs or save client review decisions. Launch the installed app first. `--wait-seconds 0` reports pending checks while a run is processing; default waiting is bounded to 30 minutes.

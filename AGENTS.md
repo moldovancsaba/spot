@@ -1,10 +1,10 @@
 # Agent Guide
 
 Read these first:
-- [`READMEDEV.md`](/Users/moldovancsaba/Projects/spot/READMEDEV.md)
-- [`README.md`](/Users/moldovancsaba/Projects/spot/README.md)
-- [`docs/LOCAL_APPLIANCE_RUNBOOK.md`](/Users/moldovancsaba/Projects/spot/docs/LOCAL_APPLIANCE_RUNBOOK.md)
-- [`docs/HANDOVER.md`](/Users/moldovancsaba/Projects/spot/docs/HANDOVER.md)
+- [`READMEDEV.md`](/Users/Shared/Projects/spot/READMEDEV.md)
+- [`README.md`](/Users/Shared/Projects/spot/README.md)
+- [`docs/LOCAL_APPLIANCE_RUNBOOK.md`](/Users/Shared/Projects/spot/docs/LOCAL_APPLIANCE_RUNBOOK.md)
+- [`docs/HANDOVER.md`](/Users/Shared/Projects/spot/docs/HANDOVER.md)
 
 Working rules:
 - inspect the repo directly before changing it
