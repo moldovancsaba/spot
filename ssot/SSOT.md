@@ -56,10 +56,10 @@ No row may remain uncategorized.
 ## 6. Runtime Policy
 
 Primary classifier route:
-- `ollama://qwen2.5:7b`
+- `ollama://gemma2:9b`
 
 Independent verifier / fallback classifier route:
-- `ollama://gemma2:9b`
+- `ollama://qwen2.5:7b`
 
 Support lanes:
 - drafter: `ollama://granite4:350m`
@@ -67,7 +67,7 @@ Support lanes:
 - judge: `ollama://llama3.1:8b`
 - judge fallback: `ollama://gemma2:2b`
 
-The active local architecture uses schema-constrained Qwen classification, independent Gemma verification, and a Llama quality check. Apertus/MLX remains available for historical comparison; the controlled German investigation found frequent malformed and ungrounded responses on that route. Text preparation is deterministic whitespace-only normalization; the configured generative drafter is not invoked.
+The active local architecture uses schema-constrained Gemma classification, independent Qwen verification, and a Llama quality check. Apertus/MLX remains available for historical comparison; the controlled German investigation found frequent malformed and ungrounded responses on that route. Text preparation is deterministic whitespace-only normalization; the configured generative drafter is not invoked.
 
 ## 7. Determinism
 

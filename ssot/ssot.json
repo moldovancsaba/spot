@@ -14,7 +14,7 @@
   },
   "policy": {
     "prompt_version": "prompt-v0.3-independent-checks",
-    "model_version": "ollama:qwen2.5:7b",
+    "model_version": "ollama:gemma2:9b",
     "expected_columns": [
       "Item number",
       "Post text",
@@ -41,9 +41,9 @@
   "runtime": {
     "classifier": {
       "backend": "ollama",
-      "model": "qwen2.5:7b",
+      "model": "gemma2:9b",
       "fallback_backend": "ollama",
-      "fallback_model": "gemma2:9b"
+      "fallback_model": "qwen2.5:7b"
     },
     "drafter": {
       "backend": "ollama",

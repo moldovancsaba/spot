@@ -62,10 +62,10 @@ Important:
 ## Runtime Truth
 
 Primary route:
-- `classifier`: `ollama://qwen2.5:7b`
+- `classifier`: `ollama://gemma2:9b`
 
 Fallback and support routes:
-- `classifier fallback / independent verifier`: `ollama://gemma2:9b`
+- `classifier fallback / independent verifier`: `ollama://qwen2.5:7b`
 - `drafter`: `ollama://granite4:350m`
 - `drafter fallbacks`: `ollama://gemma3:1b`, `ollama://llama3.2:1b`
 - `judge`: `ollama://llama3.1:8b`

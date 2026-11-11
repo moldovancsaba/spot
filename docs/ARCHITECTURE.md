@@ -89,10 +89,10 @@ No writer lane exists in {spot}.
 ## Runtime Routing
 
 Primary runtime:
-- `ollama://qwen2.5:7b`
+- `ollama://gemma2:9b`
 
 Fallback / independent verifier:
-- `ollama://gemma2:9b`
+- `ollama://qwen2.5:7b`
 
 Configured legacy support runtimes (generative drafter unused):
 - `ollama://granite4:350m`
