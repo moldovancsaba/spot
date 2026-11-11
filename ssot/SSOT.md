@@ -159,7 +159,9 @@ in the report.
 - The policy is snapshotted per run; new native runs inherit it automatically, and current runs require
   explicit activation/backfill.
 
-Operational note (2026-11-11): this route is currently **disabled** by policy, and the reporting policy
-file for the active interrupted run sets `enabled: false`. Re-enabling requires an explicit decision
-backed by an adjudicated gold set; measured reference-label agreement does not yet support unassisted
-publication.
+**Current policy state: this route is DISABLED.** `automatic_reporting.enabled` is `false` in the
+governed default, so a new run does not generate automatic AI reports and writes no reporting policy
+snapshot. Activation is per run and explicit: it requires `enabled: true` in the SSOT plus an accepted
+decision record. Re-enabling requires an adjudicated gold set and a decision record; measured
+reference-label agreement does not support unassisted publication. See
+`docs/MODEL_SELECTION_DECISION_2026-11-11.md`.

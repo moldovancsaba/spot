@@ -1,6 +1,7 @@
 from __future__ import annotations
 import io
 import json
+import pathlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -80,6 +81,26 @@ class AutomaticReportTests(unittest.TestCase):
             self.login(role)
             self.assertEqual(self.client.get(download).status_code,200,role)
             self.assertEqual(self.client.post(generate).status_code,200,role)
+
+    def test_governed_default_keeps_automatic_reporting_disabled(self):
+        """Automatic publication must not resume by default.
+
+        The 2026-11-11 model-selection decision closes the classifier search and requires an adjudicated
+        gold set before any unassisted publication. A governed default of `enabled: true` would silently
+        restart branded AI reports on the next run.
+        """
+        repo = pathlib.Path(__file__).resolve().parents[1]
+        ssot = json.loads((repo / 'ssot' / 'ssot.json').read_text())
+        self.assertIs(ssot['automatic_reporting']['enabled'], False)
+
+    def test_enable_reporting_policy_refuses_when_disabled_and_writes_nothing(self):
+        with tempfile.TemporaryDirectory() as td:
+            runs = pathlib.Path(td)
+            (runs / 'r1').mkdir()
+            ssot = runs / 'ssot.json'
+            ssot.write_text(json.dumps({'automatic_reporting': {'enabled': False}}))
+            self.assertFalse(enable_reporting_policy(runs_dir=runs, run_id='r1', ssot_path=ssot))
+            self.assertFalse((runs / 'r1' / 'automatic_reporting_policy.json').exists())
 
     def test_repeated_generation_is_idempotent_and_tampering_requires_regeneration(self):
         row=self.row('Classical Antisemitism',.3);case=self.store(row);first=case['automatic_report']['report_id'];self.store(row)

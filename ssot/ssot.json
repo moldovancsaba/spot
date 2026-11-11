@@ -71,7 +71,7 @@
     }
   },
   "automatic_reporting": {
-    "enabled": true,
+    "enabled": false,
     "minimum_positive_confidence": 0.3,
     "trigger": "any_current_positive_analysis_including_retries",
     "human_review_required": false,
