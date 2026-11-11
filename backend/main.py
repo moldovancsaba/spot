@@ -23,7 +23,12 @@ from backend.services.auth_service import (
 )
 from backend.services.request_auth import require_permission, session_payload
 from backend.services.excel_service import intake_workbook, list_upload_records, read_upload_record
-from backend.services.run_lifecycle_service import discover_run_process_pid, pid_alive, pid_command
+from backend.services.run_lifecycle_service import (
+    DEFAULT_ACTIVE_RUN_STATES,
+    discover_run_process_pid,
+    pid_alive,
+    pid_command,
+)
 from backend.services.ops_db_service import (
     build_operations_overview,
     build_run_segment_summary,
@@ -75,7 +80,8 @@ app = FastAPI(title="{spot} Classification Backend", version="0.5.2")
 RUNS_DIR = Path(os.getenv("RUNS_DIR", str(Path(__file__).resolve().parent.parent / "runs")))
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 PYTHON_BIN = Path(os.getenv("SPOT_NATIVE_PYTHON_BIN") or sys.executable)
-BACKEND_ACTIVE_RUN_STATES = {"STARTING", "PENDING", "VALIDATING", "PROCESSING", "WRITING", "PAUSED"}
+# Single source of truth in run_lifecycle_service; keep the local name for call sites.
+BACKEND_ACTIVE_RUN_STATES = DEFAULT_ACTIVE_RUN_STATES
 SUPERVISOR_PID = int(os.getenv("SPOT_NATIVE_SUPERVISOR_PID", "0") or "0")
 _SUPERVISOR_WATCHDOG_STARTED = False
 
