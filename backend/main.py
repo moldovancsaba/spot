@@ -84,6 +84,22 @@ PYTHON_BIN = Path(os.getenv("SPOT_NATIVE_PYTHON_BIN") or sys.executable)
 BACKEND_ACTIVE_RUN_STATES = DEFAULT_ACTIVE_RUN_STATES
 SUPERVISOR_PID = int(os.getenv("SPOT_NATIVE_SUPERVISOR_PID", "0") or "0")
 _SUPERVISOR_WATCHDOG_STARTED = False
+# {spot} is a learning service, not a one-shot tool: cycles run on their own so reviewed evidence keeps
+# becoming training material and drift keeps being measured. Set to 0 to disable.
+LEARNING_CYCLE_INTERVAL_SEC = int(os.getenv("SPOT_LEARNING_CYCLE_INTERVAL_SEC", "21600") or "0")
+_LEARNING_SCHEDULER_STARTED = False
+
+
+def _learning_cycle_scheduler() -> None:
+    while True:
+        try:
+            from backend.services.learning_cycle_service import run_learning_cycle, runs_with_rows
+
+            for run_id in runs_with_rows(runs_dir=RUNS_DIR, limit=3):
+                run_learning_cycle(runs_dir=RUNS_DIR, run_id=run_id)
+        except Exception:  # noqa: BLE001 - a scheduled cycle must never take the service down
+            pass
+        time.sleep(LEARNING_CYCLE_INTERVAL_SEC)
 
 
 def _ensure_run_is_not_broken_for_resume(*, run_id: str, action: str) -> dict | None:
@@ -734,6 +750,36 @@ def startup_native_supervisor_watchdog() -> None:
     thread = threading.Thread(target=_native_supervisor_watchdog, name="spot-native-watchdog", daemon=True)
     thread.start()
     _SUPERVISOR_WATCHDOG_STARTED = True
+
+
+@app.on_event("startup")
+def startup_learning_cycle_scheduler() -> None:
+    global _LEARNING_SCHEDULER_STARTED
+    if LEARNING_CYCLE_INTERVAL_SEC <= 0 or _LEARNING_SCHEDULER_STARTED:
+        return
+    thread = threading.Thread(target=_learning_cycle_scheduler, name="spot-learning-cycles", daemon=True)
+    thread.start()
+    _LEARNING_SCHEDULER_STARTED = True
+
+
+@app.post("/learning/cycle/{run_id}")
+def post_learning_cycle(run_id: str, request: Request):
+    """Run one governed learning cycle for a run: feedback, drift, export, registry."""
+    require_permission(request, "signoff")
+    from backend.services.learning_cycle_service import run_learning_cycle
+
+    try:
+        return run_learning_cycle(runs_dir=RUNS_DIR, run_id=run_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+
+
+@app.get("/learning/cycles/{run_id}")
+def get_learning_cycles(run_id: str, request: Request, limit: int = 50):
+    require_permission(request, "view")
+    from backend.services.learning_cycle_service import list_cycles
+
+    return {"run_id": run_id, "cycles": list_cycles(runs_dir=RUNS_DIR, run_id=run_id, limit=limit)}
 
 
 @app.post("/classify/start/{run_id}")

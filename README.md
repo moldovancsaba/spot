@@ -251,6 +251,8 @@ Run, review, and artifact endpoints:
 - `GET /runs/{run_id}/artifacts`
 - `GET /runs/{run_id}/artifacts/download/{artifact_name}` (permission: `download_artifact`)
 - `GET /runs/{run_id}/events` (append-only run audit trail, newest first; permission: `view`)
+- `POST /learning/cycle/{run_id}` (run one governed learning cycle: feedback, drift, training export, registry; permission: `signoff`)
+- `GET /learning/cycles/{run_id}` (learning cycle registry; permission: `view`)
 - `POST /runs/{run_id}/review-rows/{row_index}`
 - `GET /runs/{run_id}/actions`
 - `POST /runs/{run_id}/signoff`
@@ -268,6 +270,21 @@ Native runtime and active-run endpoints:
 - `POST /classify/resume/{run_id}`
 - `POST /classify/stop/{run_id}`
 - `GET /classify/status/{run_id}`
+
+## Continuous learning
+
+{spot} runs as a learning service, not a one-shot tool. On backend startup a scheduler thread runs a learning
+cycle for the most recent runs that carry canonical rows, every `SPOT_LEARNING_CYCLE_INTERVAL_SEC` seconds
+(default 21600 = 6 h; set `0` to disable). A cycle:
+
+1. summarises human decisions and how many rows are now eligible training evidence,
+2. scores the run's canonical labels against the frozen reference so drift is measured continuously,
+3. exports eligible reviewed rows through the bounded `{trinity}` / `{train}` seam,
+4. appends an immutable record to `runs/<run_id>/learning/registry.jsonl`.
+
+It never mutates classification state, never retrains, and never changes the governed contract; adopting a
+model or threshold stays an explicit, recorded decision. Cycles can also be triggered on demand with
+`POST /learning/cycle/{run_id}`.
 
 ## Repo Layout
 
