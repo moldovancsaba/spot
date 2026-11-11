@@ -1005,6 +1005,56 @@ class BackendContractRegressionTests(unittest.TestCase):
     def test_run_events_endpoint_requires_auth(self) -> None:
         self.assertEqual(self.client.get("/runs/anything/events").status_code, 401)
 
+    def test_dead_feedback_items_table_is_not_created(self) -> None:
+        """feedback_items had no writer and no reader; a fresh database must not carry it."""
+        from backend.services.ops_db_service import _connect
+
+        with _connect(self.runs_dir) as conn:
+            names = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")]
+        self.assertNotIn("feedback_items", names)
+        self.assertIn("events", names)
+
+    def test_empty_legacy_feedback_items_table_is_dropped_on_init(self) -> None:
+        import sqlite3
+
+        from backend.services.ops_db_service import _connect, db_path
+
+        raw = sqlite3.connect(db_path(self.runs_dir))
+        raw.execute(
+            "CREATE TABLE feedback_items (id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT, "
+            "row_index INTEGER NOT NULL, feedback_type TEXT NOT NULL, payload_json TEXT NOT NULL, "
+            "created_at INTEGER NOT NULL)"
+        )
+        raw.commit()
+        raw.close()
+        with _connect(self.runs_dir) as conn:
+            names = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")]
+        self.assertNotIn("feedback_items", names)
+
+    def test_legacy_feedback_items_with_rows_is_preserved(self) -> None:
+        """The migration is guarded: it must never destroy data it does not understand."""
+        import sqlite3
+
+        from backend.services.ops_db_service import _connect, db_path
+
+        raw = sqlite3.connect(db_path(self.runs_dir))
+        raw.execute(
+            "CREATE TABLE feedback_items (id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT, "
+            "row_index INTEGER NOT NULL, feedback_type TEXT NOT NULL, payload_json TEXT NOT NULL, "
+            "created_at INTEGER NOT NULL)"
+        )
+        raw.execute(
+            "INSERT INTO feedback_items (run_id, row_index, feedback_type, payload_json, created_at) "
+            "VALUES ('legacy-run', 1, 'note', '{}', 0)"
+        )
+        raw.commit()
+        raw.close()
+        with _connect(self.runs_dir) as conn:
+            names = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")]
+            count = conn.execute("SELECT COUNT(*) FROM feedback_items").fetchone()[0]
+        self.assertIn("feedback_items", names)
+        self.assertEqual(count, 1)
+
     def test_run_classification_resumes_from_checkpoint(self) -> None:
         workbook_path = self.runs_dir / "resume-input.xlsx"
         wb = Workbook()

@@ -162,15 +162,6 @@ def _init_db(conn: sqlite3.Connection) -> None:
             FOREIGN KEY (upload_id, sequence_index) REFERENCES upload_rows(upload_id, sequence_index)
         );
 
-        CREATE TABLE IF NOT EXISTS feedback_items (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            run_id TEXT,
-            row_index INTEGER NOT NULL,
-            feedback_type TEXT NOT NULL,
-            payload_json TEXT NOT NULL,
-            created_at INTEGER NOT NULL
-        );
-
         CREATE TABLE IF NOT EXISTS events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             entity_type TEXT NOT NULL,
@@ -203,6 +194,7 @@ def _init_db(conn: sqlite3.Connection) -> None:
     _ensure_column(conn, "upload_rows", "source_name", "TEXT NOT NULL DEFAULT ''")
     _ensure_column(conn, "upload_rows", "source_sheet", "TEXT NOT NULL DEFAULT ''")
     _ensure_column(conn, "upload_rows", "source_row_index", "INTEGER")
+    _drop_dead_feedback_items_table(conn)
     if _run_rows_lineage_rebuild_required(conn):
         _rebuild_run_rows_table(conn)
     _ensure_column(conn, "run_rows", "analysis_trace_json", "TEXT")
@@ -288,6 +280,26 @@ def _resolve_managed_upload(
 
 def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
     return {str(row["name"]) for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+
+
+def _drop_dead_feedback_items_table(conn: sqlite3.Connection) -> None:
+    """Retire `feedback_items`.
+
+    The table was created but never written or read by any code path — only deleted when a run or
+    upload was purged. It is dropped here only when empty, so a database that somehow holds rows is
+    left untouched rather than losing data.
+    """
+    exists = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='feedback_items'"
+    ).fetchone()
+    if not exists:
+        return
+    try:
+        count = conn.execute("SELECT COUNT(*) FROM feedback_items").fetchone()[0]
+    except sqlite3.DatabaseError:
+        return
+    if count == 0:
+        conn.execute("DROP TABLE IF EXISTS feedback_items")
 
 
 def _run_rows_lineage_rebuild_required(conn: sqlite3.Connection) -> bool:
@@ -1466,7 +1478,6 @@ def count_other_runs_for_upload(*, runs_dir: Path, upload_id: str, excluding_run
 
 def delete_run_snapshot(*, runs_dir: Path, run_id: str) -> None:
     with _connect(runs_dir) as conn:
-        conn.execute("DELETE FROM feedback_items WHERE run_id = ?", (run_id,))
         conn.execute("DELETE FROM events WHERE entity_type = 'run' AND entity_id = ?", (run_id,))
         conn.execute("DELETE FROM run_rows WHERE run_id = ?", (run_id,))
         conn.execute("DELETE FROM run_attempts WHERE run_id = ?", (run_id,))
@@ -1477,7 +1488,6 @@ def delete_run_snapshot(*, runs_dir: Path, run_id: str) -> None:
 
 def delete_upload_snapshot(*, runs_dir: Path, upload_id: str) -> None:
     with _connect(runs_dir) as conn:
-        conn.execute("DELETE FROM feedback_items WHERE run_id IN (SELECT run_id FROM runs WHERE upload_id = ?)", (upload_id,))
         conn.execute("DELETE FROM run_rows WHERE upload_id = ?", (upload_id,))
         conn.execute("DELETE FROM upload_rows WHERE upload_id = ?", (upload_id,))
         conn.execute("DELETE FROM events WHERE entity_type = 'upload' AND entity_id = ?", (upload_id,))
