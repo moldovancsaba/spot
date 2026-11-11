@@ -30,7 +30,7 @@ Two references were used, because neither is authoritative:
 | `qwen2.5:7b` (previously primary) | 0.300 | 0.351 | 0.967 / 0.820 / 0.887 | 4.6 s | kept as verifier |
 | `gemma2:9b` (**current primary**) | **0.354** | 0.328 | 0.900 / 0.936 / **0.918** | 7.0 s | adopted |
 | `qwen3.8:27b` | — | — | — | 76 s | **rejected**: 86 % unparseable output, 8.5× slower |
-| `Apertus-8B-Instruct-2509-4bit` (MLX) | in progress | — | — | 14.9 s | structured output clean on the rows run so far; 0 malformed |
+| `Apertus-8B-Instruct-2509-4bit` (MLX) | not computable | — | — | 15.9 s | **rejected**: 89.7% malformed output (n=87) |
 | two-stage hierarchical (binary gate → forced 5-way) | 0.186 | — | 0.977 / 0.500 / 0.661 | 1.8 s | rejected |
 | flat + hand-built disambiguation rubric | 0.243 | — | — | 4.2 s | rejected |
 
@@ -79,10 +79,15 @@ Apertus ships in exactly two sizes, 8B and 70B (70.6B dense, Apache-2.0;
 - **70B: not evaluated, not feasible on this appliance.** Measured proxy: an 18 GB model already drove
   swap to 9 GB and an 8.5× slowdown. A ~40 GB model would exceed physical memory and run unusable
   slowly, not merely slower.
-- **8B (MLX): measurement in progress.** The previously documented "frequent malformed responses" has
-  not reproduced so far — the MLX route is returning structured output cleanly with 0 malformed rows to
-  date, at ~14.9 s/row. Full 300-row figure to be appended to §7 on completion. This does not change the
-  decision: an 8B candidate cannot resolve a taxonomy-boundary problem, and the close-out holds either way.
+- **8B (MLX): measured and rejected.** A 3-row smoke test looked clean and was misleading; the full run
+  (n=87, stopped once the rate was unambiguous) produced **89.7% `INVALID_MODEL_METADATA`**, plus
+  `UNGROUNDED_MODEL_SIGNAL` (18), `UNSTRUCTURED_MODEL_OUTPUT` (6) and `SOFT_SIGNAL_REVIEW` (69), at
+  15.9 s/row. The earlier documented claim in `ssot/SSOT.md` that this route returns "frequent malformed
+  and ungrounded responses" is therefore **confirmed, not contradicted** — the SSOT 0.4 route-off-Apertus
+  decision was correct.
+
+**Net: the Apertus family is not a viable direction on this appliance at either size** — 8B is unreliable
+within the structured-output contract, and 70B exceeds physical memory.
 
 **If someone wants a larger Apertus, it needs ≥64 GB unified memory (96 GB comfortable),** and even then
 the label problem remains the ceiling. A fine-tune on a human-confirmed gold set is the only path that
