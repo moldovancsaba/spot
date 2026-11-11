@@ -146,11 +146,19 @@ Do not rewrite historical release notes just to match the workspace baseline.
 
 ## Validation Expectations
 
+Test-only dependencies live in `requirements-dev.txt` (`httpx2`, `pypdf`) and are **not** part of the
+operator runtime install. Install both files on a maintainer machine:
+
+```bash
+.venv/bin/python -m pip install -r requirements.txt -r requirements-dev.txt
+```
+
 Minimum validation for routine repo work:
 
 ```bash
 git status --short --branch
 python3 -m py_compile src/*.py src/ensemble/*.py src/evaluation/*.py backend/main.py backend/models/*.py backend/routes/*.py backend/services/*.py
+bash script/verify-contracts.sh
 ```
 
 Operational validation when touching delivery/runtime behaviour:

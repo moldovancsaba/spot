@@ -1,0 +1,13 @@
+# Test / verification dependencies for {spot}.
+#
+# Runtime requirements live in requirements.txt (operator install).
+# Install both for maintainer verification:
+#   .venv/bin/python -m pip install -r requirements.txt -r requirements-dev.txt
+#
+# Why these are separate:
+#   httpx2  - Starlette 1.10's TestClient is built on httpx2, not httpx. Needed by all
+#             FastAPI contract regressions. Not needed at runtime.
+#   pypdf   - PDF assertions in the case/threat-report regressions. Not needed at runtime
+#             (runtime PDF generation uses reportlab, pinned in requirements.txt).
+httpx2==2.16.0
+pypdf==7.0.0
