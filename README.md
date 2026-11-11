@@ -294,7 +294,21 @@ cycle for the most recent runs that carry canonical rows, every `SPOT_LEARNING_C
 4. appends an immutable record to `runs/<run_id>/learning/registry.jsonl`.
 
 It never mutates classification state, never retrains, and never changes the governed contract; adopting a
-model or threshold stays an explicit, recorded decision. Cycles can also be triggered on demand with
+model or threshold stays an explicit, recorded decision.
+
+### From evidence to a better classifier
+
+Routing cannot fix discrimination: measured against the double-annotated reference, the current models flag
+88% of rows to reach recall 0.987, which is not a maintainable human workload. Learning is the only path, so
+the pipeline is explicit and reproducible:
+
+1. `script/build_gold_sample.py` regenerates the accepted sample texts from the approved workbook and seed.
+2. `script/build_training_set.py` joins them to the accepted reference and writes chat-format
+   `train/valid/test` JSONL plus a manifest. No post text is committed.
+3. `mlx_lm lora` fine-tunes a local MLX model on that set (`runs/learning/`).
+4. `script/evaluate_adapter.py` scores base vs adapter on the held-out split, so a model is adopted only on
+   measured improvement, never on expectation.
+5. Adoption is a recorded decision; the adapter path becomes part of the governed runtime configuration. Cycles can also be triggered on demand with
 `POST /learning/cycle/{run_id}`.
 
 ## Repo Layout
