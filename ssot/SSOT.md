@@ -106,6 +106,15 @@ Low-confidence rows must be flaggable.
 `partial` review flags low-confidence rows.
 `full` review flags every processed row.
 
+**Any-positive review rule (safety).** A row must be surfaced for human review whenever *any* analysis
+branch — canonical, primary, independent, or a structured retry — assigned a positive antisemitism
+category at confidence `>= 0.30`, even when the aggregate or final label is `Not Antisemitic`. Such rows
+carry the `ANY_POSITIVE_ANALYSIS` flag alongside `REVIEW_REQUIRED`. Only a complete independent-consensus
+certificate may clear them.
+
+This rule exists because a measured run showed that rows carrying no review flag contained 53% missed
+positives and 60% of all false negatives: a negative aggregate is not evidence of a clean row.
+
 ## 10. Security Posture
 
 - Local execution is the default security model

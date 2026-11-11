@@ -15,6 +15,46 @@ def requires_safety_review(flags, fallback_events=None) -> bool:
     return bool(set(flags or []) & MANDATORY_REVIEW_FLAGS or fallback_events)
 
 
+ANY_POSITIVE_REVIEW_THRESHOLD = 0.30
+ANY_POSITIVE_REVIEW_FLAG = "ANY_POSITIVE_ANALYSIS"
+
+
+def any_positive_analysis(result, threshold: float = ANY_POSITIVE_REVIEW_THRESHOLD) -> bool:
+    """True when any analysis branch assigned a positive category at or above the threshold.
+
+    Safety routing consequence: a row that ANY model called antisemitic must be reviewed by a human,
+    even when the aggregate/final label is `Not Antisemitic`. Measured on 300 rows, rows carrying no
+    review flag contained 53% missed positives and 60% of all false negatives, so the aggregate label
+    alone is not a trustworthy clearance.
+    """
+    import math
+
+    from .models import CANONICAL_CATEGORIES
+
+    positives = set(CANONICAL_CATEGORIES) - {"Not Antisemitic"}
+
+    def as_positive(entry) -> bool:
+        if not isinstance(entry, dict):
+            return False
+        if entry.get("category") not in positives:
+            return False
+        try:
+            score = float(entry.get("confidence"))
+        except (TypeError, ValueError):
+            return False
+        return math.isfinite(score) and score >= threshold
+
+    trace = getattr(result, "audit_trace", None) or {}
+    branches = [trace.get("initial"), trace.get("alternate")]
+    for entry in list(branches):
+        attempts = entry.get("attempts") if isinstance(entry, dict) else None
+        if isinstance(attempts, dict):
+            branches.append(attempts.get("initial_response"))
+            branches.append(attempts.get("retry_response"))
+    branches.append({"category": getattr(result, "category", None), "confidence": getattr(result, "confidence", None)})
+    return any(as_positive(entry) for entry in branches)
+
+
 def enforce_result_safety(result):
     from .models import CANONICAL_CATEGORIES
 
@@ -27,6 +67,10 @@ def enforce_result_safety(result):
         result.confidence = 0.0
     if requires_safety_review(flags, result.fallback_events) and not validated_auto_consensus(result):
         flags.add("REVIEW_REQUIRED")
+    # Safety routing: any single analysis calling the row antisemitic outranks a negative aggregate.
+    if any_positive_analysis(result) and not validated_auto_consensus(result):
+        flags.add("REVIEW_REQUIRED")
+        flags.add(ANY_POSITIVE_REVIEW_FLAG)
     result.flags = sorted(flags)
     return result
 

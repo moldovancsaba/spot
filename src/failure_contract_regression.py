@@ -5,7 +5,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from src.classifier import _apply_review_mode, _classify_with_backend, _extract_last_json_object, _mlx_generate_json, classify_row
-from src.models import InputRow
+from src.models import ClassificationResult, InputRow
+from src.failure_policy import enforce_result_safety, any_positive_analysis
 from src.preflight import _inference_smoke_checks
 from src.ssot_loader import load_ssot
 
@@ -13,6 +14,38 @@ SSOT = load_ssot(Path(__file__).resolve().parent.parent / 'ssot/ssot.json')
 
 
 class FailureContractRegressionTests(unittest.TestCase):
+    def test_any_positive_analysis_forces_review_over_a_negative_aggregate(self):
+        """A negative aggregate must not clear a row that some analysis called antisemitic."""
+        def result(**overrides):
+            base = dict(row_index=2, raw_category='Not Antisemitic', category='Not Antisemitic',
+                        confidence=.99, explanation='synthetic', flags=[])
+            base.update(overrides)
+            return ClassificationResult(**base)
+
+        positive_trace = {'initial': {'model': 'mock-a', 'category': 'Anti-Israel', 'confidence': .31, 'flags': []},
+                          'alternate': {'model': 'mock-b', 'category': 'Not Antisemitic', 'confidence': .99, 'flags': []}}
+        flagged = enforce_result_safety(result(audit_trace=positive_trace))
+        self.assertIn('REVIEW_REQUIRED', flagged.flags)
+        self.assertIn('ANY_POSITIVE_ANALYSIS', flagged.flags)
+
+        weak_trace = {'initial': {'model': 'mock-a', 'category': 'Anti-Israel', 'confidence': .29, 'flags': []},
+                      'alternate': {'model': 'mock-b', 'category': 'Not Antisemitic', 'confidence': .99, 'flags': []}}
+        clean = enforce_result_safety(result(audit_trace=weak_trace))
+        self.assertNotIn('REVIEW_REQUIRED', clean.flags)
+
+        negative_only = {'initial': {'model': 'mock-a', 'category': 'Not Antisemitic', 'confidence': .99, 'flags': []},
+                         'alternate': {'model': 'mock-b', 'category': 'Not Antisemitic', 'confidence': .99, 'flags': []}}
+        self.assertNotIn('REVIEW_REQUIRED', enforce_result_safety(result(audit_trace=negative_only)).flags)
+
+    def test_any_positive_analysis_reads_structured_retry_branches(self):
+        from src.models import ClassificationResult
+
+        retry_trace = {'initial': {'model': 'mock-a', 'category': 'Not Antisemitic', 'confidence': .99,
+                                   'flags': [], 'attempts': {'retry_response': {'category': 'Conspiracy Theories', 'confidence': .30}}}}
+        res = ClassificationResult(row_index=2, raw_category='Not Antisemitic', category='Not Antisemitic',
+                                   confidence=.99, explanation='synthetic', flags=[], audit_trace=retry_trace)
+        self.assertTrue(any_positive_analysis(res))
+
     def test_missing_invalid_and_null_categories_cannot_become_unreviewed_negatives(self):
         for category in ('missing', None, '', 'invalid-label', [], {}):
             for mode in ('full', 'partial', 'none'):

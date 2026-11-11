@@ -126,7 +126,7 @@ Evaluation defaults remain explicit and deterministic:
 - MLX is intended for locally available Apertus weights
 - No training on client data is part of {spot}
 
-New runs mark missing/invalid classifier categories as failed analysis with zero confidence and mandatory review, including `none` mode. The closed-taxonomy fallback is a placeholder, not a successful negative result. Existing artifacts are unchanged.
+New runs mark missing/invalid classifier categories as failed analysis with zero confidence and mandatory review, including `none` mode. Any single analysis that assigns a positive antisemitism category at confidence >= 0.30 forces human review (`ANY_POSITIVE_ANALYSIS`), even when the final label is `Not Antisemitic`; only a complete independent-consensus certificate clears a row. The closed-taxonomy fallback is a placeholder, not a successful negative result. Existing artifacts are unchanged.
 
 Before using classification results for a consequential decision or external handoff, follow the interim row-by-row safeguard in [Fallback and Failure Handling](docs/LOCAL_APPLIANCE_RUNBOOK.md#fallback-and-failure-handling). A fallback `Not Antisemitic` label or `Review Required = NO` alone does not establish a valid negative result.
 
