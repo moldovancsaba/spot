@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 
 from backend.services.ops_db_service import (
+    resolve_processed_rows,
     build_run_segment_summary,
     count_other_runs_for_upload,
     delete_run_snapshot,
@@ -106,15 +107,13 @@ def _resolved_total_rows(*, record: dict, progress: dict | None, segment_summary
 
 
 def _resolved_processed_rows(*, record: dict, progress: dict | None, canonical_stats: dict | None, segment_summary: dict | None) -> int:
-    canonical_processed_rows = int((canonical_stats or {}).get("processed_rows") or 0)
-    if canonical_processed_rows > 0:
-        return canonical_processed_rows
-    segment_processed_rows = int((segment_summary or {}).get("processed_rows") or 0)
-    if segment_processed_rows > 0:
-        return segment_processed_rows
-    if isinstance(progress, dict):
-        return int(progress.get("processed_rows") or 0)
-    return int(record.get("processed_rows") or 0)
+    # Shared rule with the queue projection; progress.json is only a last-resort tier there too.
+    return resolve_processed_rows(
+        canonical_processed_rows=int((canonical_stats or {}).get("processed_rows") or 0),
+        segment_processed_rows=int((segment_summary or {}).get("processed_rows") or 0),
+        indexed_processed_rows=int(record.get("processed_rows") or 0),
+        progress_processed_rows=int((progress or {}).get("processed_rows") or 0) if isinstance(progress, dict) else 0,
+    )
 
 
 def append_action(

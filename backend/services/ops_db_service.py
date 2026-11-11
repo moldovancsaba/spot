@@ -494,21 +494,45 @@ def _resolved_total_rows(
     return None
 
 
+def resolve_processed_rows(
+    *,
+    canonical_processed_rows: int = 0,
+    segment_processed_rows: int = 0,
+    indexed_processed_rows: int = 0,
+    progress_processed_rows: int = 0,
+) -> int:
+    """Single precedence rule for processed-row counts.
+
+    Canonical committed `run_rows` first, then segment counters, then the indexed run snapshot, and only
+    as a last resort the runtime `progress.json` hint. The file tiers exist because legacy and
+    interrupted runs have no canonical rows; but they must never outrank committed state, which is the
+    bug the earlier canonical-first work fixed.
+
+    Both the queue projection and the run-record projection resolve through this function, so two
+    surfaces cannot report different row counts for the same run.
+    """
+    if canonical_processed_rows > 0:
+        return canonical_processed_rows
+    if segment_processed_rows > 0:
+        return segment_processed_rows
+    if indexed_processed_rows > 0:
+        return indexed_processed_rows
+    return progress_processed_rows
+
+
 def _resolved_processed_rows(
     *,
     indexed_run: sqlite3.Row | None,
     canonical_stats: dict[str, Any] | None,
     segment_summary: dict[str, Any] | None = None,
+    progress: dict | None = None,
 ) -> int:
-    canonical_processed_rows = int((canonical_stats or {}).get("processed_rows") or 0)
-    if canonical_processed_rows > 0:
-        return canonical_processed_rows
-    segment_processed_rows = int((segment_summary or {}).get("processed_rows") or 0)
-    if segment_processed_rows > 0:
-        return segment_processed_rows
-    if indexed_run:
-        return int(indexed_run["processed_rows"] or 0)
-    return 0
+    return resolve_processed_rows(
+        canonical_processed_rows=int((canonical_stats or {}).get("processed_rows") or 0),
+        segment_processed_rows=int((segment_summary or {}).get("processed_rows") or 0),
+        indexed_processed_rows=int(indexed_run["processed_rows"] or 0) if indexed_run and indexed_run["processed_rows"] is not None else 0,
+        progress_processed_rows=int((progress or {}).get("processed_rows") or 0) if isinstance(progress, dict) else 0,
+    )
 
 
 def _resolved_processing_stats(
@@ -557,6 +581,7 @@ def _resolved_run_snapshot(runs_dir: Path, run_id: str, indexed_run: sqlite3.Row
         indexed_run=indexed_run,
         canonical_stats=canonical_stats,
         segment_summary=segment_summary,
+        progress=progress,
     )
     total_rows = _resolved_total_rows(
         indexed_run=indexed_run,

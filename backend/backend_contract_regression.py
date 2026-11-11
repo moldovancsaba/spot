@@ -1055,6 +1055,47 @@ class BackendContractRegressionTests(unittest.TestCase):
         self.assertIn("feedback_items", names)
         self.assertEqual(count, 1)
 
+    def test_processed_row_precedence_is_shared_between_projections(self) -> None:
+        """One rule for processed rows, so the dashboard and the queue cannot disagree.
+
+        Precedence: canonical committed rows -> segment counters -> indexed snapshot -> progress.json,
+        the last being a last-resort tier for legacy/interrupted runs that have no canonical rows.
+        """
+        from backend.services.ops_db_service import resolve_processed_rows
+        from backend.services.run_state_service import _resolved_processed_rows as run_state_rows
+
+        # full ladder
+        self.assertEqual(resolve_processed_rows(
+            canonical_processed_rows=3, segment_processed_rows=5,
+            indexed_processed_rows=7, progress_processed_rows=9), 3)
+        self.assertEqual(resolve_processed_rows(
+            canonical_processed_rows=0, segment_processed_rows=5,
+            indexed_processed_rows=7, progress_processed_rows=9), 5)
+        self.assertEqual(resolve_processed_rows(
+            canonical_processed_rows=0, segment_processed_rows=0,
+            indexed_processed_rows=7, progress_processed_rows=9), 7)
+        self.assertEqual(resolve_processed_rows(
+            canonical_processed_rows=0, segment_processed_rows=0,
+            indexed_processed_rows=0, progress_processed_rows=9), 9)
+
+        # the run-record projection resolves through the same ladder
+        record = {"processed_rows": 7}
+        segment = {"processed_rows": 5}
+        canonical = {"processed_rows": 3}
+        self.assertEqual(run_state_rows(
+            record=record, progress={"processed_rows": 9},
+            canonical_stats=canonical, segment_summary=segment), 3)
+        self.assertEqual(run_state_rows(
+            record=record, progress={"processed_rows": 9},
+            canonical_stats={}, segment_summary=segment), 5)
+        self.assertEqual(run_state_rows(
+            record=record, progress={"processed_rows": 9},
+            canonical_stats={}, segment_summary={}), 7)
+        # legacy run: no canonical rows, no snapshot counter -> the file tier is the only source
+        self.assertEqual(run_state_rows(
+            record={"processed_rows": 0}, progress={"processed_rows": 9},
+            canonical_stats={}, segment_summary={}), 9)
+
     def test_run_classification_resumes_from_checkpoint(self) -> None:
         workbook_path = self.runs_dir / "resume-input.xlsx"
         wb = Workbook()
