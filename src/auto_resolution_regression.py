@@ -16,7 +16,7 @@ SSOT=load_ssot(Path(__file__).resolve().parents[1]/'ssot/ssot.json')
 
 def consensus_result(mode='partial'):
     text='Synthetic source: the weather is sunny.'
-    initial=ClassificationResult(2,'Not Antisemitic','Not Antisemitic',.96,'Synthetic assessment',['REASSESSMENT_REQUESTED'],soft_signal_score=.6,soft_signal_flags=['SOFT_SIGNAL_DUAL_LOYALTY'],soft_signal_evidence=['the weather is sunny'],resolved_model_version='mlx:primary',drafted_text=text)
+    initial=ClassificationResult(2,'Not Antisemitic','Not Antisemitic',.96,'Synthetic assessment',['REASSESSMENT_REQUESTED'],soft_signal_score=0,soft_signal_flags=[],soft_signal_evidence=[],resolved_model_version='mlx:primary',drafted_text=text)
     alternate=ClassificationResult(2,'Not Antisemitic','Not Antisemitic',.94,'Independent assessment',[],soft_signal_score=0,soft_signal_flags=[],soft_signal_evidence=[],resolved_model_version='ollama:independent',drafted_text=text)
     with patch('src.classifier._classify_with_backend',return_value=alternate),patch('src.classifier.run_judge',return_value=(.95,'PASS',[])):
         return _adjudicate_targeted_row(InputRow(2,'synthetic',text),initial,SSOT,mode)
@@ -26,11 +26,36 @@ class AutomaticResolutionTests(unittest.TestCase):
         r=consensus_result()
         self.assertTrue(validated_auto_consensus(r))
         self.assertNotIn('REVIEW_REQUIRED',r.flags)
-        self.assertIn('SOFT_SIGNAL_REVIEW',r.flags) # retained, not hidden
         self.assertEqual(r.confidence,.94)
         self.assertEqual(len(r.model_votes),2)
         self.assertTrue(r.audit_trace['initial'])
         self.assertIn('REVIEW_REQUIRED',consensus_result('full').flags)
+
+    def test_soft_antisemitism_signal_blocks_certificate_clearance(self):
+        """A detected soft signal is evidence of problematic content and must reach a human.
+
+        The certificate may not clear it: clearing would hide the very rows the soft-signal detector
+        exists to surface.
+        """
+        r = consensus_result()
+        r.soft_signal_score = .6
+        r.soft_signal_flags = ['SOFT_SIGNAL_DUAL_LOYALTY']
+        r.flags.append('SOFT_SIGNAL_REVIEW')
+        self.assertFalse(validated_auto_consensus(r))
+        from src.failure_policy import enforce_result_safety
+        self.assertIn('REVIEW_REQUIRED', enforce_result_safety(r).flags)
+
+    def test_operator_can_disable_certificate_clearance_entirely(self):
+        """SPOT_DISABLE_AUTO_CLEAR=1 is the safest posture: nothing clears without a human."""
+        import os
+
+        r = consensus_result()
+        self.assertTrue(validated_auto_consensus(r))
+        with patch.dict(os.environ, {'SPOT_DISABLE_AUTO_CLEAR': '1'}):
+            from src.failure_policy import enforce_result_safety
+
+            self.assertFalse(validated_auto_consensus(r))
+            self.assertIn('REVIEW_REQUIRED', enforce_result_safety(r).flags)
 
     def test_marker_missing_proof_failure_disagreement_and_low_confidence_cannot_clear_review(self):
         valid=consensus_result()

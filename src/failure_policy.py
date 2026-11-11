@@ -15,6 +15,22 @@ def requires_safety_review(flags, fallback_events=None) -> bool:
     return bool(set(flags or []) & MANDATORY_REVIEW_FLAGS or fallback_events)
 
 
+# Flags that make a row ineligible for certificate-based review clearance. A soft antisemitism signal is
+# evidence of problematic content; clearing it without a human defeats the purpose of detecting it.
+CERTIFICATE_BLOCKING_FLAGS = frozenset({"SOFT_SIGNAL_REVIEW"})
+
+def certificate_clearance_disabled() -> bool:
+    """True when the operator has turned off certificate-based review clearance.
+
+    SPOT_DISABLE_AUTO_CLEAR=1 is the safest posture: every row reaches a human, no row is ever cleared
+    by model agreement alone. It exists because the independent-consensus certificate rests on two
+    models; where both share a blind spot, their agreement is not evidence.
+    """
+    import os
+
+    return os.getenv("SPOT_DISABLE_AUTO_CLEAR", "0").strip().lower() in {"1", "true", "yes", "on"}
+
+
 ANY_POSITIVE_REVIEW_THRESHOLD = 0.30
 ANY_POSITIVE_REVIEW_FLAG = "ANY_POSITIVE_ANALYSIS"
 
@@ -83,9 +99,13 @@ def validated_auto_consensus(value) -> bool:
     get = value.get if isinstance(value, dict) else lambda key, default=None: getattr(value, key, default)
     flags = set(get('flags') or [])
     trace = get('audit_trace') or {}
+    if certificate_clearance_disabled():
+        return False
     if 'AUTO_RESOLVED_CONSENSUS' not in flags or trace.get('automatic_resolution',{}).get('policy') != 'independent-consensus-v1':
         return False
     if flags & MANDATORY_REVIEW_FLAGS or set(get('fallback_events') or []) - {'SECOND_PASS_ALT_ROUTE'}:
+        return False
+    if flags & CERTIFICATE_BLOCKING_FLAGS:
         return False
     first, second = trace.get('initial') or {}, trace.get('alternate') or {}
     category = get('assigned_category') or get('category')

@@ -106,6 +106,15 @@ Low-confidence rows must be flaggable.
 `partial` review flags low-confidence rows.
 `full` review flags every processed row.
 
+**Purpose of review routing.** {spot} exists to find antisemitic rows and put them in front of a human.
+Recall is the product requirement: a missed antisemitic row is the failure mode that matters, while an
+extra reviewed row is an acceptable cost. Routing therefore widens on any suspicion and never narrows on
+model agreement alone.
+
+**Suspicion** for routing purposes means any of: a positive category from any analysis branch at
+confidence `>= 0.30`; any positive soft-antisemitism signal; a judge verdict of `REVIEW` or `FAIL`; a
+disagreement between classifier passes; a fallback or analysis-failure event; or a non-canonical category.
+
 **Any-positive review rule (safety).** A row must be surfaced for human review whenever *any* analysis
 branch — canonical, primary, independent, or a structured retry — assigned a positive antisemitism
 category at confidence `>= 0.30`, even when the aggregate or final label is `Not Antisemitic`. Such rows

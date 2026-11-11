@@ -13,7 +13,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable, List, Optional, Tuple
 
-from .failure_policy import MANDATORY_REVIEW_FLAGS, enforce_result_safety, validated_auto_consensus
+from .failure_policy import MANDATORY_REVIEW_FLAGS, certificate_clearance_disabled, enforce_result_safety, validated_auto_consensus
 from .models import CANONICAL_CATEGORIES, ClassificationResult, InputRow, SSOT
 from .defaults import DEFAULT_ALLOW_REMOTE_OLLAMA, DEFAULT_OLLAMA_URL
 from .lanes import format_model_version, load_lane_config, parse_model_spec
@@ -734,6 +734,8 @@ def _audit_result(result: ClassificationResult) -> dict:
 
 
 def _can_resolve_consensus(initial, alternate, judge_score, verdict, judge_flags, text):
+    if certificate_clearance_disabled():
+        return False
     if alternate is None or not initial.resolved_model_version or initial.resolved_model_version == alternate.resolved_model_version:
         return False
     blocking = MANDATORY_REVIEW_FLAGS | {"UNGROUNDED_MODEL_SIGNAL"}
