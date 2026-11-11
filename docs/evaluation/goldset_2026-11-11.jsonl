@@ -1,0 +1,300 @@
+{"sample_id": "S0001", "text_sha256": "487ce0492ec26c4edb2f0d9c2e797aa631e71bbf7c4f8af7b2f651fe7444941d", "label": "Not Antisemitic", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0002", "text_sha256": "dee9f84fa94d1381e16bf81b0d3cd875242823707296b5ca7b84a98cc3669058", "label": "Conspiracy Theories", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0003", "text_sha256": "f9fb0496efd06b154f0390a6a91020b4f051990f993344d1104ae6f48681dd98", "label": "Anti-Israel", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0004", "text_sha256": "c837dcadb928305982e7a7976243cfc146c1615af74f967c68ce0f203e914a57", "label": "Not Antisemitic", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0005", "text_sha256": "e90feb373ae9c76a4dacafbe386d2c488e51f1e77dc99260acea8d519b3b8eb4", "label": "Not Antisemitic", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0006", "text_sha256": "abe5ddef623a627e2e06dcd8d50eb6276ac2fa98df557d9a74d020352a0a019f", "label": "Not Antisemitic", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0007", "text_sha256": "f2d43177fb9e94c67b0b8bc9f1548aee94f9d09bbb4f52f1a709decaa1953d6b", "label": "Conspiracy Theories", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0008", "text_sha256": "67326c3c8b20dcfd5301db72f58e5c38f3f9e356e6a0aff648b7fdd5a5a413ee", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0009", "text_sha256": "3b380bd92996111b8c0fd2c83352f56645bca685b4ba11cb5d6693eda4bdc959", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0010", "text_sha256": "fcc45ebe3bf35d540fbc2851bf1b529be0f61a71b68ba8592ec233a69e18eee3", "label": "Conspiracy Theories", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0011", "text_sha256": "a7d8f2784fd80a4d15f0b0987789dd2368da8152be1471925fff7fe47f35ecb3", "label": "Anti-Judaism", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0012", "text_sha256": "36eaa6c784246a08879307ee620a7d2e0a1bc8fdc7d7266597efe3b1da9d8c92", "label": "Anti-Israel", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0013", "text_sha256": "a65ab6fd6d2b91d806ba3542e34b38d10ee43ec95b7cea7faca9f1fad9b1eb6f", "label": "Not Antisemitic", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0014", "text_sha256": "8ed7bd3c72e346bb17d84e1c90c04cd1fce82baaa4507eb98466dc054c8b7f3f", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0015", "text_sha256": "142d1525bf952070af254bb21844dd629d97a1f2bed577910b5f86518049ba0a", "label": "Not Antisemitic", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0016", "text_sha256": "c46c079ec8eac60a5b7c8529a24a55ec8b03fc8daa4e3d3a733d039c75188583", "label": "Not Antisemitic", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0017", "text_sha256": "c9e2dda27d75f0991785e4f675e2245515c914303790e4cac1679cac414f12f1", "label": "Not Antisemitic", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0018", "text_sha256": "b2937197d78318586c08b0851d052c8e6628c5b3d78c0f13add55c3a3c2e508f", "label": "Anti-Israel", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0019", "text_sha256": "acfab43ff756d32cda2720583e58013f96be9475f65d1fdba0ed784fd04f8bb2", "label": "Anti-Israel", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0020", "text_sha256": "94b1a3b107292cb0b5ed5201560cc0942c198db6c7c87524dd98be84a9d39c74", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0021", "text_sha256": "5dfd98907c952d7e31c2ddaa4529818e338eb5342a113e50efcaa515b6e11cd1", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0022", "text_sha256": "6cc299e19e2db6663f5714500c78df0800bdc80dd95ea7f661fc4d62e473cea1", "label": "Conspiracy Theories", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0023", "text_sha256": "4729ce20b0b09e060d26488a3c62e1ed736594c8f541e3a407c1441c65a503de", "label": "Classical Antisemitism", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0024", "text_sha256": "264fe55147d39d0d65d43dc76031b8524db8ee8d2dfa082e2ccb02238273789d", "label": "Not Antisemitic", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0025", "text_sha256": "e24acfde4b3846b86674778bcde4e53f07f9409384740ded76e6cedfce8fa0de", "label": "Conspiracy Theories", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0026", "text_sha256": "d9459eb30b26ca7ef8ca3f493027dfbb6c7731034a0d0e46635f3b1138413163", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0027", "text_sha256": "20ab8213a703e42a9608606b266ea23b36c23623369614e1e6bb45bb4f47dd2d", "label": "Anti-Israel", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0028", "text_sha256": "0612571c95916cc7bf77b66153d7878f5fa108edda91b334918bbc87acafa734", "label": "Anti-Israel", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0029", "text_sha256": "f995c2192c61a6254813f7e12d371e6b150e133e38bcb3973b08a0243f9ef4f5", "label": "Anti-Israel", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0030", "text_sha256": "7fc34c78a0bd7ceb9db9fad8e38894ab82de47b9f21010a72516275370bda518", "label": "Anti-Israel", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0031", "text_sha256": "7d4f9fb10f23b08602f74d4f0dc00c39d2535136dfcec6a967b9d3dfab8878d4", "label": "Not Antisemitic", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0032", "text_sha256": "3b4c61387ee660acfb9648893cebddcad077ec33cd3aa63657d00848430d9da4", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0033", "text_sha256": "15e7c8aded982a627bd3b604545fa40791f43fef5ba6bc35c00e96a83fe2f128", "label": "Anti-Israel", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0034", "text_sha256": "ff0d224ffb3f64996a9c11add203a1005c89ae1dd8bd586ad7d33a36364702f2", "label": "Conspiracy Theories", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0035", "text_sha256": "8f8b43d6a51eb5b6f566b3e5985318f093f8277b665672689ab6e5a9effcd312", "label": "Anti-Judaism", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0036", "text_sha256": "05c4dfe345b3d0926a13473fe1b22fef5a63aa95d98dc9e728570f706d421852", "label": "Anti-Israel", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0037", "text_sha256": "6f9ad4114cf31de6b9e4e31fd86f52fa8d35c9668ad5dca214f8eb2786b7e21c", "label": "Not Antisemitic", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0038", "text_sha256": "caa89e18548b6ffd8f72df8439041795297cbfa287ebf488bdb26efcfffac68c", "label": "Not Antisemitic", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0039", "text_sha256": "cd9972718462be38ed686891f60e30ba85c9de88b46a31fa647028bbc806a07a", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0040", "text_sha256": "749280ad627eed0288164ea773ebf303c1620db58d6bdd56aa61f021784eb5c4", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0041", "text_sha256": "1c8d097404c0771a994f58eac13fab50b9d4d1f62269b8481802b8fbbdd0b949", "label": "Structural Antisemitism", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0042", "text_sha256": "293465e6cd238c2997b28944c489d84a4d4a97c62cb4a34195c3f7e353d6fb3b", "label": "Anti-Israel", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0043", "text_sha256": "ae97af70850d6b68c25a3b36d92f708164e7a0327d7303018e0c39d103770f83", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0044", "text_sha256": "583b8cc5f15ffde2b429057ea6175304a24e791f3357520e9f3495fe43f6fa81", "label": "Anti-Judaism", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0045", "text_sha256": "11bfd8866bb601f16c2b5c00525e303069d9cb98ec0676e6f7912d8407aadcd8", "label": "Not Antisemitic", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0046", "text_sha256": "c9ae08cb484d5728e741eef808328f04d00fc1597359e84bd5d3ad123876f9c0", "label": "Not Antisemitic", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0047", "text_sha256": "7acd4fbedc3bb2ada9eead801c2137dabceedbd27a802fdb778fbe2bb0437149", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0048", "text_sha256": "031596ccc882b56871d788e418d96fab4148d51419ea87d503065c2fa2d31523", "label": "Conspiracy Theories", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0049", "text_sha256": "e794cb9e45b4e7a8014edb0df19159be5bbc95ab124944b285ccb244e4115382", "label": "Not Antisemitic", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0050", "text_sha256": "e245e76c38bea4dfeb46026b6bb4b36b71de66784dd14b20a06fa5f03483126f", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0051", "text_sha256": "55b3d074c3818957d7f0f6ca4be42b96217782ac8b83b9fac18133bdc4de4b2f", "label": "Anti-Judaism", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0052", "text_sha256": "e274275a57f01c7f2c01466cb18c3d9c541afdb512f6bb0895eba83c5d3f009f", "label": "Conspiracy Theories", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0053", "text_sha256": "b4fa463377bb3a51f66870f711371fb028fdd3c50d505d918f49e819e24c2660", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0054", "text_sha256": "535c42e3cda65fa17087f2121f6c81471e0d68950ff05bc207dfd4ddabf07f03", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0055", "text_sha256": "a027b015df46ec5bb5ccb3b85a5daf01a98c5e14b9b83183192c140ad2a4fb6b", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0056", "text_sha256": "0aef29b48351332ee1fea6a63e2fd68df051e4604b2016a183b832ee7243a23f", "label": "Anti-Israel", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0057", "text_sha256": "7102fd331be5b5e5f3597275c5efe6fee428ef9a81ddb2b7f74f6cae37166b3d", "label": "Classical Antisemitism", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0058", "text_sha256": "d63735ef3ccb1ee193cd4470ec442273f91a8a10aeee15b60ac1acbe71699cdd", "label": "Not Antisemitic", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0059", "text_sha256": "21891e48ffa361ca342f39cf97249ce69dbd33e96dc2917c5707fa5afadc77d7", "label": "Not Antisemitic", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0060", "text_sha256": "a044f3e4af3adcd41ef8616f4d0858864ef86012d75042f9428e7d37663d8e6d", "label": "Conspiracy Theories", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0061", "text_sha256": "01de0cb46f0d7399491e3da00deebed4f104a8933a85e8efd1ed62ff357e2560", "label": "Anti-Israel", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0062", "text_sha256": "2839af677e1d6030961f04f4cc465a56b58e263fcc8f8a34ea72c33e80384da1", "label": "Not Antisemitic", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0063", "text_sha256": "bdb0ccb3f1d988e7ba10f8addfad8fa4637875448fdcaa4f29f6680cf195cb9b", "label": "Not Antisemitic", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0064", "text_sha256": "1648d39c4d693ee357373e93ddd6a2ca4e95dcc26d28d2e5b0094baf6dd57180", "label": "Conspiracy Theories", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0065", "text_sha256": "5b432c1606677a6961b7c2f5a8ba43d40d86f4d97cf7059536d370e4bdd31d3e", "label": "Not Antisemitic", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0066", "text_sha256": "4d4a84f82e6f4b33ac21e09d0ac4428b6e0806fb5f4589de68a91a538967ae62", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0067", "text_sha256": "c5ff0587452f2df377066cb87a217d945f55e3f4bfd393d5e740dbf6010c0cfa", "label": "Anti-Israel", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0068", "text_sha256": "c31622da3534d18bf8f96c0ef16b8856244e9ba28b0e6146d6dad434ead9b6b5", "label": "Not Antisemitic", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0069", "text_sha256": "22884dd8fecc66d644b6ab3b18f9b144f40fc06ae767bffa4d0d0e4d383bd800", "label": "Not Antisemitic", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0070", "text_sha256": "f046320a4e0505256448544e5736761b627bfa3a0bf02c0c6e55150a572520da", "label": "Not Antisemitic", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0071", "text_sha256": "3ec7a449cbdd6dabff0d6c94e0d780186d97e64dc427f497f708a6b5bcfe9ef7", "label": "Not Antisemitic", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0072", "text_sha256": "3cd90039f1c4bf49fb55df6a6319e1c9adedbb99f6f7796162462e2115bc07ed", "label": "Anti-Israel", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0073", "text_sha256": "0fde4017fd1703a280219e01720f6841a69be1f8b90a6fc32214dc13ea62b516", "label": "Conspiracy Theories", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0074", "text_sha256": "a02b780d3cb0e9f849f80e25e00264f95b57e59d3a1a4ef7575b0c916f278031", "label": "Conspiracy Theories", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0075", "text_sha256": "57cc4e08b5aa95b6ee3af43e2aed37c283ff6c2217a1851fbb2ede510d57cf77", "label": "Anti-Israel", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0076", "text_sha256": "45b4823a92a2be5baff51d5cc8f8605d8989ab5be6a7e9ffb3b9ac9c734f87df", "label": "Not Antisemitic", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0077", "text_sha256": "00896004ec4d30b45c04ff39b3a4181e9a5f2874cfe1ebc15c240f323563c079", "label": "Anti-Israel", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0078", "text_sha256": "0870506ffee23707a09893bbe063f9d45519d0a50ed622188dcc9b48350109b2", "label": "Not Antisemitic", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0079", "text_sha256": "52a6b2265fb25c1957144eb9e4a469cf06dcb22aab520482c89cf9544ab0bce9", "label": "Conspiracy Theories", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0080", "text_sha256": "2d47f6ec947bdd005b13d83db2cca412fbc3c5bd26044962911b7ce20edf82cc", "label": "Not Antisemitic", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0081", "text_sha256": "3a9a3cf6066de96f890d744f332a7fbe32f80a75f816167ec818d87bc3fed3e7", "label": "Conspiracy Theories", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0082", "text_sha256": "32c3cbe8c99362fe8fe4508adc6fe907467dce993e7636ef97c51fd12ae0c0ec", "label": "Classical Antisemitism", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0083", "text_sha256": "6cd9a37809b68d8ba3661d17f48d76419ea2985b4a6351b31505630b197a1982", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0084", "text_sha256": "a0380c5c1198f94b7f5f849fd66138a5e9d50d8bbb641dd0137d47a4ce8909d7", "label": "Conspiracy Theories", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0085", "text_sha256": "644058937cba4e80c0bea906c938bfafba605cbc716c96a2f18b539109174042", "label": "Anti-Israel", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0086", "text_sha256": "72b82d78b87f61c13bed2439ab3f5dd6cb993513eaf599ff4f5d26a781174c14", "label": "Not Antisemitic", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0087", "text_sha256": "d0159cef788aaeba0e295fb2af4d0829066752c2f8703ee4caad45480e61d6a3", "label": "Conspiracy Theories", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0088", "text_sha256": "e668e74332465765afd181e2aa03d2061d329fddc0b0cba103a16089484cd654", "label": "Classical Antisemitism", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0089", "text_sha256": "919ae7fac8170361c6fe854627fe3832c61276488e989f37762b149f02949032", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0090", "text_sha256": "381908cbba4302a97d00db770c385cb42b417411ae87149a26567f4d9464f424", "label": "Conspiracy Theories", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0091", "text_sha256": "8c7218ef6f23966cebdeda5ac472c11d1211f0ccad1f0a199e9dfd517210c8f7", "label": "Not Antisemitic", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0092", "text_sha256": "c9511e8ff977a54f6c2702df899e5c2653f3aca21cfcb3485d812eea149f3fea", "label": "Conspiracy Theories", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0093", "text_sha256": "b267728fbb7fbbd169073a7cee3c1da218ecda5298ac24760a02ecacd11f8f41", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0094", "text_sha256": "a36f2df7e3da81f462c681c5e8f752d6c95653533a10e3297468416a46c599c2", "label": "Anti-Israel", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0095", "text_sha256": "f000f64a936a34b336bc47d301b86dcb1cf849dc79b451f45ed8477f2a14a7ed", "label": "Anti-Israel", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0096", "text_sha256": "69aadf304dae424223c72ed49852421d9e7f76d805cda8f9d6d8b24f3a94e379", "label": "Anti-Judaism", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0097", "text_sha256": "b5c30cc00e2b97c9c800aff80a5708e1f19afa819b197b0afcad01051fbc5007", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0098", "text_sha256": "9f25b4e5415fd89e7863d35f18830339c16d280bd95a887e79d7e5df71213ea5", "label": "Anti-Judaism", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0099", "text_sha256": "497b103e93af5332b742357b93d1b0128bb45603069a0518529ce6e67bbab5be", "label": "Conspiracy Theories", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0100", "text_sha256": "df13d71500834c6f1db02c958f0c3c3c56ebb54338de03c069165e4827a0c30f", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0101", "text_sha256": "de3372b20a59950222b0f701e1f3edbbb3d54e88b44baeb6b6d005e37e23c0b9", "label": "Conspiracy Theories", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0102", "text_sha256": "3c10576f325bda35fcbc7bd9298363d7c84bd8d9220eee56dbabb3af5ad07f0d", "label": "Conspiracy Theories", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0103", "text_sha256": "30a5ee3ca17434d78c1c0a7b5d1f72d9884ec0d3d03adfd92bd0a9ef57a846ed", "label": "Anti-Israel", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0104", "text_sha256": "5f7a0d4d7582783eb792469502d99a9ff48532d220b8365000731d84c31bfdd9", "label": "Not Antisemitic", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0105", "text_sha256": "c79fb086f5d29bedcef2cca561812977bda525b024ef7ab3211dc56fea1ed500", "label": "Not Antisemitic", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0106", "text_sha256": "c57fa85ba0b18ccdd2007d1284dfd04ea15c0e35158a975966c5cd1a243771e3", "label": "Not Antisemitic", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0107", "text_sha256": "644e0cc90379a0595c09f3c8f459b8165f294ac501b9eb802d8739f13b90d114", "label": "Conspiracy Theories", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0108", "text_sha256": "71db21ee7e24d3608a2f2f2407aad892f9fa930b1376ba5657e3000bca2fefbb", "label": "Conspiracy Theories", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0109", "text_sha256": "93eabf70d77505e6eb155f42ee5efb12b3a1540843a3e29ac1293dc04be41d29", "label": "Not Antisemitic", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0110", "text_sha256": "a81d20c60746f2715766907d03bdc9785cd5477834b870c80a1392f2d293d815", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0111", "text_sha256": "f93c601a41d7f6a406e5d7687fa5925c4586a7cc25e05da7f6bdfd55162f7454", "label": "Not Antisemitic", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0112", "text_sha256": "d56987150415ac452b3d3f07a07908a600b00a496f31839519b5c343a8d24d77", "label": "Not Antisemitic", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0113", "text_sha256": "1a62920a0fc10e5cd732f43302b72d6ba7c88d995a3319e8c0576545a84984f0", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0114", "text_sha256": "2bcdce8976d96d1fe2718ef57d82c52c4d63637832a56af69cf253818e36e813", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0115", "text_sha256": "8456f4112113416d8097261b454d364b3b5a88ed9284eb6d3ee73976a5d6aeb0", "label": "Anti-Israel", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0116", "text_sha256": "9097efe11a0d843edb3535663a1ecab21f8b24a9332ee5b3fb707442095691b6", "label": "Conspiracy Theories", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0117", "text_sha256": "fc3f272323389a126ef4e1e0922476d1c0c6dd7b7d4d256dc7d122c6ccf52746", "label": "Anti-Israel", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0118", "text_sha256": "62ea131f5bb8fac6aeb856299f92397ef10143cafd0caf3c016fd890f058e658", "label": "Anti-Israel", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0119", "text_sha256": "29acf4bba9fea3e3b5b1d6b906c33b59ce266494b8c945ee2e1f400f66df5f85", "label": "Conspiracy Theories", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0120", "text_sha256": "f4f502032ba845c6476de8501ea13e54bb20d9d7cb0ee3153d24409daed8f65c", "label": "Anti-Judaism", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0121", "text_sha256": "dcda3b6aef93d46b688ab7bb8cc7f7d2dab8b21251b9b972db5be9cdc8b77f35", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0122", "text_sha256": "cfe2b6c0e9bbd2a1b89d6b665fa75c02bac3d41a9f4b4c5d559703e17fbe6517", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0123", "text_sha256": "b71f6d361d8c07618e1001f5ae2c29622614969b9efa08b0ded7cea80c351aa0", "label": "Not Antisemitic", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0124", "text_sha256": "be62a5fab192bbb9b4e36982675521b0f80b6d64c6fd5228ab0d854cb93ef0a8", "label": "Anti-Israel", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0125", "text_sha256": "dd782ed84be8ab50e67e93228a5894edaf5ee5d195d36e2090ef2aa616fef00e", "label": "Anti-Israel", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0126", "text_sha256": "d73ea48da830cd6f649a161c793cfdc2f7dfe779ef95f86f7e9bdf073b9e9aef", "label": "Anti-Israel", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0127", "text_sha256": "9f1c8578bbb06df38360db0d277e0df22e81674801345d49e75e52ff341ee1c0", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0128", "text_sha256": "5a95a830e088897febf42691ed5cd0fe38bc7f399bc47eb577cf1cf1d5c0ce63", "label": "Not Antisemitic", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0129", "text_sha256": "fe76f9ee62619d8a7638e18a9992108ba9505559e2c45350d12750e9a454183e", "label": "Anti-Israel", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0130", "text_sha256": "20933b9f733f7c1ab74e9220ad107166f90d0a0e33e35df13401a17d80cfa739", "label": "Anti-Judaism", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0131", "text_sha256": "30f8035bbd1d9da8f7270fa04a9cab499c20f1f302640340fa6130b36422d70e", "label": "Anti-Israel", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0132", "text_sha256": "d1e88e6193eaccb265695c3ed54e1938630a020b15cdd9e8e5d57f6bd3b99a44", "label": "Anti-Israel", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0133", "text_sha256": "e2d933146f956cde85bc7c006ff61373efc5ab92dabf4cca46966ea86c619648", "label": "Conspiracy Theories", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0134", "text_sha256": "2769f93b329cbcf59dbd7a26d6fd356f1614440f5550601174f590b54e006a65", "label": "Conspiracy Theories", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0135", "text_sha256": "35c2ccc34bee0bb26f57d8ecc1f01177769f877ae13ad99c217402ec1da0902d", "label": "Conspiracy Theories", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0136", "text_sha256": "55c708f0aa42b27c00aa20b2682028487b40ca84b0cc96f84e7dc156ca3a0cba", "label": "Not Antisemitic", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0137", "text_sha256": "b11b3d8032e09e9abc1a243cddcba75c066277f65e8dc4a1a5605749de4c4530", "label": "Not Antisemitic", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0138", "text_sha256": "54c225a2d862d0c2ec9422459acb7b3543a8ca3d13f67d390cfc252fe2d92bde", "label": "Anti-Judaism", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0139", "text_sha256": "a51c197581dbb7ea5cc11c450cf1f5572c4dd8548137c3c45814274703107433", "label": "Anti-Israel", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0140", "text_sha256": "e15a7ce89e415d7d5a88ad4dd1d4a8734275a6cff8d66c0b10a1eff68c9b92ca", "label": "Anti-Israel", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0141", "text_sha256": "35ff7323d9ba07dbaefb214506fb5250079952105b9cf7286a77ad2c5d63c5d4", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0142", "text_sha256": "108669bb9a0c41986d8f69a09362ad46e464cb4757c8d9dab542da38e5d89f9c", "label": "Classical Antisemitism", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0143", "text_sha256": "453a0c1c19172b0894b2def6b0b354e8aa85d542a30b01aa8952f80b2e881475", "label": "Conspiracy Theories", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0144", "text_sha256": "6b56ba2a04aa40d484337759c9ff5a109cdb01e2dc5679cc0111a09eef408956", "label": "Anti-Judaism", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0145", "text_sha256": "35dd3dab2fe1220f75cd5194fc6214eae1b90fc53592da97b2f44dd26564dd29", "label": "Not Antisemitic", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0146", "text_sha256": "7a743b2aa1bad5a09382e02796301379a09fdf3f7df7ea324ff3fbd989ac2711", "label": "Anti-Israel", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0147", "text_sha256": "a048d2b5b846a2c26a11f986017dac3562cf32b5f10150743af0a070dbe448c0", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0148", "text_sha256": "7437d528c3d0e385d5347e56a935510312c1a20ec400d899526f26cd8814807d", "label": "Anti-Israel", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0149", "text_sha256": "3e292f11945a2b65f9c5ad2fd146a90216d59cf9484d75cb4905b67a9d3b3bae", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0150", "text_sha256": "c17406f9f510c476f7cffac6c1644b1cb557a4ab5e30692ed89bb0ccabcdba8f", "label": "Anti-Israel", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0151", "text_sha256": "3b359703c1613d671282bf437889b50d991c8bbb44c36870eacfa62e6306aa5a", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0152", "text_sha256": "0249fc102a5d5e10bef26979e867f300af2a6d890feaca31ed5a359c2143564f", "label": "Not Antisemitic", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0153", "text_sha256": "67fe7a3d4cee080f82c728199b2eb3e94de083e66465b99611094d63b7c22a27", "label": "Not Antisemitic", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0154", "text_sha256": "16867d659e237d52b9a4c97e88443f03ff9c066c982a47e16815802e1d4f1ce5", "label": "Not Antisemitic", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0155", "text_sha256": "3a5c0589b59b373c8b1783eaedf71a070fa8c29b86ff2bb86084d65f29fd9038", "label": "Anti-Israel", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0156", "text_sha256": "e3c3bcc9c2f9e76b368ee37f5826e7b486dd99cad22a077c4d1c5a90ff7fe0db", "label": "Classical Antisemitism", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0157", "text_sha256": "159b7cf8796c588657aea4dd53bd67a15c8eb0e948a9d5c55074b760c83a493e", "label": "Anti-Israel", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0158", "text_sha256": "5fc52280b6a4af2024956f3980071696dd3c1f6a114cb7a5adebb60b22d94889", "label": "Conspiracy Theories", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0159", "text_sha256": "908c34c3db32ef68dab5f83be5ff20e73db0c924a1daea5269509f27488d8b1f", "label": "Conspiracy Theories", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0160", "text_sha256": "0d17c85e3f6d4308b37c07127a4ecf424ce0f685b3e6dfa29d94fdf83f3b1ea6", "label": "Anti-Israel", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0161", "text_sha256": "632722bc883e27670b4d945b3f93e507c32086e53df444c1842a69a3a004c3fb", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0162", "text_sha256": "4168e2053870e66535b843493d324aab65d30759acdb73435c707cc0cf1b8469", "label": "Anti-Judaism", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0163", "text_sha256": "4fcb0a80f4a1253067c0d490c4a5fe7bdcf8ba1d0440d7e2615c0ea82c1c9109", "label": "Anti-Israel", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0164", "text_sha256": "a33425c051fdb8a198a7e78cedb724698395bd0b7314841732ddebf0c7cd1dac", "label": "Anti-Israel", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0165", "text_sha256": "9ba0cbbe43f11f3659f2637bac553ff64b20c6e543fc5bb43246f03a15090194", "label": "Conspiracy Theories", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0166", "text_sha256": "f986f2d6618a15ab2ed81368dadbfdcb2a4876ec6340641e3465320a35e32c2e", "label": "Not Antisemitic", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0167", "text_sha256": "2a43bb6dc4c7157de9ed7007da64cdc6ffa434b3c039f798b8c0d10c96194bf4", "label": "Anti-Israel", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0168", "text_sha256": "f6c84fb07c2949f3216879be645eb1a33fc1413056f83f35777c7cf8b4290bbe", "label": "Not Antisemitic", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0169", "text_sha256": "23888797207fd852fa5b896f76dd1044340fdd25c9d9a490220bea4288427a03", "label": "Anti-Judaism", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0170", "text_sha256": "d20d824c71272f118114f84c90174d977fe4050de7c7c5a1c99052363515c4f0", "label": "Conspiracy Theories", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0171", "text_sha256": "7dbb7f2a6ad9d74962b7e94426be07ade4f27683b83737d0b68334d2dfa4f1e3", "label": "Anti-Israel", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0172", "text_sha256": "7c4938b0952a61e7e6e1ce37d560348a7b702d767a8eb3edee3fe8a939789b01", "label": "Anti-Judaism", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0173", "text_sha256": "b62bb5215d9ad4b11af63fec414621a98a6380793f8fc2efdfe99062d43c0147", "label": "Anti-Israel", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0174", "text_sha256": "900fa2229d7dfd5eeddeb912e1977756c61ded0adcdb09ad8ccefb0ae366dd8f", "label": "Anti-Israel", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0175", "text_sha256": "2a2363734f36bcf8c297f9ebeca8bb7523330296226341459bd1bfc504f2f09d", "label": "Conspiracy Theories", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0176", "text_sha256": "5b92c1fe471178367de0dda9c8c856933aade1b33b16873ccbf317a163987553", "label": "Anti-Israel", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0177", "text_sha256": "572a83583e585475fe7cc2d586d18f82c71702ab4649a979c01c52a8d90334da", "label": "Anti-Judaism", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0178", "text_sha256": "d6b90b357d01fac8e6404e499b438f6f2264370d1be0d169dc7684c709964dea", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0179", "text_sha256": "145b65b4f07728d581ad81a5f5b6df5c41cf80fcf98b1a080c014987cf983f8c", "label": "Anti-Israel", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0180", "text_sha256": "ca56d1874f2517c9ac9740bd21b455c259f3e965af5ff1eb8be06dd032607101", "label": "Anti-Israel", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0181", "text_sha256": "f129d6f8e93a326891d5be4e223b03c239f9199ce2494a7545bffd049867b57e", "label": "Not Antisemitic", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0182", "text_sha256": "bd392c550e531b6e1d1e62f764f16cc57e9c45c779e3ba29770a62d978e78fa8", "label": "Not Antisemitic", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0183", "text_sha256": "99619cda38e10808f7090e136ed991ac06f5a16ab24ba172ff1301c6982bb464", "label": "Conspiracy Theories", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0184", "text_sha256": "24d9db966987fa4c08a6aae1054aced5adfdfd166a6037a7dba76845fc386760", "label": "Not Antisemitic", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0185", "text_sha256": "af50e607a88374ec278784148560f9ebc61952704922c2e112ee39c742185879", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0186", "text_sha256": "2289658bde7979e17f20c89614a58e76b0bd86b3942f231cde5dd76c880ba41d", "label": "Conspiracy Theories", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0187", "text_sha256": "cdd0f3c5813a1a6a96dabce45d698bca473bc676fd54d01007d680b2c79a2b7c", "label": "Not Antisemitic", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0188", "text_sha256": "655bfb83561be6935916807df7815c483ef70f8185c5ccb66ce5ba7c1ae41d36", "label": "Not Antisemitic", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0189", "text_sha256": "f3fff1d42f4a5e61581476475ea7aaf77b709057b9990ba1f4ee9e9becd49622", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0190", "text_sha256": "2fbe86a65bb270cfe76c2217a3a7d804db7f004af16931ddb68abb28f4a9a857", "label": "Conspiracy Theories", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0191", "text_sha256": "c74adb17ac75346bf0b479700fb684594760a0e60d0b0960eb76d8a2a31f154d", "label": "Anti-Judaism", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0192", "text_sha256": "d313c3b0a6ba5356a24e14e71b00087ed26db0a0b4748f05836c94f5a5df58c0", "label": "Classical Antisemitism", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0193", "text_sha256": "c9f7c25f2ae40078a937e7b744a935ae33edc5939c245aa5c4be468b671e5f68", "label": "Conspiracy Theories", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0194", "text_sha256": "6bf3ed2cfda78ed72a687b0f34cb9e80b763aae24b9ea5e9d42f27ed03016457", "label": "Not Antisemitic", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0195", "text_sha256": "d01aac309c60df7851b6343e7283fd29bab76c24dee158d65aa85eaa1468e0e2", "label": "Conspiracy Theories", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0196", "text_sha256": "328c7f8b2e180af7566fe9081b8902364f54ff14ec4a5aef3ff2e49129187621", "label": "Classical Antisemitism", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0197", "text_sha256": "7c512933c7dacdda26383a4aa2874e6e697f2dba9615aada62dded073ebf1cf2", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0198", "text_sha256": "a5ab998b632c2411aa2547aeb072d4c493c2c01788fafeef2ca0ce9a39b7e2ad", "label": "Not Antisemitic", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0199", "text_sha256": "0cd881f23556e71e49fc8cdd9a89e3495b507a2ad732dd29b7b093e9def92552", "label": "Classical Antisemitism", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0200", "text_sha256": "11fe5d5ded5b604192a7d0c738ac6b39f88e593cad5bfab0e3b233fa03141e7c", "label": "Not Antisemitic", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0201", "text_sha256": "522d3a61332844647ae40b20891c0c2eb6dcafdcc31effcdd0f220e7cfe1556f", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0202", "text_sha256": "9be2fd6a0c963a1092cf98b7b5d0b41452f47604b477a142b2be451331291113", "label": "Anti-Israel", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0203", "text_sha256": "2e0d2a7a4a9f86c57615e60a5eb832b6f40073abee33b61f1b5e249571d8afcb", "label": "Anti-Israel", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0204", "text_sha256": "338e14016d39c92e2a5b86bc1d4e30116e174ba0887d0ac73268ef1611bfcf42", "label": "Classical Antisemitism", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0205", "text_sha256": "fa6a12ecb8cee5711a175c226d119ebc7889d4a7d96e2612c7fff9a1e36827dd", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0206", "text_sha256": "a8796cced4f1fc7066b0f61caa76fb6dce1c956d4d14b51574a2d81bb8daef27", "label": "Anti-Israel", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0207", "text_sha256": "d6c8ede1a41043c93899decbbc4009a7ac93e61a0d0225f957db058be4127949", "label": "Not Antisemitic", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0208", "text_sha256": "9b94c4199f6042d555bdf85ccdd84eedd55d7fde06f87be1687325185fcbb58a", "label": "Not Antisemitic", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0209", "text_sha256": "52f76a257173c619f54ea509ee8966333f7d9564a43ab19c4f56f66d31050db1", "label": "Not Antisemitic", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0210", "text_sha256": "5eb64af3fb04ddfef333768a212547d6123863da667c1722c687640d150b7403", "label": "Not Antisemitic", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0211", "text_sha256": "5b8870c234d9e7518355471ceade3b62d6d96ba5f2e24d14c8cc0b70f3beb907", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0212", "text_sha256": "bf22783c12465223ea6d07ae5338b62dfdf00450da98e249c0eed7fb84301c49", "label": "Anti-Judaism", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0213", "text_sha256": "cdb2c8b5e250ccb2a1eed13e1841c910fa35b7086d5ceab1162ba013bdb1d353", "label": "Not Antisemitic", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0214", "text_sha256": "4c68375bcfd3f444968ff6c528d64f37db0a2918f6f6ae5731df38929d4c38af", "label": "Not Antisemitic", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0215", "text_sha256": "64d8aa2e3a8d112f832f04726501ac1667ffcc67d7df24ece27003bed52c4eef", "label": "Conspiracy Theories", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0216", "text_sha256": "9a35e1cce820f0d250638c1c7c3472fa503bafd5a3e721bdf007133f5b47b0d0", "label": "Conspiracy Theories", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0217", "text_sha256": "e829aee86f45a5f01ef4852eb28132e8c424e6cfe36d35bbfb9d5da8c64fd1d6", "label": "Anti-Israel", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0218", "text_sha256": "13c8d75f5596eae917ced586af509987150f42d9d9ad88ae73ca1a3fc62de4b7", "label": "Anti-Israel", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0219", "text_sha256": "dbe4dfd904397151e6b18d86efb1e1024387f86f5c4ba250d8979027b98bc085", "label": "Anti-Judaism", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0220", "text_sha256": "e8679e85a2066283b8d15760b0426957531e99d421dbb1fc376b1b15cac94ec5", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0221", "text_sha256": "535ccbe243ea62ba001e33b81834255fbb4029c2fa171e85c6fedcb2562a9904", "label": "Classical Antisemitism", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0222", "text_sha256": "e3475494168f57ec03779f08e44bb114a80e59d3e6b0d3ec458d408d0717c59c", "label": "Conspiracy Theories", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0223", "text_sha256": "3df65ae7e2768451aa61cc7c092db18157d027baa0f83100b134f6a16380aab3", "label": "Not Antisemitic", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0224", "text_sha256": "8b356698b85e327a83e43749fe181c8dabba497bfbd18f049352a41f8efd25f1", "label": "Conspiracy Theories", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0225", "text_sha256": "b1eeb75f7a348dc112b14c8f7b6cc6cf817af6faa707d0ea439373b97eecd1b9", "label": "Not Antisemitic", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0226", "text_sha256": "e9de0f5d2c1a542c877ca555ed614c33cb19e8977d0a5c168517c078da5d727f", "label": "Anti-Israel", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0227", "text_sha256": "7aeebf02f7f4a3da4ef935b0c40b47a382462e6706e734b2cd8b28c3f5a9536c", "label": "Not Antisemitic", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0228", "text_sha256": "490b58eae28baabc01609ca76aa679ec352d6cb7ca00edfac316a3aed1de7352", "label": "Not Antisemitic", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0229", "text_sha256": "1ff7a07defd02a401cdbc00f2e0fb65126b46683c94352d489d38b54010b2592", "label": "Anti-Israel", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0230", "text_sha256": "f45001d3f3932fbc4bba1dccb67125145fe962738837e09313efc8273123cb97", "label": "Anti-Judaism", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0231", "text_sha256": "7c667ba570425234663e2bf45f838776a38d7cb6493c273e5f9915ff01d2c4fe", "label": "Not Antisemitic", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0232", "text_sha256": "7f751969aaa432ca844a5164ac3a63f1b52aecef5e7a4f8927bbbc68d18e53c5", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0233", "text_sha256": "4c0c7b08ecde135888f502b18f02a12bfcd33a6d95282974ff333beb408a1e3e", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0234", "text_sha256": "e1dfac8152779cd76e81e251224920fdd6ecf7b712501289d6d112bbd99b1697", "label": "Conspiracy Theories", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0235", "text_sha256": "a5e1d8a96014669200d56efb8ab660bc2d8f5e4dda24f35411b9bef162e0df84", "label": "Conspiracy Theories", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0236", "text_sha256": "3f065b5cbca308777eec527dd49c865a510494eea095a9dcb180c5fc9215d9f1", "label": "Anti-Israel", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0237", "text_sha256": "f789f6dfbff31c8989f081d6676fb707d7e4355c9733a04e1f69eac2c35723cf", "label": "Not Antisemitic", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0238", "text_sha256": "385ffc1186eccf6dd2e72813214c54abc6922a4bb8a6e29c19b0a24a6c5cb901", "label": "Not Antisemitic", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0239", "text_sha256": "61136b690c367acef58c2971341746f9347da6101f600d5da667122e2e0d3ec8", "label": "Not Antisemitic", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0240", "text_sha256": "68fd67c050ff2e06bdf2e14e6f6d493f22a56cc289d98fd404b5524da640b421", "label": "Not Antisemitic", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0241", "text_sha256": "4c3a7f6720286d673191b07c870c6df1f5a7250d31cd9db55cde29f4a49be7d2", "label": "Anti-Judaism", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0242", "text_sha256": "0594ac438970f4e34102352b3495fd3f8f842cd178dc3e4878e355dc40a3aff2", "label": "Anti-Israel", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0243", "text_sha256": "fd9453d9e06a7f6ed5ea76e0a2b183093133312a5c21ba7746f3faff3caf13da", "label": "Anti-Israel", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0244", "text_sha256": "7c7ea64088ec190c1bdbfe6bd521842bb1cf429979032fe6497c0ed4b0e0dac8", "label": "Anti-Israel", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0245", "text_sha256": "c845b3c768011ae15b06853e1bf406ef4d7bbc132e0ee6d9a632b476484ecce2", "label": "Anti-Judaism", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0246", "text_sha256": "079000ce495f2eb0881bb6ffd8b9081ecaea2591720f2b2243e0795cd0bd3279", "label": "Anti-Israel", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0247", "text_sha256": "f062d3e8787ceb1d84ff76357a372c5ab56bb08da0c61227aa8b864d6affbf7b", "label": "Not Antisemitic", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0248", "text_sha256": "d232965409b96cf2a35233390451a5e3d751a9be7e41e8173cf1f9799b1ee9d8", "label": "Not Antisemitic", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0249", "text_sha256": "deaadd8fa12fd6fefe63339e07add2d8b72cf10fbe5a7f8d72d66061d8f0baf7", "label": "Not Antisemitic", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0250", "text_sha256": "368e9dfa0072c82a2f612a951876237a38921ebc1d5720da030d37d7e4b8e422", "label": "Not Antisemitic", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0251", "text_sha256": "67fccbb3f85186a36898b7f52f270de96fff7b477d4b7aafce4c4f9fd96887cf", "label": "Conspiracy Theories", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0252", "text_sha256": "1c897b98825cf0cf28fd78f515d5883b0354be8a0f88cbfb7966ea9a1c021468", "label": "Anti-Israel", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0253", "text_sha256": "a1cd024bdda4f75775d7f8a52f7f5b6ea93ffb4d38dffdc4a1073ebba0eef38c", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0254", "text_sha256": "0487909f2a4c8f4e94febef496f3065497f40095ea03056c561156ef044a705f", "label": "Not Antisemitic", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0255", "text_sha256": "0a4babe94a34da28a51868c2328b2d43a48623ea265370766767bd69a8662ace", "label": "Anti-Israel", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0256", "text_sha256": "6c176017fbd5196ec8577966b514bafff672e695680dcfeaf2b99718c53435fa", "label": "Anti-Israel", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0257", "text_sha256": "9bdb2b97a9ab1094462ce0913f9e075d50bf4ffe9625971469ee444d98044d53", "label": "Anti-Israel", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0258", "text_sha256": "a919e33cbcd95897c980c7e53e4c65174e683dbe21812525d36093d5bd882fac", "label": "Anti-Israel", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0259", "text_sha256": "25d8a5f5aac5aff84704111fd07d98e20aad9f43088cfe8c6a817b53a87345c1", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0260", "text_sha256": "6a8460b79315949088574a0b359933a0aacd2d129d561ac0c0ff63a9c1091090", "label": "Conspiracy Theories", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0261", "text_sha256": "79f7ec8e0e23180c5d6c32815573c36389f6ffa69ba1482bfbfa2fcdf7956b72", "label": "Anti-Israel", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0262", "text_sha256": "e7d546c218d2bf4066079a30b86d9d2495fb68ae4228d9867fad8236306c8908", "label": "Not Antisemitic", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0263", "text_sha256": "81b5296997a34830ae1f8c41fa767e5f690d7258c9b9554175895dc8051ab222", "label": "Not Antisemitic", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0264", "text_sha256": "eb0cff10ed7435dba6740b7c41dfce309016d3f3f41da13cbb48b61843751609", "label": "Anti-Israel", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0265", "text_sha256": "74a32fd55432369d53e4b6a0a19299245fee699d770bdceee236a63faa7a934e", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0266", "text_sha256": "c887261b86a921fb231c5f5cacfe5eb3aa82e9c09eb7b6d5ea9c50143577e3f7", "label": "Conspiracy Theories", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0267", "text_sha256": "d21e137db5d945c96c0cd20cf122d60127da7d9f45d70704c6601a662cddaffe", "label": "Not Antisemitic", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0268", "text_sha256": "c4782e71a0592a13bf0f5fe5a60f12d1d91f968a52f4f4ec32af5ff8e54f044d", "label": "Not Antisemitic", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0269", "text_sha256": "b95b56bcf47d6c2f873aa5d1b524e177609afabec8c0641d4587534dc16dd187", "label": "Not Antisemitic", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0270", "text_sha256": "1dfc8a7459f25b935cd6854decd55c9a424434274bed122af306d60d773c1f91", "label": "Anti-Israel", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0271", "text_sha256": "fe5f95e369253d5ffb119505c844516badb78ad2efde03c541725252b9933406", "label": "Not Antisemitic", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0272", "text_sha256": "97eb319d39dace091026ab9b71dcea17fcc0d77d88954ff3b5b62c13ddc9cc75", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0273", "text_sha256": "ab641afa42e6b4654b3bdb3c28357a6514050358537f10d1caa76a726f65da05", "label": "Anti-Israel", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0274", "text_sha256": "a45c43339ce2ddb52e7d20c514b73f527f9066aeed61da6a6e58a9e01f556c6f", "label": "Not Antisemitic", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0275", "text_sha256": "7b021aec0ac501c2a1ea75d145e3e10aaf07094fec1d3215a0b92ade4edae70c", "label": "Not Antisemitic", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0276", "text_sha256": "3485b94fc0d0dda8feedddcb92b11029e2cb5afe30aeca640cd504163ace67c1", "label": "Not Antisemitic", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0277", "text_sha256": "d727856b6e97b09c3ab499ba9ee031dfd88c226f5b0dda4e15e28608ff81b9e1", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0278", "text_sha256": "d4b8d7179e27cccb7b4a369db8cd9a64f375f201809b67552830ecdf89c4f003", "label": "Not Antisemitic", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0279", "text_sha256": "0df9a6340ec2394fe921f4d013f9a136d3bc760c13b33a8a90afc83cc45fc716", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0280", "text_sha256": "0343627dd34a60866ac2ab64f903223c4519482c33d80c4b6fb6ed777977e92e", "label": "Not Antisemitic", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0281", "text_sha256": "e565b3fc6cb3814909e71124c0a2cfcc14d48ccce129f9717b4eaae229ec4f1a", "label": "Anti-Israel", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0282", "text_sha256": "30123e3ac146b83b7ba44df6ca472408fb0d6fed0ed52424b5db62c9edf5e41c", "label": "Conspiracy Theories", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0283", "text_sha256": "7b32581b1effca66c99d280be096b693483a8c716a3c4c5e3003f50b84090407", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0284", "text_sha256": "0fe660bea16587a80698dbc270d4c565f2ca2b61befa05aab0d9d44551272a0f", "label": "Not Antisemitic", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0285", "text_sha256": "4432028af5e84d012dab8a8037af01959e8d4ee59508f81a911b88d998fcc9f4", "label": "Anti-Israel", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0286", "text_sha256": "bd5ef5ce49c041309f18963106eb0182b512eab967bd1a0dc56bee031e6be1d4", "label": "Anti-Israel", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0287", "text_sha256": "c2388685ef69ecbe6a3c56bcee08987af402796c576622c952c8fd841a964490", "label": "Not Antisemitic", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0288", "text_sha256": "fbe07576af60c3e18de002e189df525377472cd6df251986f6f4c8169bc851cd", "label": "Not Antisemitic", "workbook_label": "Not Antisemitic"}
+{"sample_id": "S0289", "text_sha256": "57f7631091a7b18a7906182d5fca7df4c9bbe7937bedad6013c17cc3bce6e73e", "label": "Not Antisemitic", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0290", "text_sha256": "50a18b5d984a3e88aa42e52852f2b5a8921715a104e218e07fb6d4b8c8f90a28", "label": "Anti-Israel", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0291", "text_sha256": "b2178fd02d85c7ef06faca3bb885901b1047bdf3467f3135e02878a69bf769ca", "label": "Conspiracy Theories", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0292", "text_sha256": "2586bc5a8b9a96e4fdba512f4edaf04ae26dc67b7a084e910873daac776481dd", "label": "Not Antisemitic", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0293", "text_sha256": "6bc5f513fcfefbd04c482f9862ef3c6a2b281221fa138501fc5a683f2cb917e5", "label": "Anti-Israel", "workbook_label": "Conspiracy Theories"}
+{"sample_id": "S0294", "text_sha256": "56c0c9af96e3112958dc72900af842c01265aa59a0becc9eeeeb3b0314a6f56c", "label": "Conspiracy Theories", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0295", "text_sha256": "071c3c36925796c029eef468abc8c3f4526921d59deb035464197b4249cfbed1", "label": "Classical Antisemitism", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0296", "text_sha256": "35729c6fcda7c0e154d50bcaa115b78eff54ac3266bd77dd0aa18eda4b6a85a0", "label": "Not Antisemitic", "workbook_label": "Anti-Israel"}
+{"sample_id": "S0297", "text_sha256": "70ec22f087a8457cee6a3ea8c13307b437af149880a2fb665c30c4cee85d409f", "label": "Anti-Israel", "workbook_label": "Anti-Judaism"}
+{"sample_id": "S0298", "text_sha256": "0f56e07133a8fcfc49a231a82da7086fc3d1739ee7a73cbcedcab645bb4e606e", "label": "Not Antisemitic", "workbook_label": "Structural Antisemitism"}
+{"sample_id": "S0299", "text_sha256": "86e88748a23248eb65c89260263124cde1ad624da61a8ba9863706d6103b0122", "label": "Conspiracy Theories", "workbook_label": "Classical Antisemitism"}
+{"sample_id": "S0300", "text_sha256": "430a77e8629a5ad784470747b4e2869888e643f92defab0a183fe0eedbb3e297", "label": "Classical Antisemitism", "workbook_label": "Structural Antisemitism"}
