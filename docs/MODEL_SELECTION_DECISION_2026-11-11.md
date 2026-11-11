@@ -110,3 +110,25 @@ attacks the actual constraint; raw scale ranks below it.
 3. Hardware with ≥64 GB unified memory **and** a reason to believe scale addresses the boundary
    problem — which the Apertus-70B question would then legitimately answer.
 4. A governed fine-tuning pipeline on adjudicated labels (epic #50 path).
+
+## 9. Re-confirmation against the accepted reference (same day)
+
+The owner subsequently accepted the AI annotation as the provisional evaluation reference
+(`docs/GOLD_SET_ACCEPTANCE_2026-11-11.md`). All candidates were re-scored against that fixed reference
+(`docs/evaluation/EVALUATION_2026-11-11.md`):
+
+| Candidate | Six-way macro-F1 | Binary F1 |
+|---|---:|---:|
+| qwen2.5:7b | 0.351 | 0.774 |
+| gemma2:9b | 0.328 | 0.743 |
+| two-stage | 0.341 | 0.662 |
+| disambiguation rubric (partial) | 0.347 | 0.793 |
+
+**The decision is unchanged and now rests on a fixed target rather than a contested one.** No candidate
+exceeds 0.35 six-way macro-F1; the three prompt-level interventions sit within 0.03 of each other, which is
+not a meaningful difference; and four of six classes have too little support in the reference to validate at
+all (`Structural Antisemitism` appears once in 300 rows).
+
+The adopted configuration therefore stands, six-way output remains advisory, and automatic reporting remains
+disabled. Because the reference is provisional, every number above is an upper bound relative to a human
+standard — the annotator–model agreement exceeds annotator–workbook agreement by construction.
