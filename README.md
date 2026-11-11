@@ -118,6 +118,17 @@ Evaluation defaults remain explicit and deterministic:
 - versioned SSOT / prompt / model route / pipeline in artifacts
 - no stochastic rerun strategy
 
+## Review Routing Posture
+
+{spot} exists to find antisemitic rows and put them in front of a human, so routing widens on any suspicion
+and never narrows on model agreement alone. The shipped native launcher sets `SPOT_DISABLE_AUTO_CLEAR=1` by
+default: no row is cleared by the independent-consensus certificate, so every processed row requires human
+review. Override with `SPOT_DISABLE_AUTO_CLEAR=0` only for a bounded, explicitly accepted experiment.
+
+A row is treated as suspicious when any analysis branch assigns a positive category at confidence `>= 0.30`,
+any soft antisemitism signal fires, the judge returns `REVIEW` or `FAIL`, classifier passes disagree, a
+fallback or analysis failure occurred, or the category is non-canonical.
+
 ## Security Defaults
 
 - API binds to `127.0.0.1`
