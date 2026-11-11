@@ -8,7 +8,7 @@ struct SpotReviewWorkspaceView: View {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Review Queue")
+                        Text("Review queue")
                             .font(.title2)
                             .fontWeight(.semibold)
                         Text(service.selectedRunID.isEmpty ? "No run selected" : "Run \(service.selectedRunID)")
@@ -21,11 +21,38 @@ struct SpotReviewWorkspaceView: View {
                     .disabled(service.selectedRunID.isEmpty)
                 }
 
+                Picker("Run", selection: Binding(get: { service.selectedRunID }, set: { value in Task { await service.selectRun(value) } })) {
+                    ForEach(service.availableRuns) { run in Text(run.runID).tag(run.runID) }
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Needs your review: \(service.reviewBucketCounts.waiting) · Automatic checks pending: \(service.reviewBucketCounts.automaticPending) · Human decisions: \(service.reviewBucketCounts.reviewed) · Automatic: \(service.reviewBucketCounts.automatic)")
+                        .font(.headline)
+                    Text("Cases with any positive analysis >=30% go directly to AI reports. Only other unresolved cases need your review. Oldest waiting first.").font(.caption).foregroundStyle(.secondary)
+                    if let recheck = service.automaticRecheck, recheck.state != "completed" {
+                        Text("Automatic recheck: \(recheck.processed) / \(recheck.total) · \(recheck.resolved) resolved · Unreported unfinished cases stay in Automatic checks pending")
+                            .font(.callout).foregroundStyle(.teal)
+                    }
+                    Picker("Bucket", selection: Binding(get: { service.reviewBucket }, set: { bucket in Task { await service.selectReviewBucket(bucket) } })) {
+                        Text("Needs your review (\(service.reviewBucketCounts.waiting))").tag("waiting")
+                        Text("Needs follow-up (\(service.reviewBucketCounts.followUp))").tag("follow_up")
+                        Text("Confirmed threats (\(service.reviewBucketCounts.confirmedThreat))").tag("confirmed_threat")
+                        Text("Not antisemitic (\(service.reviewBucketCounts.falseAlarm))").tag("false_alarm")
+                        Text("Automatic checks pending (\(service.reviewBucketCounts.automaticPending))").tag("automatic_pending")
+                        Text("Automatic complete (\(service.reviewBucketCounts.automatic))").tag("automatic")
+                        Text("AI reports (\(service.reviewBucketCounts.reporting))").tag("reporting")
+                    }.pickerStyle(.menu)
+                    if !service.reviewSaveMessage.isEmpty { Text(service.reviewSaveMessage).font(.callout).textSelection(.enabled) }
+                }
+                HStack {
+                    Button("Previous") { Task { await service.changeCasePage(-1) } }.disabled(service.casePageOffset == 0)
+                    Text("\(min(service.casePageOffset + 1, service.casePageTotal))-\(min(service.casePageOffset + 100, service.casePageTotal)) / \(service.casePageTotal)").font(.caption)
+                    Button("Next") { Task { await service.changeCasePage(1) } }.disabled(service.casePageOffset + 100 >= service.casePageTotal)
+                }
                 if service.reviewQueueRows.isEmpty {
                     ContentUnavailableView(
-                        "No flagged rows",
+                        service.reviewBucket == "waiting" ? "You’re caught up" : "No cases in this bucket",
                         systemImage: "checkmark.seal",
-                        description: Text("The selected run has no queued review rows or they have not been loaded yet.")
+                        description: Text(service.reviewBucket == "waiting" ? "No cases need your review right now. Unfinished automatic checks are in their own bucket; only unresolved results will arrive here. Follow-up cases are in their own bucket." : (service.reviewBucket == "automatic_pending" ? "No automatic checks are pending for saved cases." : "Cases will appear here after their checks or your decision are saved."))
                     )
                 } else {
                     List(service.reviewQueueRows, selection: Binding(
@@ -41,12 +68,13 @@ struct SpotReviewWorkspaceView: View {
                                 Text("Row \(row.rowIndex)")
                                     .font(.headline)
                                 Spacer()
-                                Text(row.reviewState ?? "pending")
+                                Text(row.workflowBucket == "reporting" ? "AI report - no review required" : row.workflowBucket == "automatic_pending" ? "Automatic checks pending — no action needed" : row.workflowBucket == "automatic" ? "Automatic — no review needed" : row.workflowBucket == "follow_up" ? "Needs follow-up" : (row.outcome == "confirmed_threat" ? "Confirmed threat" : (row.outcome == "false_alarm" ? "Not antisemitic" : "Needs your review")))
                                     .foregroundStyle(.secondary)
                             }
                             if let category = row.assignedCategory, !category.isEmpty {
-                                Text(category)
+                                Text("Model: \(category)")
                             }
+                            if let humanCategory = row.humanCategory { Text("Human: \(humanCategory)").font(.caption).bold() }
                             if let postText = row.postText, !postText.isEmpty {
                                 Text(postText)
                                     .font(.caption)
@@ -62,6 +90,7 @@ struct SpotReviewWorkspaceView: View {
             }
             .frame(minWidth: 320)
             .padding(20)
+            .disabled(service.savingCaseDecision)
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
@@ -80,10 +109,10 @@ struct SpotReviewWorkspaceView: View {
                         GroupBox("Post") {
                             VStack(alignment: .leading, spacing: 8) {
                                 if let category = inspector.row.assignedCategory, !category.isEmpty {
-                                    Text("Category: \(category)")
+                                    Text("Model proposal: \(category)")
                                 }
                                 if let score = inspector.row.confidenceScore {
-                                    Text(String(format: "Confidence: %.3f", score))
+                                    Text(String(format: "Model-reported score: %.3f", score))
                                         .foregroundStyle(.secondary)
                                 }
                                 Text(inspector.row.postText ?? "No post text available.")
@@ -99,7 +128,7 @@ struct SpotReviewWorkspaceView: View {
                                         .textSelection(.enabled)
                                 }
                                 if !inspector.evidence.flags.isEmpty {
-                                    Text("Flags: \(inspector.evidence.flags.joined(separator: ", "))")
+                                    Text("Original analysis flags: \(inspector.evidence.flags.joined(separator: ", "))")
                                 }
                                 if !inspector.evidence.fallbackEvents.isEmpty {
                                     Text("Fallback Events: \(inspector.evidence.fallbackEvents.joined(separator: ", "))")
@@ -118,45 +147,12 @@ struct SpotReviewWorkspaceView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
 
-                        GroupBox("Reviewer Controls") {
-                            VStack(alignment: .leading, spacing: 12) {
-                                Picker("Review State", selection: $service.reviewDraft.reviewState) {
-                                    Text("pending").tag("pending")
-                                    Text("reviewed").tag("reviewed")
-                                    Text("escalated").tag("escalated")
-                                }
-                                .pickerStyle(.segmented)
-
-                                Picker("Decision", selection: $service.reviewDraft.reviewDecision) {
-                                    Text("none").tag("")
-                                    Text("confirm").tag("confirm")
-                                    Text("adjust").tag("adjust")
-                                    Text("skip").tag("skip")
-                                }
-                                .pickerStyle(.menu)
-
-                                Text("Reviewer Note")
-                                    .font(.headline)
-                                TextEditor(text: $service.reviewDraft.reviewerNote)
-                                    .frame(minHeight: 120)
-                                    .font(.body)
-
-                                HStack {
-                                    Button("Save Review") {
-                                        Task { await service.saveActiveReview() }
-                                    }
-                                    if !service.reviewSaveMessage.isEmpty {
-                                        Text(service.reviewSaveMessage)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                            }
-                        }
+                        SpotCaseDecisionControls(service: service, inspector: inspector)
                     } else {
                         ContentUnavailableView(
                             "No row selected",
                             systemImage: "doc.text.magnifyingglass",
-                            description: Text("Pick a flagged row to inspect its evidence and save a review decision.")
+                            description: Text("Choose a bucket to inspect saved decisions. The next waiting case opens automatically.")
                         )
                     }
                 }
@@ -165,5 +161,6 @@ struct SpotReviewWorkspaceView: View {
             .frame(minWidth: 560)
         }
         .frame(minWidth: 1080, minHeight: 760)
+        .task { await service.loadReviewQueueForSelectedRun() }
     }
 }

@@ -112,6 +112,8 @@ struct SpotWorkspaceView: View {
         case .review:
             SpotReviewWorkspaceView(service: service)
                 .padding(24)
+        case .reports:
+            SpotReportsWorkspaceView(service: service).padding(24)
         case .operations:
             ScrollView {
                 SpotArtifactWorkspaceView(service: service)

@@ -37,8 +37,8 @@ struct SpotIntakeWorkspaceView: View {
                     GridRow {
                         Text("Review Mode").foregroundStyle(.secondary)
                         Picker("Review Mode", selection: $service.startReviewMode) {
-                            Text("partial").tag("partial")
-                            Text("full").tag("full")
+                            Text("Automatic · review exceptions").tag("partial")
+                            Text("Manual review · every post").tag("full")
                         }
                         .pickerStyle(.menu)
                     }

@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import SQLite3
+import UniformTypeIdentifiers
 
 private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
@@ -33,8 +34,19 @@ final class SpotCoreService: ObservableObject {
     @Published var authEnabledForNativeApp: Bool = false
     @Published var operatorActorName: String = "local-operator"
     @Published var operatorRole: String = "operator"
-    @Published var operatorAccessCode: String = "spot-local"
+    @Published var operatorAccessCode: String = ""
     @Published var selectedRunID: String = ""
+    @Published var casePageOffset: Int = 0
+    @Published var casePageTotal: Int = 0
+    @Published var reviewBucket = "waiting"
+    @Published var reviewBucketCounts: SpotReviewBucketCounts = .empty
+    @Published var savingCaseDecision = false
+    @Published var reviewNoteIsDirty = false
+    @Published var automaticRecheck: SpotAutomaticRecheck?
+    private var reviewQueueGeneration = 0
+    @Published var runReports: SpotRunReports?
+    @Published var reportMessage: String = ""
+    @Published var exportingThreatReport = false
     @Published var activeRunSummary: SpotRuntimeSummary = .empty
     @Published var pendingReviewCount: Int = 0
     @Published var availableRuns: [SpotRunRecord] = []
@@ -67,6 +79,7 @@ final class SpotCoreService: ObservableObject {
     private let preferredHost = "127.0.0.1"
     private let session: URLSession
     private var latestRunDetail: SpotRunDetail?
+    private var manuallySelectedRunID: String?
     private var watchedFileSnapshots: [String: WatchedFileSnapshot] = [:]
     private var watchFolderInFlight: Set<String> = []
     private var lastAutoLaunchAttemptAt: Date?
@@ -97,7 +110,7 @@ final class SpotCoreService: ObservableObject {
             nativeConfig.logsDir = spotLogHome.path
         }
         if nativeConfig.modelsHome.isEmpty {
-            nativeConfig.modelsHome = "/Users/Shared/Models/spot"
+            nativeConfig.modelsHome = "/Users/Shared/Models"
         }
         if nativeConfig.huggingFaceHome.isEmpty {
             nativeConfig.huggingFaceHome = URL(fileURLWithPath: nativeConfig.modelsHome).appending(path: "huggingface").path
@@ -106,7 +119,7 @@ final class SpotCoreService: ObservableObject {
             nativeConfig.huggingFaceHubCache = URL(fileURLWithPath: nativeConfig.huggingFaceHome).appending(path: "hub").path
         }
         if nativeConfig.ollamaModelsDir.isEmpty {
-            nativeConfig.ollamaModelsDir = URL(fileURLWithPath: nativeConfig.modelsHome).appending(path: "ollama").path
+            nativeConfig.ollamaModelsDir = nativeConfig.modelsHome
         }
         if nativeConfig.mlxModelsDir.isEmpty {
             nativeConfig.mlxModelsDir = URL(fileURLWithPath: nativeConfig.modelsHome).appending(path: "mlx-local").path
@@ -125,6 +138,9 @@ final class SpotCoreService: ObservableObject {
         }
         if newRunID.isEmpty {
             newRunID = suggestedRunID()
+        }
+        if nativeConfig.accessCode.isEmpty || nativeConfig.accessCode == "spot-local" {
+            nativeConfig.accessCode = UUID().uuidString + UUID().uuidString
         }
         saveNativeConfig()
         refreshWatchFolderStatus()
@@ -372,7 +388,7 @@ final class SpotCoreService: ObservableObject {
             nativeConfig.logsDir = spotLogHome.path
         }
         if nativeConfig.modelsHome.isEmpty {
-            nativeConfig.modelsHome = "/Users/Shared/Models/spot"
+            nativeConfig.modelsHome = "/Users/Shared/Models"
         }
         if nativeConfig.huggingFaceHome.isEmpty {
             nativeConfig.huggingFaceHome = URL(fileURLWithPath: nativeConfig.modelsHome).appending(path: "huggingface").path
@@ -381,7 +397,7 @@ final class SpotCoreService: ObservableObject {
             nativeConfig.huggingFaceHubCache = URL(fileURLWithPath: nativeConfig.huggingFaceHome).appending(path: "hub").path
         }
         if nativeConfig.ollamaModelsDir.isEmpty {
-            nativeConfig.ollamaModelsDir = URL(fileURLWithPath: nativeConfig.modelsHome).appending(path: "ollama").path
+            nativeConfig.ollamaModelsDir = nativeConfig.modelsHome
         }
         if nativeConfig.mlxModelsDir.isEmpty {
             nativeConfig.mlxModelsDir = URL(fileURLWithPath: nativeConfig.modelsHome).appending(path: "mlx-local").path
@@ -397,6 +413,10 @@ final class SpotCoreService: ObservableObject {
         }
         if nativeConfig.intakeFailedDir.isEmpty {
             nativeConfig.intakeFailedDir = defaultIntakeFailedURL.path
+        }
+        if nativeConfig.accessCode.isEmpty || nativeConfig.accessCode == "spot-local" {
+            nativeConfig.accessCode = UUID().uuidString + UUID().uuidString
+            saveNativeConfig()
         }
         refreshWatchFolderStatus()
     }
@@ -421,6 +441,7 @@ final class SpotCoreService: ObservableObject {
     }
 
     func navigate(to page: SpotAppPage) {
+        if currentPage != page { casePageOffset = 0; reviewQueueGeneration += 1 }
         currentPage = page
     }
 
@@ -555,6 +576,13 @@ final class SpotCoreService: ObservableObject {
 
     func selectRun(_ runID: String) async {
         guard !runID.isEmpty else { return }
+        manuallySelectedRunID = runID
+        if selectedRunID != runID {
+            reviewNoteIsDirty = false
+            casePageOffset = 0; runReports = nil; reviewBucket = "waiting"
+            selectedReviewRowIndex = nil; activeReviewInspector = nil; reviewSaveMessage = ""
+            reviewQueueGeneration += 1
+        }
         selectedRunID = runID
         guard let baseURL else { return }
         do {
@@ -582,23 +610,27 @@ final class SpotCoreService: ObservableObject {
     }
 
     func loadReviewInspector(rowIndex: Int) async {
-        guard let baseURL, !selectedRunID.isEmpty else { return }
-        do {
-            _ = try await ensureAuthenticated(baseURL: baseURL)
-            let inspector: SpotReviewRowInspector = try await requestJSON(
-                url: baseURL.appending(path: "runs/\(selectedRunID)/review-rows/\(rowIndex)")
-            )
-            selectedReviewRowIndex = rowIndex
-            activeReviewInspector = inspector
-            reviewDraft = SpotReviewDraft(
-                reviewState: inspector.reviewControls.reviewState,
-                reviewDecision: inspector.reviewControls.reviewDecision ?? "",
-                reviewerNote: inspector.reviewControls.reviewerNote
-            )
-            reviewSaveMessage = ""
-        } catch {
-            reviewSaveMessage = "Could not load review row \(rowIndex): \(error.localizedDescription)"
-        }
+        guard !savingCaseDecision else { return }
+        do { try await loadReviewInspectorSync(rowIndex: rowIndex) }
+        catch { reviewSaveMessage = "Could not load review row \(rowIndex): \(error.localizedDescription)" }
+    }
+
+    func selectReviewBucket(_ bucket: String) async {
+        guard !savingCaseDecision else { return }
+        reviewNoteIsDirty = false
+        reviewBucket = bucket
+        casePageOffset = 0
+        selectedReviewRowIndex = nil
+        activeReviewInspector = nil
+        await loadReviewQueueForSelectedRun()
+    }
+
+    func openCaseForReview(_ row: SpotReviewRowPreview) async {
+        reviewNoteIsDirty = false
+        reviewBucket = row.workflowBucket ?? "waiting"
+        navigate(to: .review)
+        casePageOffset = 0
+        await loadReviewInspector(rowIndex: row.rowIndex)
     }
 
     func saveActiveReview() async {
@@ -622,6 +654,103 @@ final class SpotCoreService: ObservableObject {
             await refreshHealth()
         } catch {
             reviewSaveMessage = "Could not save review row: \(error.localizedDescription)"
+        }
+    }
+
+    var canReviewCases: Bool { ["reviewer", "admin"].contains(operatorRole) }
+    var canExportThreatReports: Bool { ["reviewer", "acceptance_lead", "admin"].contains(operatorRole) }
+
+    func loadRunReports() async {
+        guard let baseURL, !selectedRunID.isEmpty else { return }
+        do {
+            _ = try await ensureAuthenticated(baseURL: baseURL)
+            runReports = try await requestJSON(url: baseURL.appending(path: "runs/\(selectedRunID)/reports"))
+        } catch { reportMessage = error.localizedDescription }
+    }
+
+    func changeCasePage(_ direction: Int) async {
+        reviewNoteIsDirty = false
+        casePageOffset = max(0, casePageOffset + direction * 100)
+        do { try await loadReviewQueue(for: selectedRunID) }
+        catch { reviewSaveMessage = error.localizedDescription }
+    }
+
+    func saveCaseOutcome(_ outcome: String, category: String, note: String, token: String) async -> Bool {
+        guard let baseURL, let rowIndex = selectedReviewRowIndex, !savingCaseDecision else { return false }
+        let runID = selectedRunID
+        savingCaseDecision = true
+        reviewQueueGeneration += 1
+        defer { savingCaseDecision = false }
+        do {
+            _ = try await ensureAuthenticated(baseURL: baseURL)
+            var request = URLRequest(url: baseURL.appending(path: "runs/\(runID)/cases/\(rowIndex)/decision"))
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try JSONSerialization.data(withJSONObject: ["outcome": outcome, "category": category, "note": note, "case_token": token])
+            let _: SpotCaseRecord = try await requestJSON(request: request)
+        } catch {
+            reviewSaveMessage = "Decision was not saved: \(error.localizedDescription)"
+            return false
+        }
+        // Only advance after the server committed the decision. Never report a refresh failure as a save failure.
+        let label = outcome == "confirmed_threat" ? "Confirmed threat" : (outcome == "false_alarm" ? "Not antisemitic" : "Needs follow-up")
+        guard selectedRunID == runID else { return true }
+        reviewNoteIsDirty = false
+        reviewBucket = "waiting"
+        casePageOffset = 0
+        selectedReviewRowIndex = nil
+        activeReviewInspector = nil
+        do {
+            try await loadReviewQueue(for: runID, force: true)
+            reviewSaveMessage = "Row \(rowIndex) saved as \(label). " + (selectedReviewRowIndex.map { "Now reviewing Row \($0)." } ?? "No cases waiting for review.")
+        } catch {
+            reviewSaveMessage = "Row \(rowIndex) saved as \(label). Refresh the queue to continue: \(error.localizedDescription)"
+        }
+        await loadRunReports()
+        return true
+    }
+
+    func exportConfirmedThreatPDF(rowIndex: Int) async {
+        await saveThreatPDF(path: "runs/\(selectedRunID)/cases/\(rowIndex)/report.pdf", method: "POST", filename: "spot-threat-\(selectedRunID)-row-\(rowIndex).pdf")
+        await loadRunReports()
+    }
+
+    func saveAutomaticReport(rowIndex: Int, reportID: String?) async {
+        let path = reportID.map { "runs/\(selectedRunID)/automatic-reports/\($0).pdf" } ?? "runs/\(selectedRunID)/cases/\(rowIndex)/automatic-report.pdf"
+        await saveThreatPDF(path: path, method: reportID == nil ? "POST" : "GET", filename: "spot-ai-finding-\(selectedRunID)-row-\(rowIndex).pdf")
+        await loadRunReports()
+    }
+
+    func openStoredThreatReport(reportID: String) async {
+        await saveThreatPDF(path: "runs/\(selectedRunID)/threat-reports/\(reportID).pdf", method: "GET", filename: "spot-threat-\(reportID).pdf")
+    }
+
+    private func saveThreatPDF(path: String, method: String, filename: String) async {
+        guard let baseURL, !selectedRunID.isEmpty, !exportingThreatReport else { return }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.pdf]
+        panel.nameFieldStringValue = filename
+        panel.title = filename.hasPrefix("spot-ai-finding") ? "Save AI-generated {spot} finding report" : "Export official {spot} threat report"
+        guard panel.runModal() == .OK, let destination = panel.url else { return }
+        exportingThreatReport = true
+        defer { exportingThreatReport = false }
+        do {
+            _ = try await ensureAuthenticated(baseURL: baseURL)
+            var request = URLRequest(url: baseURL.appending(path: path))
+            request.httpMethod = method
+            request.timeoutInterval = 60
+            let (data, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200, data.starts(with: Data("%PDF-".utf8)) else {
+                let error = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+                throw NSError(domain: "SpotReports", code: 1, userInfo: [NSLocalizedDescriptionKey: error?["detail"] as? String ?? "The report could not be exported."])
+            }
+            try data.write(to: destination, options: .atomic)
+            reportMessage = "Saved confirmed threat report."
+            reviewSaveMessage = reportMessage
+            NSWorkspace.shared.open(destination)
+        } catch {
+            reportMessage = error.localizedDescription
+            reviewSaveMessage = reportMessage
         }
     }
 
@@ -712,7 +841,7 @@ final class SpotCoreService: ObservableObject {
     func submitSignoff() async {
         guard let baseURL, !selectedRunID.isEmpty else { return }
         do {
-            _ = try await loginAsRole(baseURL: baseURL, role: "admin", actorName: "spot-native-admin")
+            _ = try await ensureAuthenticated(baseURL: baseURL)
             var request = URLRequest(url: baseURL.appending(path: "runs/\(selectedRunID)/signoff"))
             request.httpMethod = "POST"
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -1493,7 +1622,7 @@ final class SpotCoreService: ObservableObject {
         env["SPOT_LOCKED_SSOT_PATH"] = nativeConfig.lockedSSOTPath
         env["SPOT_PRODUCTION_MODE"] = "1"
         env["SPOT_RUN_PREFLIGHT"] = "1"
-        env["SPOT_AUTH_ENABLED"] = "0"
+        env["SPOT_AUTH_ENABLED"] = "1"
         env["SPOT_NATIVE_PORT"] = String(nativeConfig.port)
         env["SPOT_NATIVE_SUPERVISOR_PID"] = String(ProcessInfo.processInfo.processIdentifier)
         if !nativeConfig.accessCode.isEmpty {
@@ -1563,8 +1692,13 @@ final class SpotCoreService: ObservableObject {
             request.timeoutInterval = 15
         }
         let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            throw NSError(domain: "SpotCoreService", code: 4, userInfo: [NSLocalizedDescriptionKey: "Runtime probe failed."])
+        guard let http = response as? HTTPURLResponse else {
+            throw NSError(domain: "SpotCoreService", code: 4, userInfo: [NSLocalizedDescriptionKey: "The local service did not respond."])
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            let payload = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            let message = payload?["detail"] as? String ?? "The request could not be completed (HTTP \(http.statusCode))."
+            throw NSError(domain: "SpotCoreService", code: http.statusCode, userInfo: [NSLocalizedDescriptionKey: message])
         }
         return try JSONDecoder().decode(T.self, from: data)
     }
@@ -1643,9 +1777,7 @@ final class SpotCoreService: ObservableObject {
         } catch {
             do {
                 try await applyLightweightRunStatus(baseURL: rootURL, runID: selectedRunID)
-                reviewQueueRows = []
-                activeReviewInspector = nil
-                reviewDraft = .empty
+                // Preserve the open review while runtime detail is temporarily unavailable.
             } catch {
                 primeVisibleRunFromInboxHistory(force: true)
             }
@@ -1669,7 +1801,7 @@ final class SpotCoreService: ObservableObject {
     private func loginAsRole(baseURL: URL, role: String, actorName: String) async throws -> SpotAuthSessionResponse {
         let sessionURL = baseURL.appending(path: "auth/session")
         let existing: SpotAuthSessionResponse = try await requestJSON(url: sessionURL)
-        if existing.authenticated, let session = existing.session, session.role == role {
+        if existing.authenticated, let session = existing.session, session.role == role, session.actorName == actorName {
             return existing
         }
         if !existing.authEnabled {
@@ -1722,6 +1854,9 @@ final class SpotCoreService: ObservableObject {
         }
         if let active = prioritizedRuns.first(where: { isActiveRunState($0.state) }) {
             return active.runID
+        }
+        if let manuallySelectedRunID, runs.contains(where: { $0.runID == manuallySelectedRunID }) {
+            return manuallySelectedRunID
         }
         if let newestCreatedAt = runs.compactMap(\.createdAt).max() {
             let newestRuns = runs
@@ -2197,12 +2332,28 @@ final class SpotCoreService: ObservableObject {
         .sorted { $0.uploadID > $1.uploadID }
     }
 
-    private func loadReviewQueue(for runID: String) async throws {
-        guard let baseURL else { return }
-        let queue: SpotReviewQueue = try await requestJSON(url: baseURL.appending(path: "runs/\(runID)/review-rows"))
+    private func loadReviewQueue(for runID: String, force: Bool = false) async throws {
+        guard let baseURL, !savingCaseDecision || force else { return }
+        reviewQueueGeneration += 1
+        let generation = reviewQueueGeneration
+        let bucket = currentPage == .review ? reviewBucket : "all"
+        let offset = casePageOffset
+        let queue: SpotCasePage = try await requestJSON(url: URL(string: "\(baseURL.absoluteString)/runs/\(runID)/cases?offset=\(offset)&limit=100&bucket=\(bucket)")!)
+        guard generation == reviewQueueGeneration, selectedRunID == runID else { return }
+        casePageTotal = queue.total
+        casePageOffset = queue.offset
+        reviewBucketCounts = queue.counts
+        automaticRecheck = queue.recheck
         reviewQueueRows = queue.rows
-        if let rowIndex = selectedReviewRowIndex, queue.rows.contains(where: { $0.rowIndex == rowIndex }) {
-            try await loadReviewInspectorSync(rowIndex: rowIndex)
+        if currentPage == .reports { await loadRunReports() }
+        guard generation == reviewQueueGeneration else { return }
+        if reviewNoteIsDirty, activeReviewInspector?.runID == runID, selectedReviewRowIndex != nil {
+            // A background recheck must not discard a note that is still being written.
+            return
+        }
+        if let rowIndex = selectedReviewRowIndex, queue.rows.contains(where: { $0.rowIndex == rowIndex }), activeReviewInspector?.runID == runID {
+            // Keep the current case and draft steady while newly classified posts arrive.
+            return
         } else if let first = queue.rows.first {
             try await loadReviewInspectorSync(rowIndex: first.rowIndex)
         } else {
@@ -2214,10 +2365,12 @@ final class SpotCoreService: ObservableObject {
 
     private func loadReviewInspectorSync(rowIndex: Int) async throws {
         guard let baseURL, !selectedRunID.isEmpty else { return }
-        let inspector: SpotReviewRowInspector = try await requestJSON(
-            url: baseURL.appending(path: "runs/\(selectedRunID)/review-rows/\(rowIndex)")
-        )
+        let runID = selectedRunID
         selectedReviewRowIndex = rowIndex
+        let inspector: SpotReviewRowInspector = try await requestJSON(
+            url: baseURL.appending(path: "runs/\(runID)/review-rows/\(rowIndex)")
+        )
+        guard selectedRunID == runID, selectedReviewRowIndex == rowIndex else { return }
         activeReviewInspector = inspector
         reviewDraft = SpotReviewDraft(
             reviewState: inspector.reviewControls.reviewState,
@@ -2414,10 +2567,10 @@ final class SpotCoreService: ObservableObject {
     private func nativeConfigTemplate() -> String {
         let defaultRuns = spotDataHome.appending(path: "runs").path
         let defaultLogs = spotLogHome.path
-        let defaultModelsHome = "/Users/Shared/Models/spot"
+        let defaultModelsHome = "/Users/Shared/Models"
         let defaultHFHome = URL(fileURLWithPath: defaultModelsHome).appending(path: "huggingface").path
         let defaultHFHubCache = URL(fileURLWithPath: defaultHFHome).appending(path: "hub").path
-        let defaultOllamaModels = URL(fileURLWithPath: defaultModelsHome).appending(path: "ollama").path
+        let defaultOllamaModels = defaultModelsHome
         let defaultMLXModels = URL(fileURLWithPath: defaultModelsHome).appending(path: "mlx-local").path
         let bundledSSOT = bundledCoreRootURL()?.appending(path: "ssot/ssot.json").path ?? ""
         let suggestedPython = ProcessInfo.processInfo.environment["SPOT_NATIVE_PYTHON_BIN"] ?? ""
@@ -2439,7 +2592,7 @@ final class SpotCoreService: ObservableObject {
         SPOT_NATIVE_INTAKE_ARCHIVE_DIR="\(defaultIntakeProcessedURL.path)"
         SPOT_NATIVE_INTAKE_FAILED_DIR="\(defaultIntakeFailedURL.path)"
         SPOT_NATIVE_AUTO_START_WATCH_FOLDER="1"
-        # If auth is enabled for this runtime, set a non-default local access code before real operator use.
+        # Native startup creates a local access code when this value is empty.
         SPOT_LOCAL_ACCESS_CODE=""
         """
     }

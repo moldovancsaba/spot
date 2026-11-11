@@ -26,6 +26,7 @@ enum SpotAppPage: String, CaseIterable, Identifiable {
     case intake
     case review
     case operations
+    case reports
 
     var id: String { rawValue }
 
@@ -36,6 +37,7 @@ enum SpotAppPage: String, CaseIterable, Identifiable {
         case .intake: "Intake"
         case .review: "Review"
         case .operations: "Operations"
+        case .reports: "Reports"
         }
     }
 }
@@ -314,6 +316,10 @@ struct SpotReviewRowPreview: Decodable, Identifiable {
     let reviewDecision: String?
     let explanation: String?
     let flags: [String]?
+    let outcome: String?
+    let humanCategory: String?
+    let workflowBucket: String?
+    let automaticReport: SpotAutomaticReport?
 
     var id: Int { rowIndex }
 
@@ -326,6 +332,10 @@ struct SpotReviewRowPreview: Decodable, Identifiable {
         case reviewDecision = "review_decision"
         case explanation
         case flags
+        case outcome
+        case humanCategory = "human_category"
+        case workflowBucket = "workflow_bucket"
+        case automaticReport = "automatic_report"
     }
 }
 
@@ -382,6 +392,7 @@ struct SpotReviewRowInspector: Decodable {
     let row: SpotReviewRowPreview
     let evidence: SpotReviewEvidence
     let reviewControls: SpotReviewControls
+    let caseReview: SpotCaseRecord?
 
     private enum CodingKeys: String, CodingKey {
         case runID = "run_id"
@@ -392,6 +403,7 @@ struct SpotReviewRowInspector: Decodable {
         case row
         case evidence
         case reviewControls = "review_controls"
+        case caseReview = "case_review"
     }
 }
 
