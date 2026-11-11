@@ -93,6 +93,8 @@ def resolve_run_state(
         return "PAUSED"
     if progress_state in nonterminal and not running:
         return "INTERRUPTED"
+    if progress_state in {"COMPLETED", "FAILED", "CANCELLED", "BLOCKED"}:
+        return progress_state
     if existing in nonterminal and not running:
         return "INTERRUPTED"
     if progress_state:

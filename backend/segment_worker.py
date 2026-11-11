@@ -508,6 +508,11 @@ def main() -> int:
     )
 
     try:
+        from backend.services.automatic_recheck_service import run_planned_rechecks
+        def recheck_progress(plan):
+            _append_log(run_dir, f"[AUTOMATIC_RECHECK] {plan['processed']}/{plan['total']} checked; {plan['resolved']} resolved automatically")
+        run_planned_rechecks(runs_dir=args.runs_dir, run_id=args.run_id, ssot_path=args.ssot,
+                             should_stop=lambda: STOP_REQUESTED, on_progress=recheck_progress)
         while True:
             if STOP_REQUESTED:
                 raise KeyboardInterrupt("stop requested")

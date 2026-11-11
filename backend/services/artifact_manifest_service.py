@@ -7,6 +7,7 @@ from typing import Callable
 
 RUN_ARTIFACT_NAMES = [
     "output.xlsx",
+    "evaluation_report.json",
     "integrity_report.json",
     "artifact_manifest.json",
     "segment_assignment_manifest.jsonl",

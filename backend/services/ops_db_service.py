@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from src.failure_policy import ANALYSIS_FAILURE_FLAGS, requires_safety_review, validated_auto_consensus
+
 import json
 import os
 import sqlite3
@@ -184,6 +186,7 @@ def _init_db(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_upload_rows_upload_sequence ON upload_rows(upload_id, sequence_index);
         CREATE INDEX IF NOT EXISTS idx_run_attempts_run_id ON run_attempts(run_id, attempt_number);
         CREATE INDEX IF NOT EXISTS idx_run_rows_run_id ON run_rows(run_id, row_index);
+        CREATE INDEX IF NOT EXISTS idx_run_rows_review_age ON run_rows(run_id, created_at, row_index);
         CREATE INDEX IF NOT EXISTS idx_run_rows_review_required ON run_rows(run_id, review_required, review_state);
         """
     )
@@ -202,6 +205,61 @@ def _init_db(conn: sqlite3.Connection) -> None:
     _ensure_column(conn, "upload_rows", "source_row_index", "INTEGER")
     if _run_rows_lineage_rebuild_required(conn):
         _rebuild_run_rows_table(conn)
+    _ensure_column(conn, "run_rows", "analysis_trace_json", "TEXT")
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS automatic_report_status (
+            run_id TEXT NOT NULL,row_index INTEGER NOT NULL,evidence_hash TEXT NOT NULL,findings_json TEXT NOT NULL,
+            report_id TEXT,state TEXT NOT NULL,last_error TEXT,updated_at INTEGER NOT NULL,
+            PRIMARY KEY(run_id,row_index),FOREIGN KEY(run_id,row_index) REFERENCES run_rows(run_id,row_index) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS automatic_report_exports (
+            report_id TEXT PRIMARY KEY,run_id TEXT NOT NULL,row_index INTEGER NOT NULL,evidence_hash TEXT NOT NULL,rule_id TEXT NOT NULL,
+            pdf_path TEXT NOT NULL,pdf_sha256 TEXT NOT NULL,snapshot_path TEXT NOT NULL,findings_json TEXT NOT NULL,created_at INTEGER NOT NULL,
+            FOREIGN KEY(run_id,row_index) REFERENCES run_rows(run_id,row_index) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_auto_report_case ON automatic_report_exports(run_id,row_index,created_at);
+        CREATE TABLE IF NOT EXISTS analysis_revisions (
+            revision_id TEXT PRIMARY KEY, run_id TEXT NOT NULL, row_index INTEGER NOT NULL,
+            previous_json TEXT NOT NULL, replacement_json TEXT NOT NULL, created_at INTEGER NOT NULL,
+            FOREIGN KEY (run_id,row_index) REFERENCES run_rows(run_id,row_index) ON DELETE CASCADE
+        );
+        CREATE TRIGGER IF NOT EXISTS invalidate_case_on_analysis_trace_change
+        AFTER UPDATE OF analysis_trace_json ON run_rows
+        WHEN OLD.analysis_trace_json IS NOT NEW.analysis_trace_json
+        BEGIN DELETE FROM case_decisions WHERE run_id=NEW.run_id AND row_index=NEW.row_index; END;
+        CREATE TRIGGER IF NOT EXISTS invalidate_automatic_check_on_source_change
+        AFTER UPDATE OF post_text, item_number, source_row_hash ON run_rows
+        WHEN OLD.analysis_trace_json IS NOT NULL AND (OLD.post_text IS NOT NEW.post_text OR OLD.item_number IS NOT NEW.item_number OR OLD.source_row_hash IS NOT NEW.source_row_hash)
+        BEGIN UPDATE run_rows SET review_required=1 WHERE run_id=NEW.run_id AND row_index=NEW.row_index; END;
+        CREATE TABLE IF NOT EXISTS case_decisions (
+            run_id TEXT NOT NULL, row_index INTEGER NOT NULL,
+            decision_id TEXT NOT NULL, outcome TEXT NOT NULL,
+            human_category TEXT, note TEXT NOT NULL, reviewer TEXT NOT NULL,
+            reviewed_at INTEGER NOT NULL, evidence_hash TEXT NOT NULL,
+            PRIMARY KEY (run_id, row_index),
+            FOREIGN KEY (run_id, row_index) REFERENCES run_rows(run_id, row_index) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS case_decision_history (
+            decision_id TEXT PRIMARY KEY, run_id TEXT NOT NULL, row_index INTEGER NOT NULL,
+            payload_json TEXT NOT NULL, created_at INTEGER NOT NULL,
+            FOREIGN KEY (run_id, row_index) REFERENCES run_rows(run_id, row_index) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS threat_report_exports (
+            report_id TEXT PRIMARY KEY, run_id TEXT NOT NULL, row_index INTEGER NOT NULL,
+            decision_id TEXT NOT NULL, evidence_hash TEXT NOT NULL,
+            pdf_path TEXT NOT NULL, pdf_sha256 TEXT NOT NULL, created_at INTEGER NOT NULL,
+            actor TEXT NOT NULL,
+            FOREIGN KEY (run_id, row_index) REFERENCES run_rows(run_id, row_index) ON DELETE CASCADE
+        );
+    """)
+    conn.execute("""CREATE TRIGGER IF NOT EXISTS invalidate_case_on_evidence_change
+        AFTER UPDATE OF post_text, item_number, row_hash, source_row_index, source_row_hash, assigned_category, confidence_score, flags_json, fallback_events_json, explanation, model_votes_json, drafted_text ON run_rows
+        WHEN OLD.post_text IS NOT NEW.post_text OR OLD.item_number IS NOT NEW.item_number OR OLD.row_hash IS NOT NEW.row_hash OR OLD.source_row_index IS NOT NEW.source_row_index OR OLD.source_row_hash IS NOT NEW.source_row_hash OR OLD.assigned_category IS NOT NEW.assigned_category OR OLD.confidence_score IS NOT NEW.confidence_score OR OLD.flags_json IS NOT NEW.flags_json OR OLD.fallback_events_json IS NOT NEW.fallback_events_json OR OLD.explanation IS NOT NEW.explanation OR OLD.model_votes_json IS NOT NEW.model_votes_json OR OLD.drafted_text IS NOT NEW.drafted_text
+        BEGIN DELETE FROM case_decisions WHERE run_id=NEW.run_id AND row_index=NEW.row_index; END""")
+    conn.execute("""CREATE TRIGGER IF NOT EXISTS invalidate_automatic_report_on_evidence_change
+        AFTER UPDATE OF post_text,item_number,row_hash,source_row_index,source_row_hash,assigned_category,confidence_score,flags_json,fallback_events_json,explanation,model_votes_json,drafted_text,analysis_trace_json,soft_signal_score,soft_signal_flags_json,soft_signal_evidence_json,judge_score,judge_verdict ON run_rows
+        WHEN OLD.post_text IS NOT NEW.post_text OR OLD.item_number IS NOT NEW.item_number OR OLD.row_hash IS NOT NEW.row_hash OR OLD.source_row_index IS NOT NEW.source_row_index OR OLD.source_row_hash IS NOT NEW.source_row_hash OR OLD.assigned_category IS NOT NEW.assigned_category OR OLD.confidence_score IS NOT NEW.confidence_score OR OLD.flags_json IS NOT NEW.flags_json OR OLD.fallback_events_json IS NOT NEW.fallback_events_json OR OLD.explanation IS NOT NEW.explanation OR OLD.model_votes_json IS NOT NEW.model_votes_json OR OLD.drafted_text IS NOT NEW.drafted_text OR OLD.analysis_trace_json IS NOT NEW.analysis_trace_json OR OLD.soft_signal_score IS NOT NEW.soft_signal_score OR OLD.soft_signal_flags_json IS NOT NEW.soft_signal_flags_json OR OLD.soft_signal_evidence_json IS NOT NEW.soft_signal_evidence_json OR OLD.judge_score IS NOT NEW.judge_score OR OLD.judge_verdict IS NOT NEW.judge_verdict
+        BEGIN DELETE FROM automatic_report_status WHERE run_id=NEW.run_id AND row_index=NEW.row_index; END""")
     conn.commit()
 
 
@@ -781,6 +839,7 @@ def _decode_run_row(row: sqlite3.Row) -> dict[str, Any]:
         "minority_label": str(row["minority_label"]) if row["minority_label"] else None,
         "model_votes": _json_loads_dict(row["model_votes_json"]),
         "drafted_text": str(row["drafted_text"]) if row["drafted_text"] else None,
+        "audit_trace": _json_loads_dict(row["analysis_trace_json"]),
         "updated_at": int(row["updated_at"] or 0),
     }
 
@@ -825,6 +884,15 @@ def upsert_run_rows(
             sequence_index = row.get("sequence_index", source_row.get("sequence_index", existing.get("sequence_index")))
             source_row_index = row.get("source_row_index", source_row.get("row_index", existing.get("source_row_index")))
             source_row_hash = str(row.get("source_row_hash") or source_row.get("row_hash") or existing.get("source_row_hash") or "") or None
+            row = dict(row)
+            flags = set(row.get("flags") or [])
+            if flags & ANALYSIS_FAILURE_FLAGS:
+                flags.add("ANALYSIS_FAILED")
+                row["confidence_score"] = 0.0
+            if requires_safety_review(flags, row.get("fallback_events")) and not validated_auto_consensus(row):
+                flags.add("REVIEW_REQUIRED")
+                row["review_required"] = True
+            row["flags"] = sorted(flags)
             review_required = row.get("review_required")
             if review_required is None:
                 review_required = "REVIEW_REQUIRED" in {str(flag) for flag in row.get("flags", [])}
@@ -911,6 +979,10 @@ def upsert_run_rows(
                     now,
                 ),
             )
+            if row.get("audit_trace") is not None:
+                conn.execute('UPDATE run_rows SET analysis_trace_json=? WHERE run_id=? AND row_index=?', (_json_dumps(row['audit_trace']),run_id,row_index))
+            from backend.services.automatic_report_service import refresh_automatic_report
+            refresh_automatic_report(conn,runs_dir=runs_dir,run_id=run_id,row_index=row_index)
         conn.commit()
     return len(rows)
 
@@ -959,13 +1031,15 @@ def summarize_run_rows(
         params.append(int(row_index_max))
     where_clause = " AND ".join(where)
 
+    from backend.services.recheck_queue_service import pending_recheck_rows
+    pending = pending_recheck_rows(runs_dir,run_id)
     with _connect(runs_dir) as conn:
         row = conn.execute(
             f"""
             SELECT
                 COUNT(*) AS processed_rows,
                 SUM(CASE WHEN assigned_category IS NOT NULL AND assigned_category NOT IN ('', 'Not Antisemitic') THEN 1 ELSE 0 END) AS threat_rows_detected,
-                SUM(CASE WHEN review_required = 1 THEN 1 ELSE 0 END) AS review_required_rows_detected,
+                SUM(CASE WHEN review_required = 1 AND (NOT EXISTS (SELECT 1 FROM automatic_report_status a WHERE a.run_id=run_rows.run_id AND a.row_index=run_rows.row_index) OR EXISTS (SELECT 1 FROM case_decisions d WHERE d.run_id=run_rows.run_id AND d.row_index=run_rows.row_index)) AND (row_index NOT IN (SELECT value FROM json_each(?)) OR EXISTS (SELECT 1 FROM case_decisions d WHERE d.run_id=run_rows.run_id AND d.row_index=run_rows.row_index)) THEN 1 ELSE 0 END) AS review_required_rows_detected,
                 SUM(CASE WHEN judge_verdict IS NOT NULL OR judge_score IS NOT NULL THEN 1 ELSE 0 END) AS judged_rows,
                 SUM(CASE WHEN
                     flags_json LIKE '%SECOND_PASS_RECHECK%' OR
@@ -981,7 +1055,7 @@ def summarize_run_rows(
             FROM run_rows
             WHERE {where_clause}
             """,
-            params,
+            [json.dumps(sorted(pending)), *params],
         ).fetchone()
 
     return {
@@ -1006,6 +1080,9 @@ def update_run_row_review(
 ) -> None:
     now = _now_ts()
     with _connect(runs_dir) as conn:
+        # Legacy review edits supersede any explicit case confirmation.
+        conn.execute("DELETE FROM case_decisions WHERE run_id = ? AND row_index = ?", (run_id, row_index))
+        conn.execute("DELETE FROM automatic_report_status WHERE run_id = ? AND row_index = ?", (run_id,row_index))
         conn.execute(
             """
             UPDATE run_rows

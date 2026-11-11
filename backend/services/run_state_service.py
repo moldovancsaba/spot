@@ -255,10 +255,17 @@ def write_review_state(*, runs_dir: Path, run_id: str, state: dict) -> dict:
 
 def _project_review_state_from_run_rows(*, runs_dir: Path, run_id: str) -> dict:
     rows = fetch_run_rows(runs_dir=runs_dir, run_id=run_id, review_required_only=True)
+    from backend.services.recheck_queue_service import pending_recheck_rows
+    from backend.services.ops_db_service import _connect
+    pending = pending_recheck_rows(runs_dir,run_id)
+    with _connect(runs_dir) as conn:
+        human = {r['row_index'] for r in conn.execute('SELECT row_index FROM case_decisions WHERE run_id=?',(run_id,))}
+        reporting = {r['row_index'] for r in conn.execute('SELECT row_index FROM automatic_report_status WHERE run_id=?',(run_id,))} - human
+    pending -= human
     projected_rows: dict[str, dict] = {}
     for row in rows:
         row_index = int(row.get("row_index") or 0)
-        if row_index <= 0:
+        if row_index <= 0 or row_index in pending or row_index in reporting:
             continue
         projected_rows[str(row_index)] = {
             "row_index": row_index,
@@ -288,7 +295,7 @@ def _review_state_from_canonical(
     allow_checkpoint_backfill: bool = True,
 ) -> dict:
     state = _project_review_state_from_run_rows(runs_dir=runs_dir, run_id=run_id)
-    if state.get("rows") or not allow_checkpoint_backfill:
+    if state.get("rows") or not allow_checkpoint_backfill or summarize_run_rows(runs_dir=runs_dir, run_id=run_id)["processed_rows"] > 0:
         return state
     migrate_run_rows_to_canonical(runs_dir=runs_dir, run_id=run_id, include_checkpoints=True, include_output=False)
     return _project_review_state_from_run_rows(runs_dir=runs_dir, run_id=run_id)
@@ -536,6 +543,8 @@ def _resolve_run_state(*, run_id: str, existing_state: str | None, progress: dic
         return "PAUSED"
     if progress_state in nonterminal and not running:
         return "INTERRUPTED"
+    if progress_state in {"COMPLETED", "FAILED", "CANCELLED", "BLOCKED"}:
+        return progress_state
     if existing in nonterminal and not running:
         return "INTERRUPTED"
     if progress_state:
@@ -597,8 +606,9 @@ def _build_resolved_run_record(*, runs_dir: Path, run_id: str) -> tuple[dict, di
 
     rows = review_state.get("rows", {})
     detected_review = int(processing_stats.get("review_required_rows_detected") or 0) if isinstance(processing_stats, dict) else 0
-    total_review = max(len(rows), detected_review)
-    reviewed = sum(1 for row in rows.values() if row.get("review_state") not in {None, "", "pending"})
+    canonical_review = summarize_run_rows(runs_dir=runs_dir, run_id=run_id)
+    total_review = int(canonical_review["review_required_rows_detected"]) if canonical_review["processed_rows"] else max(len(rows), detected_review)
+    reviewed = sum(1 for row in rows.values() if row.get("review_state") == "reviewed" and row.get("review_decision") in {"confirm", "adjust"})
     record["state"] = _resolve_run_state(run_id=run_id, existing_state=record.get("state"), progress=raw_progress, control=control)
     segment_summary = build_run_segment_summary(runs_dir=runs_dir, run_id=run_id, effective_run_state=record["state"])
     record["state"] = normalize_state_from_segments(state=record["state"], segment_summary=segment_summary)
