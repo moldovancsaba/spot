@@ -494,6 +494,18 @@ def _resolved_total_rows(
     return None
 
 
+def count_upload_segments(*, runs_dir: Path, upload_id: str) -> int:
+    """Number of queue segments currently recorded for an upload.
+
+    Used by run start to refuse an upload whose segment queue is empty: without segments a run has no
+    work, and the worker would finalize it as COMPLETED with zero processed rows - a false success.
+    Segments can disappear while the upload survives, for example when a previous run is purged.
+    """
+    with _connect(runs_dir) as conn:
+        row = conn.execute("SELECT COUNT(*) FROM segments WHERE upload_id = ?", (upload_id,)).fetchone()
+    return int(row[0] if row else 0)
+
+
 def resolve_processed_rows(
     *,
     canonical_processed_rows: int = 0,

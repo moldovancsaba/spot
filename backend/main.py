@@ -761,6 +761,18 @@ def _start_classify_run(*, run_id: str, payload: dict, actor: str, resume_existi
 
     run_dir = RUNS_DIR / run_id
     _assert_allowed_classify_payload(payload)
+    if payload.get("upload_id") and not resume_existing:
+        from backend.services.ops_db_service import count_upload_segments
+
+        upload_id = str(payload.get("upload_id"))
+        if count_upload_segments(runs_dir=RUNS_DIR, upload_id=upload_id) == 0:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"upload '{upload_id}' has no queue segments; re-intake the workbook before starting a run. "
+                    "A run started without segments would finalize as COMPLETED with zero processed rows."
+                ),
+            )
     input_path = _resolve_input_path_from_payload(payload)
     if DEFAULT_PRODUCTION_MODE and not payload.get("upload_id"):
         raise HTTPException(status_code=403, detail="SPOT production mode requires classify runs to start from an accepted upload")

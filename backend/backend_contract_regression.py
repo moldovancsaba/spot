@@ -262,6 +262,39 @@ class BackendContractRegressionTests(unittest.TestCase):
         self.assertTrue(response.json()["launch"]["ready"])
         self.assertEqual(response.json()["inference"]["status"], "not_checked")
 
+    def test_start_refuses_an_upload_whose_segment_queue_is_empty(self) -> None:
+        """An upload can outlive its segments (e.g. after a run purge).
+
+        Starting a run in that state produced a COMPLETED run with zero processed rows, which reads as
+        success. Start must refuse instead.
+        """
+        self._login_admin()
+        upload = intake_workbook(
+            runs_dir=self.runs_dir,
+            ssot_path=PROJECT_ROOT / "ssot/ssot.json",
+            upload_id="no-segments-upload",
+            filename="no-segments.xlsx",
+            content=_build_workbook_bytes(),
+        )
+        self.assertEqual(upload["status"], "accepted")
+        from backend.services.ops_db_service import _connect
+
+        with _connect(self.runs_dir) as conn:
+            conn.execute("DELETE FROM segments WHERE upload_id = ?", ("no-segments-upload",))
+            conn.commit()
+
+        with patch.object(main_module, "_assert_required_local_model_services_ready"), \
+                patch.object(main_module.subprocess, "Popen") as start:
+            response = self.client.post(
+                "/classify/start/no-segments",
+                json={"upload_id": "no-segments-upload", "language": "de", "review_mode": "partial"},
+            )
+        self.assertEqual(response.status_code, 409, response.text)
+        self.assertIn("no queue segments", response.text)
+        spawned = [call.args[0] for call in start.call_args_list
+                   if call.args and any(str(a).endswith("segment_worker.py") for a in call.args[0])]
+        self.assertEqual(spawned, [], "no worker may be spawned for an upload with no segments")
+
     def test_production_start_uses_default_progress_and_real_start_builder(self) -> None:
         self._login_admin()
         main_module.DEFAULT_PRODUCTION_MODE = True
