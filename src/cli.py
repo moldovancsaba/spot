@@ -70,6 +70,7 @@ def _parser() -> argparse.ArgumentParser:
     preflight.add_argument("--ssot", default=Path("ssot/ssot.json"), type=Path)
     preflight.add_argument("--runs-dir", default=Path("runs"), type=Path)
     preflight.add_argument("--port", type=int, default=8765)
+    preflight.add_argument("--inference-smoke", action="store_true", help="Verify structured output from primary and fallback models using synthetic text")
 
     bootstrap = sub.add_parser("bootstrap", help="Prepare local appliance directories and Python environment")
     bootstrap.add_argument("--project-root", default=Path("."), type=Path)
@@ -206,6 +207,7 @@ def main() -> int:
             ssot_path=args.ssot,
             runs_dir=args.runs_dir,
             port=args.port,
+            inference_smoke=args.inference_smoke,
         )
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0 if report["status"] == "ok" else 1

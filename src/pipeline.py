@@ -331,6 +331,7 @@ def _serialize_result(result: ClassificationResult) -> dict:
         "judge_score": result.judge_score,
         "judge_verdict": result.judge_verdict,
         "fallback_events": list(result.fallback_events or []),
+        "audit_trace": result.audit_trace,
     }
 
 
@@ -353,6 +354,7 @@ def _deserialize_result(payload: dict) -> ClassificationResult:
         judge_score=(float(payload["judge_score"]) if payload.get("judge_score") is not None else None),
         judge_verdict=(str(payload["judge_verdict"]) if payload.get("judge_verdict") else None),
         fallback_events=[str(item) for item in payload.get("fallback_events", [])] or None,
+        audit_trace=payload.get("audit_trace"),
     )
 
 
@@ -409,6 +411,7 @@ def _persist_canonical_run_row(
                 "model_votes": dict(result.model_votes or {}),
                 "drafted_text": result.drafted_text,
                 "review_required": "REVIEW_REQUIRED" in (result.flags or []),
+                "audit_trace": result.audit_trace,
             }
         ],
     )
@@ -444,6 +447,16 @@ def _load_result_checkpoint(checkpoint_path: Path, expected_row_hashes: list[str
         except Exception:
             continue
     return completed
+
+
+def _committed_model_version(row: dict) -> str:
+    trace = row.get('audit_trace') or {}
+    for key in ('initial', 'alternate'):
+        branch = trace.get(key) or {}
+        if branch.get('category') == row.get('assigned_category') and branch.get('model'):
+            return branch['model']
+    matching = [model for model,label in (row.get('model_votes') or {}).items() if label == row.get('assigned_category')]
+    return matching[0] if len(matching) == 1 else 'historical:see-model-votes'
 
 
 def _load_committed_canonical_results(
@@ -482,7 +495,7 @@ def _load_committed_canonical_results(
             soft_signal_score=committed.get("soft_signal_score"),
             soft_signal_flags=[str(item) for item in committed.get("soft_signal_flags") or []],
             soft_signal_evidence=[str(item) for item in committed.get("soft_signal_evidence") or []],
-            resolved_model_version=None,
+            resolved_model_version=_committed_model_version(committed),
             model_votes=dict(committed.get("model_votes") or {}) or None,
             consensus_tier=(str(committed.get("consensus_tier")) if committed.get("consensus_tier") else None),
             minority_label=(str(committed.get("minority_label")) if committed.get("minority_label") else None),
@@ -490,8 +503,28 @@ def _load_committed_canonical_results(
             judge_score=(float(committed["judge_score"]) if committed.get("judge_score") is not None else None),
             judge_verdict=(str(committed.get("judge_verdict")) if committed.get("judge_verdict") else None),
             fallback_events=[str(item) for item in committed.get("fallback_events") or []] or None,
+            audit_trace=committed.get("audit_trace"),
         )
     return restored
+
+
+def _canonical_review_overrides(runs_dir: Path | None, run_id: str | None) -> dict[int, bool] | None:
+    if runs_dir is None or not run_id:
+        return None
+    from backend.services.ops_db_service import fetch_run_rows
+    from backend.services.ops_db_service import _connect
+    from backend.services.recheck_queue_service import pending_recheck_rows
+    with _connect(runs_dir) as conn:
+        reporting = {r['row_index'] for r in conn.execute('SELECT row_index FROM automatic_report_status WHERE run_id=?',(run_id,))}
+    machine_work = reporting | pending_recheck_rows(runs_dir,run_id)
+    return {row['row_index']: bool(row['review_required']) and row['row_index'] not in machine_work for row in fetch_run_rows(runs_dir=runs_dir, run_id=run_id)}
+
+
+def _canonical_automatic_report_rows(runs_dir: Path | None,run_id: str | None) -> set[int]:
+    if runs_dir is None or not run_id:return set()
+    from backend.services.ops_db_service import _connect
+    with _connect(runs_dir) as conn:
+        return {row['row_index'] for row in conn.execute('SELECT row_index FROM automatic_report_status WHERE run_id=?',(run_id,))}
 
 
 def rebuild_output_from_canonical(
@@ -543,6 +576,8 @@ def rebuild_output_from_canonical(
         pipeline_version=PIPELINE_VERSION,
         results=ordered_results,
         row_hashes=row_hashes,
+        review_required_overrides=_canonical_review_overrides(canonical_runs_dir, canonical_run_id),
+        automatic_report_rows=_canonical_automatic_report_rows(canonical_runs_dir,canonical_run_id),
     )
     validate_no_null_assigned_category(output_path, expected_rows=[r.row_index for r in ordered_results])
     detected_categories = extract_assigned_categories(output_path, expected_rows=[r.row_index for r in ordered_results])
@@ -854,6 +889,8 @@ def run_classification(
             pipeline_version=PIPELINE_VERSION,
             results=results,
             row_hashes=row_hashes,
+            review_required_overrides=_canonical_review_overrides(canonical_runs_dir, canonical_run_id),
+            automatic_report_rows=_canonical_automatic_report_rows(canonical_runs_dir,canonical_run_id),
         )
         validate_no_null_assigned_category(output_path, expected_rows=[r.row_index for r in results])
         detected_categories = extract_assigned_categories(output_path, expected_rows=[r.row_index for r in results])
@@ -889,6 +926,7 @@ def run_classification(
             "prompt_version": ssot.policy.prompt_version,
             "pipeline_version": PIPELINE_VERSION,
             "task_routing": TASK_ROUTING,
+            "text_preparation": "deterministic-whitespace-only-v1",
             "lane_config": lane_config.__dict__,
             "review_mode": review_mode,
             "run_language": run_language,

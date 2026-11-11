@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .failure_policy import enforce_result_safety, ANALYSIS_FAILURE_FLAGS
+
 import hashlib
 import json
 from pathlib import Path
@@ -357,6 +359,8 @@ def write_output(
     pipeline_version: str,
     results: List[ClassificationResult],
     row_hashes: List[str],
+    review_required_overrides: dict[int, bool] | None = None,
+    automatic_report_rows: set[int] | None = None,
 ) -> None:
     wb = load_workbook(input_path)
     ws = wb[wb.sheetnames[0]]
@@ -366,10 +370,16 @@ def write_output(
         ws.cell(row=1, column=start_col + offset, value=col_name)
 
     for i, result in enumerate(results, start=2):
+        result = enforce_result_safety(result)
         if not result.category:
             result.category = "Not Antisemitic"
             result.flags = sorted(set(result.flags + ["EMPTY_CATEGORY_RECOVERED"]))
-        review_required = "YES" if "REVIEW_REQUIRED" in result.flags else "NO"
+        required = "REVIEW_REQUIRED" in result.flags
+        if review_required_overrides is not None and result.row_index in review_required_overrides:
+            required = review_required_overrides[result.row_index] or bool(set(result.flags) & ANALYSIS_FAILURE_FLAGS)
+        if automatic_report_rows and result.row_index in automatic_report_rows:
+            required = False  # A persisted eligible AI-report route is distinct from an arbitrary review override.
+        review_required = "YES" if required else "NO"
         values = [
             result.raw_category,
             result.category,

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from src.failure_policy import MANDATORY_REVIEW_FLAGS
+
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -48,6 +50,13 @@ def export_trinity_spot_training_bundles(
     written: list[str] = []
     skipped_count = 0
     for row in sorted(rows, key=lambda item: int(item.get("row_index") or 0)):
+        from backend.services.case_report_service import get_case
+        case = get_case(runs_dir=runs_dir, run_id=run_id, row_index=int(row.get("row_index") or 0))
+        if case and case.get("decision_id"):
+            if case.get("decision_stale") or case.get("outcome") not in {"confirmed_threat", "false_alarm"}:
+                skipped_count += 1
+                continue
+            row = {**row, "human_category": case.get("human_category")}
         bundle = build_trinity_spot_training_bundle(
             run_id=run_id,
             company_id=company_id,
@@ -86,7 +95,9 @@ def build_trinity_spot_training_bundle(
 ) -> dict | None:
     review_state = str(row.get("review_state") or "pending")
     review_decision = str(row.get("review_decision") or "").strip().lower()
-    if review_state not in {"reviewed", "escalated"}:
+    if review_state != "reviewed":
+        return None
+    if set(row.get("flags") or []) & MANDATORY_REVIEW_FLAGS or row.get("fallback_events"):
         return None
     if review_decision not in {"confirm", "adjust"}:
         return None
@@ -99,6 +110,10 @@ def build_trinity_spot_training_bundle(
 
     occurred_at = _coerce_timestamp(row.get("updated_at"))
     cycle_id = str(uuid5(NAMESPACE_URL, f"spot:{company_id}:{run_id}:{row_index}:{review_state}:{review_decision}"))
+    final_label = str(row.get("human_category") or assigned_category)
+    from src.models import CANONICAL_CATEGORIES
+    if final_label not in CANONICAL_CATEGORIES:
+        return None
     selected_candidate_key = _selected_candidate_key(assigned_category=assigned_category)
     combined_confidence = _normalized_confidence(row.get("confidence_score"))
     review_required = bool(row.get("review_required"))
@@ -162,7 +177,7 @@ def build_trinity_spot_training_bundle(
         "row_ref": f"sheet1:{row_index}",
         "selected_candidate_key": selected_candidate_key,
         "disposition": disposition,
-        "final_label": assigned_category,
+        "final_label": final_label,
         "occurred_at": occurred_at,
         "reviewer_notes": str(row.get("reviewer_note") or "") or None,
         "metadata": {
@@ -185,7 +200,7 @@ def build_trinity_spot_training_bundle(
             "bundle_type": TRINITY_SPOT_BUNDLE_TYPE,
             "company_id": company_id,
             "run_id": run_id,
-            "final_label": assigned_category,
+            "final_label": final_label,
             "disposition": disposition,
         },
         "contract_version": TRINITY_SPOT_CONTRACT_VERSION,
