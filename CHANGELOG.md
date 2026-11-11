@@ -2,10 +2,39 @@
 
 ## Unreleased
 
-- Consolidated `{spot}` into a native-only macOS delivery baseline.
-- Removed the server-rendered browser operator UI and browser appliance startup path from the active runtime.
+### 2026-11-11 — operator safeguards, case/report cockpit, classifier route swap
+
+- Committed the previously uncommitted operator-safeguards work as ten reviewable commits: SSOT 0.4, failure policy and review routing, human case decisions and threat reports, automatic any-positive reporting, native reports surface, contract regressions, CI, and documentation reconciliation.
+- Swapped the governed classifier route to `ollama://gemma2:9b` with `ollama://qwen2.5:7b` as the independent verifier, on 300-row same-sample evidence: binary recall 0.788 -> 0.936, six-way macro-F1 0.270 -> 0.323, +44% per-row latency.
+- Re-ran the 30-row German acceptance under the new route: reference agreement 26.67% -> 40.00%, macro-F1 0.1755 -> 0.3201, zero analysis failures. Formal acceptance remains held; see `docs/ACCEPTANCE_EVIDENCE_2026-11-11.md`.
+- Recorded the reference-label audit as a material limitation: `Structural Antisemitism` is 83.5% Israel/Zionism-framed in the approved workbook, so reference agreement is not an accuracy estimate.
+- Rebuilt and reinstalled `/Applications/spot.app` from the committed tree; the bundled `classifier.py` is verified byte-identical to the repository.
+- Split test-only dependencies into `requirements-dev.txt` (`httpx2`, `pypdf`) and made CI resolve the same set instead of patching requirements at install time.
+- Refreshed `ssot/ssot.example.json` to the current contract, aligned `FOUNDATION.md` and `DESIGN.md` to the 0.5.2 / SSOT 0.4 baseline, moved the automatic-reporting clause out of "Explicit Non-Goals", and normalized machine-specific absolute paths across all documentation.
+- Disabled automatic AI reporting for the active interrupted run and kept it frozen pending a restart under the new route.
+
+### 2026-11-08 — cockpit reports, human threat decisions, acceptance evaluation
+
+- Added native Reports with case totals, paginated cases, and generated threat report history; attached the German baseline and comparison summaries to their run records.
+- Added explicit human confirmed-threat / false-alarm / unresolved decisions with closed-taxonomy categories, evidence-bound write tokens, immutable decision history, and evidence-change invalidation.
+- Added gated `{spot}` PDF generation with original post, saved human finding, model evidence, identities, timestamps and hashes; added the pinned `reportlab` dependency and PDF regressions.
+- Added mandatory failure review, zero-confidence failure placeholders, and shared safety enforcement at canonical persistence and workbook boundaries.
+- Added SSOT 0.4 automatic any-positive AI reporting and its governed preference rules.
+- Consolidated `{spot}` into a native-only macOS delivery baseline; removed the server-rendered browser operator UI and browser appliance startup path.
 - Added native acceptance smoke coverage at `app/macos/native_acceptance_smoke.py`.
 - Rebuilt active operator, acceptance, benchmark, and production docs around the native macOS surface.
+
+## 0.5.2 - 2026-05-11
+
+- Added the bounded `{trinity}` / `{train}` export seam so reviewed run rows feed the review-policy loop (`src/trinity_spot_bundle.py`, `export-trinity-spot-bundles`).
+- Limited export eligibility to reviewed rows with saved `confirm` or `adjust` decisions.
+- Promoted the workspace baseline to `0.5.2` and the pipeline marker to `mvp-0.5.2` across version surfaces, native bundle metadata, and maintainer docs.
+
+## 0.5.1 - 2026-05-10
+
+- Promoted the active workspace baseline to `0.5.1` and the pipeline marker to `mvp-0.5.1`.
+- Rewrote active README sections so the repository no longer reads as a public open-source distribution; documented the source-checkout install, update, removal, and maintenance path.
+- Aligned the client package, developer handover, runbook, and baseline docs to the same maintainer/support posture.
 
 ## 0.5.0 - 2026-05-07
 

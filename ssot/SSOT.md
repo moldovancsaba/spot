@@ -141,4 +141,25 @@ Out of scope:
 - URL analysis
 - auto language detection
 
-Automatic AI reporting (SSOT 0.4): under the approved any-positive rule, any current canonical, primary, independent, or structured-retry analysis assigning a positive antisemitism category at confidence >=0.30 routes directly to AI reports and generates a branded PDF. No human review or cross-model agreement is required for that reporting route; warnings, disagreement, failed quality checks and a negative final classification remain visible in the report. Confidence is the score for a category, not calibrated probability of harm. Only the closed antisemitism taxonomy is scored; generic harmful-content categories are not inferred. Reports are explicitly AI-generated and unconfirmed. Saved human decisions, including false alarms and follow-up decisions, take precedence and suppress automatic reports. Later analyses may supersede a report; all exported snapshots remain in audit history. Human-confirmed reports retain their separate confirmation and permission gates. The policy is snapshotted per run; new native runs inherit it automatically, and current runs require explicit activation/backfill.
+## 14. Automatic AI Reporting
+
+Under the approved any-positive rule, any current canonical, primary, independent, or structured-retry
+analysis assigning a positive antisemitism category at confidence `>= 0.30` routes directly to AI reports
+and generates a branded PDF. No human review or cross-model agreement is required for that reporting
+route; warnings, disagreement, failed quality checks and a negative final classification remain visible
+in the report.
+
+- Confidence is the score for a category, not a calibrated probability of harm.
+- Only the closed antisemitism taxonomy is scored; generic harmful-content categories are not inferred.
+- Reports are explicitly AI-generated and unconfirmed.
+- Saved human decisions, including false alarms and follow-up decisions, take precedence and suppress
+  automatic reports.
+- Later analyses may supersede a report; all exported snapshots remain in audit history.
+- Human-confirmed reports retain their separate confirmation and permission gates.
+- The policy is snapshotted per run; new native runs inherit it automatically, and current runs require
+  explicit activation/backfill.
+
+Operational note (2026-11-11): this route is currently **disabled** by policy, and the reporting policy
+file for the active interrupted run sets `enabled: false`. Re-enabling requires an explicit decision
+backed by an adjudicated gold set; measured reference-label agreement does not yet support unassisted
+publication.
