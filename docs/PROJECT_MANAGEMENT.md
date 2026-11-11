@@ -3,8 +3,8 @@
 ## Functional SSOT
 
 The functional and technical single source of truth inside this repository is:
-- [`ssot/SSOT.md`](/Users/moldovancsaba/Projects/spot/ssot/SSOT.md)
-- [`ssot/ssot.json`](/Users/moldovancsaba/Projects/spot/ssot/ssot.json)
+- [`ssot/SSOT.md`](/Users/Shared/Projects/spot/ssot/SSOT.md)
+- [`ssot/ssot.json`](/Users/Shared/Projects/spot/ssot/ssot.json)
 
 ## Documentation Hierarchy
 

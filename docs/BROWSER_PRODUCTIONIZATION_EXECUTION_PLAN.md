@@ -5,7 +5,7 @@ Historical note:
 - it is no longer the active implementation plan
 
 Primary contract:
-- [`docs/BROWSER_PRODUCTIONIZATION_CONTRACT.md`](/Users/moldovancsaba/Projects/spot/docs/BROWSER_PRODUCTIONIZATION_CONTRACT.md)
+- [`docs/BROWSER_PRODUCTIONIZATION_CONTRACT.md`](/Users/Shared/Projects/spot/docs/BROWSER_PRODUCTIONIZATION_CONTRACT.md)
 
 Board SSOT:
 - GitHub Project `{spot}` items `#12` through `#16`

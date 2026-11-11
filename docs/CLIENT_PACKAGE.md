@@ -194,7 +194,7 @@ Current pre-delivery status:
 Supported installation/update path:
 
 ```bash
-cd /Users/moldovancsaba/Projects/spot
+cd /Users/Shared/Projects/spot
 python3 -m src.cli bootstrap \
   --project-root . \
   --venv-path .venv \
@@ -230,26 +230,26 @@ Bounded `{trinity}` / `{train}` export path:
 
 ## Maintainer Notes
 
-- native app source root: [`app/macos/`](/Users/moldovancsaba/Projects/spot/app/macos)
+- native app source root: [`app/macos/`](/Users/Shared/Projects/spot/app/macos)
 - native generated folders: `app/macos/.build/` and `app/macos/dist/`
 - current repo does not declare an open-source license file
 
 ## Reference Documents
 
-- Brief: [`README_BRIEF.md`](/Users/moldovancsaba/Projects/spot/README_BRIEF.md)
-- Production plan: [`docs/PRODUCTION_PLAN.md`](/Users/moldovancsaba/Projects/spot/docs/PRODUCTION_PLAN.md)
-- Quote: [`quote.md`](/Users/moldovancsaba/Projects/spot/quote.md)
-- Local appliance runbook: [`docs/LOCAL_APPLIANCE_RUNBOOK.md`](/Users/moldovancsaba/Projects/spot/docs/LOCAL_APPLIANCE_RUNBOOK.md)
-- Benchmark checklist: [`docs/BENCHMARK_CHECKLIST.md`](/Users/moldovancsaba/Projects/spot/docs/BENCHMARK_CHECKLIST.md)
-- UAT checklist: [`docs/UAT_CHECKLIST.md`](/Users/moldovancsaba/Projects/spot/docs/UAT_CHECKLIST.md)
-- Acceptance evidence template: [`docs/ACCEPTANCE_EVIDENCE_TEMPLATE.md`](/Users/moldovancsaba/Projects/spot/docs/ACCEPTANCE_EVIDENCE_TEMPLATE.md)
-- Architecture: [`docs/ARCHITECTURE.md`](/Users/moldovancsaba/Projects/spot/docs/ARCHITECTURE.md)
-- SSOT contract: [`ssot/SSOT.md`](/Users/moldovancsaba/Projects/spot/ssot/SSOT.md)
+- Brief: [`README_BRIEF.md`](/Users/Shared/Projects/spot/README_BRIEF.md)
+- Production plan: [`docs/PRODUCTION_PLAN.md`](/Users/Shared/Projects/spot/docs/PRODUCTION_PLAN.md)
+- Quote: [`quote.md`](/Users/Shared/Projects/spot/quote.md)
+- Local appliance runbook: [`docs/LOCAL_APPLIANCE_RUNBOOK.md`](/Users/Shared/Projects/spot/docs/LOCAL_APPLIANCE_RUNBOOK.md)
+- Benchmark checklist: [`docs/BENCHMARK_CHECKLIST.md`](/Users/Shared/Projects/spot/docs/BENCHMARK_CHECKLIST.md)
+- UAT checklist: [`docs/UAT_CHECKLIST.md`](/Users/Shared/Projects/spot/docs/UAT_CHECKLIST.md)
+- Acceptance evidence template: [`docs/ACCEPTANCE_EVIDENCE_TEMPLATE.md`](/Users/Shared/Projects/spot/docs/ACCEPTANCE_EVIDENCE_TEMPLATE.md)
+- Architecture: [`docs/ARCHITECTURE.md`](/Users/Shared/Projects/spot/docs/ARCHITECTURE.md)
+- SSOT contract: [`ssot/SSOT.md`](/Users/Shared/Projects/spot/ssot/SSOT.md)
 
 Supported local startup:
 
 ```bash
-cd /Users/moldovancsaba/Projects/spot/app/macos
+cd /Users/Shared/Projects/spot/app/macos
 swift build
 bash build-bundle.sh
 bash install-bundle.sh

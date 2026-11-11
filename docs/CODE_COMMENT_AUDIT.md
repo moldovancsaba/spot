@@ -12,12 +12,12 @@ Current workspace baseline: `0.5.2`
 ## Scope
 
 Reviewed active runtime and operator-surface paths:
-- [`src/pipeline.py`](/Users/moldovancsaba/Projects/spot/src/pipeline.py)
-- [`src/classifier.py`](/Users/moldovancsaba/Projects/spot/src/classifier.py)
-- [`src/ensemble/ensemble_runner.py`](/Users/moldovancsaba/Projects/spot/src/ensemble/ensemble_runner.py)
-- [`backend/main.py`](/Users/moldovancsaba/Projects/spot/backend/main.py)
-- [`backend/services/run_state_service.py`](/Users/moldovancsaba/Projects/spot/backend/services/run_state_service.py)
-- [`backend/services/ops_db_service.py`](/Users/moldovancsaba/Projects/spot/backend/services/ops_db_service.py)
+- [`src/pipeline.py`](/Users/Shared/Projects/spot/src/pipeline.py)
+- [`src/classifier.py`](/Users/Shared/Projects/spot/src/classifier.py)
+- [`src/ensemble/ensemble_runner.py`](/Users/Shared/Projects/spot/src/ensemble/ensemble_runner.py)
+- [`backend/main.py`](/Users/Shared/Projects/spot/backend/main.py)
+- [`backend/services/run_state_service.py`](/Users/Shared/Projects/spot/backend/services/run_state_service.py)
+- [`backend/services/ops_db_service.py`](/Users/Shared/Projects/spot/backend/services/ops_db_service.py)
 
 ## Findings
 
@@ -27,7 +27,7 @@ Reviewed active runtime and operator-surface paths:
 
 ## Fixes Applied
 
-- Clarified the lifecycle-progress comment in [`src/pipeline.py`](/Users/moldovancsaba/Projects/spot/src/pipeline.py) so staged artifact progress is explicitly distinguished from operator-facing row progress.
+- Clarified the lifecycle-progress comment in [`src/pipeline.py`](/Users/Shared/Projects/spot/src/pipeline.py) so staged artifact progress is explicitly distinguished from operator-facing row progress.
 - Aligned active current-state docs to the implemented intake contract: `POST /uploads/intake?filename=<workbook.xlsx>` with legacy `X-Filename` fallback.
 - Aligned active current-state docs to the implemented queue-backed native dashboard, local segmentation model, and main-page pause/resume/stop controls.
 - Aligned executable smoke coverage to the current intake contract and current operator-surface title strings.

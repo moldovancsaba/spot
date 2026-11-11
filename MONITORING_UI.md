@@ -2,7 +2,7 @@
 
 Historical note:
 - the dedicated browser monitoring pages and eval monitor endpoints described here are no longer part of the active delivery baseline
-- the supported operator surface is now the native macOS app under [`app/macos/`](/Users/moldovancsaba/Projects/spot/app/macos)
+- the supported operator surface is now the native macOS app under [`app/macos/`](/Users/Shared/Projects/spot/app/macos)
 
 Current workspace implementation baseline: `0.5.0`
 
