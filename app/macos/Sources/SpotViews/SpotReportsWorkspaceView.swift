@@ -62,7 +62,7 @@ struct SpotReportsWorkspaceView: View {
                                     }
                                     Spacer()
                                     Button("Save AI report PDF") { Task { await service.saveAutomaticReport(rowIndex:report.rowIndex,reportID:report.reportID) } }
-                                        .disabled(report.isCurrent != 1 || service.exportingThreatReport)
+                                        .disabled(report.isCurrent != 1 || !service.canExportThreatReports || service.exportingThreatReport)
                                 }
                             }
                             Text("Latest 100 exports. All current reporting cases are available in the AI reports bucket.").font(.caption).foregroundStyle(.secondary)
@@ -103,7 +103,7 @@ struct SpotReportsWorkspaceView: View {
                                         Task { await service.openCaseForReview(row) }
                                     }
                                     if let report = row.automaticReport {
-                                        Button("Save AI report PDF") { Task { await service.saveAutomaticReport(rowIndex:row.rowIndex,reportID:report.reportID) } }.disabled(service.exportingThreatReport)
+                                        Button("Save AI report PDF") { Task { await service.saveAutomaticReport(rowIndex:row.rowIndex,reportID:report.reportID) } }.disabled(!service.canExportThreatReports || service.exportingThreatReport)
                                     }
                                     if row.outcome == "confirmed_threat" {
                                         Button("Export threat PDF") { Task { await service.exportConfirmedThreatPDF(rowIndex: row.rowIndex) } }

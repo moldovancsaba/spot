@@ -354,7 +354,7 @@ def export_case_report(run_id: str, row_index: int, request: Request):
 
 @app.get("/runs/{run_id}/automatic-reports/{report_id}.pdf")
 def download_ai_report(run_id: str,report_id: str,request: Request):
-    require_permission(request,"view")
+    require_permission(request,"export_threat_report")
     from backend.services.automatic_report_service import download_automatic_report
     from backend.services.case_report_service import CaseConflict
     try:
@@ -366,7 +366,7 @@ def download_ai_report(run_id: str,report_id: str,request: Request):
 
 @app.post("/runs/{run_id}/cases/{row_index}/automatic-report.pdf")
 def generate_ai_report(run_id: str,row_index: int,request: Request):
-    require_permission(request,"view")
+    require_permission(request,"export_threat_report")
     from backend.services.ops_db_service import _connect
     from backend.services.automatic_report_service import refresh_automatic_report,download_automatic_report
     from backend.services.case_report_service import CaseConflict
@@ -1151,7 +1151,7 @@ def migrate_run_row_state(
 
 
 @app.delete("/runs/{run_id}")
-def delete_run(run_id: str, request: Request, purge_source: bool = Query(default=True)):
+def delete_run(run_id: str, request: Request, purge_source: bool = Query(default=False)):
     require_permission(request, "manage_run")
     try:
         result = purge_run_state(runs_dir=RUNS_DIR, run_id=run_id, purge_source=purge_source)

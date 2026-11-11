@@ -54,24 +54,39 @@ class AutomaticReportTests(unittest.TestCase):
         self.assertEqual(refresh_run_record(runs_dir=self.runs,run_id='ai-test')['review_summary']['pending_rows'],0)
         report_id=case['automatic_report']['report_id'];url=f'/runs/ai-test/automatic-reports/{report_id}.pdf'
         self.assertEqual(self.client.get(url).status_code,401)
-        self.login();response=self.client.get(url);self.assertEqual(response.status_code,200)
+        self.login()  # operator: read-permission alone is no longer enough to export a branded PDF
+        self.assertEqual(self.client.get(url).status_code,403)
+        self.login('reviewer');response=self.client.get(url);self.assertEqual(response.status_code,200)
         text='\n'.join(p.extract_text() for p in PdfReader(io.BytesIO(response.content)).pages)
         for value in ['{spot}','AI-GENERATED','UNCONFIRMED','30.0%','Not Antisemitic','mock-positive','mock-negative']:
             self.assertIn(value,text)
         self.assertNotIn('CONFIRMED THREAT REPORT',text)
         self.assertIn('No human decision is recorded in this AI report',text)
+        self.login()  # operator again: human-confirmed export is denied for this role
         self.assertEqual(self.client.post('/runs/ai-test/cases/2/report.pdf').status_code,403)
         with _connect(self.runs) as conn:
             self.assertEqual(conn.execute('SELECT COUNT(*) FROM case_decisions').fetchone()[0],0)
             record=conn.execute('SELECT snapshot_path FROM automatic_report_exports').fetchone()
         snapshot=json.loads(Path(record['snapshot_path']).read_text());self.assertFalse(snapshot['human_confirmed'])
         self.assertEqual(snapshot['case']['assigned_category'],'Not Antisemitic')
+    def test_ai_report_endpoints_require_report_export_permission(self):
+        case=self.store(self.row('Anti-Israel',.3));report_id=case['automatic_report']['report_id']
+        download=f'/runs/ai-test/automatic-reports/{report_id}.pdf';generate='/runs/ai-test/cases/2/automatic-report.pdf'
+        self.assertEqual(self.client.get(download).status_code,401)
+        self.login()  # operator can upload and start runs but must not export reports
+        self.assertEqual(self.client.get(download).status_code,403)
+        self.assertEqual(self.client.post(generate).status_code,403)
+        for role in ('reviewer','acceptance_lead','admin'):
+            self.login(role)
+            self.assertEqual(self.client.get(download).status_code,200,role)
+            self.assertEqual(self.client.post(generate).status_code,200,role)
+
     def test_repeated_generation_is_idempotent_and_tampering_requires_regeneration(self):
         row=self.row('Classical Antisemitism',.3);case=self.store(row);first=case['automatic_report']['report_id'];self.store(row)
         with _connect(self.runs) as conn:
             self.assertEqual(conn.execute('SELECT COUNT(*) FROM automatic_report_exports').fetchone()[0],1)
             path=Path(conn.execute('SELECT pdf_path FROM automatic_report_exports').fetchone()[0])
-        self.login();path.write_bytes(path.read_bytes()+b'tampered')
+        self.login('reviewer');path.write_bytes(path.read_bytes()+b'tampered')
         self.assertEqual(self.client.get(f'/runs/ai-test/automatic-reports/{first}.pdf').status_code,409)
         self.assertEqual(self.client.post('/runs/ai-test/cases/2/automatic-report.pdf').status_code,200)
         second=get_case(runs_dir=self.runs,run_id='ai-test',row_index=2)['automatic_report']['report_id'];self.assertNotEqual(first,second)
@@ -81,10 +96,10 @@ class AutomaticReportTests(unittest.TestCase):
         saved=record_decision(runs_dir=self.runs,run_id='ai-test',row_index=2,outcome='false_alarm',category=None,note='Human decision must win',actor='human-reviewer',case_token=case['case_token'])
         self.store(row);current=get_case(runs_dir=self.runs,run_id='ai-test',row_index=2)
         self.assertEqual(current['decision_id'],saved['decision_id']);self.assertEqual(current['decision_note'],'Human decision must win');self.assertIsNone(current['automatic_report'])
-        self.login();self.assertEqual(self.client.get(f'/runs/ai-test/automatic-reports/{report_id}.pdf').status_code,409)
+        self.login('reviewer');self.assertEqual(self.client.get(f'/runs/ai-test/automatic-reports/{report_id}.pdf').status_code,409)
     def test_new_negative_analysis_supersedes_ai_pdf_but_retains_immutable_export_history(self):
         case=self.store(self.row('Anti-Israel',.3));old=case['automatic_report']['report_id'];new=self.store(self.row('Not Antisemitic',.99))
-        self.assertIsNone(new['automatic_report']);self.login()
+        self.assertIsNone(new['automatic_report']);self.login('reviewer')
         self.assertEqual(self.client.get(f'/runs/ai-test/automatic-reports/{old}.pdf').status_code,409)
         with _connect(self.runs) as conn:self.assertEqual(conn.execute('SELECT COUNT(*) FROM automatic_report_exports').fetchone()[0],1)
     def test_pdf_failure_remains_in_reporting_and_can_retry_without_human_decision(self):
@@ -92,6 +107,6 @@ class AutomaticReportTests(unittest.TestCase):
             case=self.store(self.row('Anti-Israel',.3))
         self.assertEqual(case['workflow_bucket'],'reporting');self.assertEqual(case['automatic_report']['state'],'failed')
         self.assertEqual(case_page(runs_dir=self.runs,run_id='ai-test',bucket='waiting')['total'],0)
-        self.login();self.assertEqual(self.client.post('/runs/ai-test/cases/2/automatic-report.pdf').status_code,200)
+        self.login('reviewer');self.assertEqual(self.client.post('/runs/ai-test/cases/2/automatic-report.pdf').status_code,200)
 
 if __name__=='__main__':unittest.main()

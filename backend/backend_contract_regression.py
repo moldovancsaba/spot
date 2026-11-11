@@ -919,6 +919,65 @@ class BackendContractRegressionTests(unittest.TestCase):
         self.assertFalse(upload_dir.exists())
         self.assertIsNone(run_state_service.read_run_record(runs_dir=self.runs_dir, run_id=run_id))
 
+    def test_delete_run_does_not_purge_managed_source_by_default(self) -> None:
+        """A bare DELETE must not destroy the source workbook; purging is opt-in."""
+        self._login_admin()
+        upload_id = "default-keep-upload"
+        upload_dir = self.runs_dir / "uploads" / upload_id
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        workbook_path = upload_dir / "keep.xlsx"
+        workbook_path.write_bytes(_build_workbook_bytes())
+        upload_record = {
+            "upload_id": upload_id,
+            "filename": "keep.xlsx",
+            "stored_path": str(workbook_path),
+            "bytes": workbook_path.stat().st_size,
+            "status": "accepted",
+            "created_at": 1771000000,
+            "validation": {"accepted": True, "row_count": 1},
+        }
+        from backend.services.ops_db_service import record_upload, register_run
+
+        (upload_dir / "upload.json").write_text(json.dumps(upload_record), encoding="utf-8")
+        record_upload(runs_dir=self.runs_dir, record=upload_record)
+        run_id = "default-keep-run"
+        run_path = self.runs_dir / run_id
+        run_path.mkdir(parents=True, exist_ok=True)
+        create_run_record(
+            runs_dir=self.runs_dir,
+            run_id=run_id,
+            input_path=str(workbook_path),
+            output_path=str(run_path / "output.xlsx"),
+            upload_id=upload_id,
+            language="de",
+            review_mode="partial",
+            start_payload={"upload_id": upload_id, "language": "de", "review_mode": "partial"},
+        )
+        register_run(
+            runs_dir=self.runs_dir,
+            run_id=run_id,
+            upload_id=upload_id,
+            language="de",
+            review_mode="partial",
+            state="FAILED",
+        )
+        (run_path / "progress.json").write_text(
+            json.dumps({"run_id": run_id, "state": "FAILED", "processed_rows": 1, "total_rows": 10, "progress_percentage": 10.0}),
+            encoding="utf-8",
+        )
+        (run_path / "control.json").write_text(
+            json.dumps({"run_id": run_id, "pid": None, "paused": False, "output": str(run_path / "output.xlsx")}),
+            encoding="utf-8",
+        )
+
+        response = self.client.delete(f"/runs/{run_id}")
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertFalse(payload["purged_source"])
+        self.assertFalse(run_path.exists())
+        self.assertTrue(upload_dir.exists(), "source workbook must survive a default delete")
+        self.assertTrue(workbook_path.exists())
+
     def test_run_classification_resumes_from_checkpoint(self) -> None:
         workbook_path = self.runs_dir / "resume-input.xlsx"
         wb = Workbook()
