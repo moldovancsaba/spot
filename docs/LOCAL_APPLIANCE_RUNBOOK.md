@@ -1,8 +1,8 @@
 # {spot} Local Appliance Runbook
 
 Current workspace implementation baseline: `0.5.2`
-SSOT baseline: `0.2`
-Document date: `2026-05-11`
+SSOT baseline: `0.4`
+Document date: `2026-11-08`
 
 ## Purpose
 
@@ -25,18 +25,18 @@ Source and installer status:
 
 ## Runtime Baseline
 
-- classifier primary: `mlx://mlx-community/Apertus-8B-Instruct-2509-4bit`
-- classifier fallback: `ollama://qwen2.5:7b`
+- classifier primary: `ollama://gemma2:9b`
+- classifier fallback / independent verifier: `ollama://qwen2.5:7b`
 - drafter: `ollama://granite4:350m`
 - drafter fallbacks: `ollama://gemma3:1b`, `ollama://llama3.2:1b`
-- judge: `ollama://llama3.2:3b`
+- judge: `ollama://llama3.1:8b`
 - SSOT: `ssot/ssot.json`
 - backend bind: `127.0.0.1:8765`
 
 ## Expected Local Layout
 
 Project root:
-- `/Users/moldovancsaba/Projects/spot`
+- `/Users/Shared/Projects/spot`
 
 Key locations:
 - input examples: `samples/`
@@ -46,9 +46,9 @@ Key locations:
 - native app source: `app/macos/`
 - run artifacts: `runs/`
 - environment: `.venv/`
-- shared model root: `/Users/Shared/Models/spot/`
-- shared Hugging Face cache: `/Users/Shared/Models/spot/huggingface/`
-- shared Ollama store: `/Users/Shared/Models/spot/ollama/`
+- shared model root: `/Users/Shared/Models/`
+- shared Hugging Face cache: `/Users/Shared/Models/huggingface/`
+- shared Ollama store: `/Users/Shared/Models/`
 
 ## Preflight Checklist
 
@@ -58,7 +58,7 @@ Before first use, confirm:
 2. Python virtual environment exists at `.venv/`
 3. dependencies from `requirements.txt` are installed
 4. `mlx_lm` is available for MLX inference
-5. required local model weights are available under `/Users/Shared/Models/spot/` or an explicitly configured `SPOT_*` model root override
+5. required local model weights are available under `/Users/Shared/Models/` or an explicitly configured `SPOT_*` model root override
 6. Ollama is installed if fallback and support lanes are required
 7. the configured Ollama endpoint resolves to loopback only
 8. `ssot/ssot.json` loads without validation failure
@@ -70,7 +70,7 @@ Before first use, confirm:
 Use this to prepare the local runtime skeleton on a clean machine:
 
 ```bash
-cd /Users/moldovancsaba/Projects/spot
+cd /Users/Shared/Projects/spot
 python3 -m src.cli bootstrap \
   --project-root . \
   --venv-path .venv \
@@ -105,42 +105,42 @@ python3 -m src.cli bootstrap \
 Use this when provisioning `{spot}` on another Apple Silicon machine.
 
 Target shared layout:
-- `/Users/Shared/Models/spot/huggingface/`
-- `/Users/Shared/Models/spot/ollama/`
-- `/Users/Shared/Models/spot/mlx-local/`
-- `/Users/Shared/Models/spot/manifest/`
+- `/Users/Shared/Models/huggingface/`
+- `/Users/Shared/Models/`
+- `/Users/Shared/Models/mlx-local/`
+- `/Users/Shared/Models/manifest/`
 
 Expected runtime environment:
-- `SPOT_MODELS_HOME=/Users/Shared/Models/spot`
-- `SPOT_HF_HOME=/Users/Shared/Models/spot/huggingface`
-- `SPOT_HF_HUB_CACHE=/Users/Shared/Models/spot/huggingface/hub`
-- `SPOT_OLLAMA_MODELS=/Users/Shared/Models/spot/ollama`
-- `SPOT_MLX_MODELS_DIR=/Users/Shared/Models/spot/mlx-local`
-- `HF_HOME=/Users/Shared/Models/spot/huggingface`
-- `HF_HUB_CACHE=/Users/Shared/Models/spot/huggingface/hub`
-- `OLLAMA_MODELS=/Users/Shared/Models/spot/ollama`
+- `SPOT_MODELS_HOME=/Users/Shared/Models`
+- `SPOT_HF_HOME=/Users/Shared/Models/huggingface`
+- `SPOT_HF_HUB_CACHE=/Users/Shared/Models/huggingface/hub`
+- `SPOT_OLLAMA_MODELS=/Users/Shared/Models`
+- `SPOT_MLX_MODELS_DIR=/Users/Shared/Models/mlx-local`
+- `HF_HOME=/Users/Shared/Models/huggingface`
+- `HF_HUB_CACHE=/Users/Shared/Models/huggingface/hub`
+- `OLLAMA_MODELS=/Users/Shared/Models`
 
 Recommended install order:
 1. check out the repo and create `.venv/`
 2. run `python3 -m src.cli bootstrap ...`
-3. populate `/Users/Shared/Models/spot/huggingface/` with the required MLX/Hugging Face cache content, including `mlx-community/Apertus-8B-Instruct-2509-4bit`
-4. populate `/Users/Shared/Models/spot/ollama/` with the required Ollama model store content
-5. optionally replace `~/.cache/huggingface` with a symlink to `/Users/Shared/Models/spot/huggingface` for compatibility with tools that still probe the legacy per-user cache path
+3. populate `/Users/Shared/Models/huggingface/` with the required MLX/Hugging Face cache content, including `mlx-community/Apertus-8B-Instruct-2509-4bit`
+4. populate `/Users/Shared/Models/` with the required Ollama model store content
+5. optionally replace `~/.cache/huggingface` with a symlink to `/Users/Shared/Models/huggingface` for compatibility with tools that still probe the legacy per-user cache path
 6. run `.venv/bin/python -m src.cli preflight --ssot ssot/ssot.json --runs-dir runs --port 8765` and require `warnings=0` before operator use
 
 Required `{spot}` model set on a fresh machine:
-- MLX primary: `mlx-community/Apertus-8B-Instruct-2509-4bit`
+- historical MLX benchmark (optional): `mlx-community/Apertus-8B-Instruct-2509-4bit`
 - Ollama: `qwen2.5:7b`
 - Ollama: `granite4:350m`
 - Ollama: `gemma3:1b`
 - Ollama: `llama3.2:1b`
 - Ollama: `llama3.2:3b`
 - Ollama: `gemma2:2b`
-- Ollama evaluation: `gemma2:9b`
-- Ollama evaluation: `llama3.1:8b`
+- Ollama independent verifier: `gemma2:9b`
+- Ollama quality check: `llama3.1:8b`
 
 Current maintainer note:
-- on this machine the legacy `~/.cache/huggingface` path is now a symlink to `/Users/Shared/Models/spot/huggingface`
+- on this machine the legacy `~/.cache/huggingface` path is now a symlink to `/Users/Shared/Models/huggingface`
 - preflight is the canonical verification step for confirming that the shared model roots are complete and that the required model set is available
 
 ## Start Procedure
@@ -148,7 +148,7 @@ Current maintainer note:
 From the project root:
 
 ```bash
-cd /Users/moldovancsaba/Projects/spot
+cd /Users/Shared/Projects/spot
 cd app/macos
 swift build
 bash build-bundle.sh
@@ -171,7 +171,7 @@ Supported native build validation:
 
 Use this path for supported maintenance updates on a machine that already runs `{spot}`:
 
-1. update the checked-out source tree under `/Users/moldovancsaba/Projects/spot`
+1. update the checked-out source tree under `/Users/Shared/Projects/spot`
 2. rerun bootstrap if environment or directory expectations changed
 3. rerun preflight
 4. rebuild the native bundle with `app/macos/build-bundle.sh`
@@ -218,7 +218,7 @@ Operator expectations:
 Run before first use on a machine or after runtime changes:
 
 ```bash
-cd /Users/moldovancsaba/Projects/spot
+cd /Users/Shared/Projects/spot
 source .venv/bin/activate
 .venv/bin/python -m src.cli preflight \
   --ssot ssot/ssot.json \
@@ -254,7 +254,7 @@ Expected result:
 
 ## Bounded Trinity/Train Export
 
-Use this after reviewers have saved `confirm` or `adjust` decisions on flagged rows:
+Before exporting or handing off a bundle, complete the [interim classification review safeguard](#interim-classification-review-safeguard). The export excludes escalated rows and failure/fallback evidence and reads native review records, not the separate protected review record; external decisions are not automatically incorporated. A saved decision does not make an escalated or failed-analysis row eligible. The acceptance lead must reconcile the actual export rows against the protected record and hold any export containing unresolved cases. Saving decisions on flagged rows alone does not establish that this check is complete.
 
 ```bash
 .venv/bin/python -m src.cli export-trinity-spot-bundles \
@@ -299,6 +299,36 @@ Ensemble disagreement paths should also retain:
 - `disagreement_report.json`
 
 ## Fallback And Failure Handling
+
+### Current failure controls and machine verification
+
+New runs mark missing/invalid categories and failed requests with `ANALYSIS_FAILED`, confidence zero, and `REVIEW_REQUIRED` regardless of review mode. Empty text is also failed analysis. Other fallback or unstructured responses require review. The governed `Not Antisemitic` fallback remains a placeholder for compatibility; it is not evidence of a successful negative analysis.
+
+Run `.venv/bin/python -m src.cli preflight --ssot ssot/ssot.json --runs-dir runs --port 8765 --inference-smoke` with production mode and the shared model environment loaded. Both primary and fallback classifiers must pass the structured-output check. Ordinary preflight and `/api/health` check prerequisites/startup, not semantic model health. A synthetic smoke pass does not replace benchmark/UAT or accuracy validation.
+
+Requests default to 120 seconds (`SPOT_INFERENCE_TIMEOUT_SEC`) and bounded output. A 32 GB Mac may not have enough GPU memory for Apertus while an unrelated large model is resident. Release that model in its owning app before classification; do not change model formats or silently switch the governed primary route.
+
+The Ollama desktop app must have **Expose Ollama to the network** switched off. Its app setting can override the shell environment. Verify the actual listener after a restart; keep the desktop app as the sole Ollama server.
+
+Native authentication is enabled. Select the appropriate actor and role in the native access controls. A generated local access code replaces an empty/historical default at startup; this is a shared-machine control, not independent organizational identity verification.
+
+Sign-off requires reviewed rows with a saved decision; escalations remain unresolved. Learning export requires `reviewed` state and excludes failure/fallback evidence, even when a decision is saved. Retain original artifacts and review historical runs using the safeguard below.
+
+### Interim classification review safeguard
+
+For historical runs and until fresh acceptance evidence is recorded for the corrected baseline, treat every output as a classification proposal requiring human review before a consequential decision or external handoff. A `Not Antisemitic` assignment, a high confidence score, `Review Required = NO`, or an empty native review queue does not establish that analysis succeeded or that content is benign. Earlier runtime versions could convert a missing or invalid model category to the fallback without reliably marking the row for review; a missing model category could leave no distinguishable flag in the workbook. An explanation is model-generated and is not independent proof.
+
+Use this procedure for **full, partial, and none** review modes, including existing runs:
+
+1. The operator records the run ID and review mode, obtains the output workbook through the artifact workflow, and preserves the source workbook and run artifacts unchanged according to the organization's approved access and retention policy. Do not make the only copy of evidence an edited workbook. If the output is missing, incomplete, unreadable, or has missing/ambiguous headers, stop the handoff and escalate to the maintainer without sending source text or artifacts through an unauthorized channel.
+2. A designated reviewer examines every processed row against the original `Post text`, not just rows in the native review queue. Inspect `Raw Category`, `Assigned Category`, `Flags`, `Fallback Events`, `Model Version`, `Confidence Score`, `Review Mode`, and `Review Required`. The native queue is populated from rows marked review-required; it can omit rows that this safeguard requires checking. Compare against the original text and preserve context limitations.
+3. Escalate any missing or invalid raw category; any `TAXONOMY_VIOLATION`, `MODEL_REQUEST_FAILED`, `CLASSIFIER_FALLBACK_FAILED`, `CLASSIFIER_FALLBACK`, `UNSTRUCTURED_MODEL_OUTPUT`, `EMPTY_TEXT`, `SKIPPED`, `SECOND_PASS_UNAVAILABLE`, or `JUDGE_UNAVAILABLE` flag; and any non-empty `Fallback Events`. Also escalate disagreement or an unclear explanation. Do not assume an empty flag or apparently valid raw category proves the model actually supplied a valid category: missing output can be normalized without a reliable marker. If the reviewer cannot determine what happened, treat the row as unresolved.
+4. For a row available in the native review queue, the reviewer records the appropriate review state, decision, and note there. An unqueued row cannot be assumed to be editable in that workflow. Record its row identifier, decision and escalation in the organization's approved access-controlled review record; do not alter the original evidence or include source text in operational logs. Native decisions and notes are stored separately and do not rewrite `Assigned Category` in the output workbook. Provide an authorized, linked review record with the workbook so downstream users can distinguish reviewed decisions from original labels; otherwise hold the handoff. If no approved review record or qualified reviewer is available, hold the handoff and contact the run owner.
+5. The run owner or designated acceptance lead reconciles input rows against output and run counts, including any configured row limit. A workbook may retain source rows with blank classification columns when the run was limited; those rows were not analyzed. Hold the handoff if unprocessed rows are not explicitly identified and handled under the organization's policy. Check that every processed row has a documented disposition and that unresolved cases are held or escalated. Record the reviewer, decision, run ID, row identifiers and outstanding limitations in the protected review record. Native sign-off checks the run and queued review state, but does not perform this external cross-check or cover unqueued rows by itself.
+
+For example, a pre-fix synthetic row with `Raw Category = invalid-label`, `Assigned Category = Not Antisemitic`, `Confidence Score = 0.99`, `Flags = TAXONOMY_VIOLATION`, and `Review Required = NO` must be escalated under step 3. The confidence value and `NO` do not override the violation. This is a synthetic control-flow example, not a measured model prediction.
+
+This is an interim manual control, not an automated guarantee or a legal determination. If examining every row is not feasible, do not represent the run as fully reviewed. Classification-failure handling and consumer contracts are tracked separately in issue #80.
 
 Expected failure classes:
 - malformed workbook schema
@@ -353,3 +383,21 @@ If a machine must be decommissioned:
 
 This runbook is the first local-appliance baseline.
 It should be expanded alongside install scripts, preflight automation, and acceptance checklists during the next hardening steps.
+
+## Review and export from the cockpit
+
+1. Open **Reports** and select the run. The evaluation card shows agreement with reference labels when an evaluation is attached; normal unlabelled production runs have no accuracy estimate.
+2. Open **Review case**. Choose **Reviewer** or **Administrator** and your local actor name in Settings before saving a decision. Original model findings and human decisions are labelled separately.
+3. Select a threat category and choose **Confirm threat**, or choose **False alarm** to record a human `Not Antisemitic` disposition. **Leave unresolved** keeps the case open. Notes stay in the edit form during automatic refresh. If the case changes, refresh and re-review before saving.
+4. After saving a threat confirmation, choose **Export official {spot} threat PDF** and select a destination. Unsaved decision edits must be saved first. Unresolved and false-alarm cases cannot be exported as confirmed threats.
+5. The Reports tab lists generated PDFs. Current reports can be saved again; superseded reports remain in audit history and are not offered as current exports. The original model output/workbook is retained unchanged. Generated PDFs and exact Unicode JSON snapshots are kept privately under the run's `threat_reports/` folder.
+
+PDF text uses an available Unicode font. Unsupported symbols are displayed as explicit Unicode code points rather than missing glyphs; the exact original Unicode remains in the JSON snapshot. Reports identify the local reviewer account and saved finding; they do not claim independent identity verification or a digital signature. Source changes, legacy review edits or a later human decision invalidate the previous export authorization.
+
+Reviewer workflow: Review defaults to Waiting for review, with server-side buckets for untouched cases, Needs follow-up (an explicit unresolved decision), Confirmed threats, and Not antisemitic. Buckets are exclusive across the whole run, ordered by the original canonical case creation time then source row index. After a committed decision, the case moves to its bucket and Review returns to the first page of Waiting for review, selecting the next oldest case. Counts include every page; Reviewed includes follow-up cases. New inference results preserve the current case and unfinished note. Confirmed cases remain accessible for PDF export or correction; all prior decisions retain their audit history. Evidence changes invalidate a decision and return the case to Waiting for review.
+
+Independent automatic checks (SSOT 0.3): partial mode obtains two distinct classifier opinions and a third-model quality check. Automatic completion requires agreement, both classifier scores >=0.85, quality PASS >=0.85, valid structured responses, verified original source, and exact source evidence for positive claims. An automatic marker alone is insufficient. Context/format failures and disagreements remain human exceptions. Schema-constrained Ollama responses replace the unreliable primary MLX response path; Apertus remains available for comparison. The generative drafter configuration is legacy and unused; text preparation is deterministic. Model confidence is a self-reported score, not a measured accuracy probability.
+
+Pending-check separation: an existing case listed in `automatic_recheck.json` stays in Automatic checks pending until its row is acknowledged in `done_rows` after the check commits. It is excluded from both the human review queue and Automatic complete, regardless of its previous review_required value. Completed unresolved cases enter Needs your review; successful checks enter Automatic complete. Saved human decisions always take precedence. The partition is applied before pagination and reused by Reports and dashboard review totals. Pending cases are read-only, and the decision endpoint rejects premature decisions. Invalid or incomplete plan state is not silently interpreted as a completed check.
+
+Automatic AI reporting (SSOT 0.4): under the approved any-positive rule, any current canonical, primary, independent, or structured-retry analysis assigning a positive antisemitism category at confidence >=0.30 routes directly to AI reports and generates a branded PDF. No human review or cross-model agreement is required for that reporting route; warnings, disagreement, failed quality checks and a negative final classification remain visible in the report. Confidence is the score for a category, not calibrated probability of harm. Only the closed antisemitism taxonomy is scored; generic harmful-content categories are not inferred. Reports are explicitly AI-generated and unconfirmed. Saved human decisions, including false alarms and follow-up decisions, take precedence and suppress automatic reports. Later analyses may supersede a report; all exported snapshots remain in audit history. Human-confirmed reports retain their separate confirmation and permission gates. The policy is snapshotted per run; new native runs inherit it automatically, and current runs require explicit activation/backfill.

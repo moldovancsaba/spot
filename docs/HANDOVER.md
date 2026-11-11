@@ -3,15 +3,45 @@
 Historical note:
 - this file is a chronological delivery log, not the active operating contract
 - older entries intentionally preserve the browser-phase and `app/spot-app` wording that was true when those entries were written
-- current operator and startup guidance lives in [`README.md`](/Users/moldovancsaba/Projects/spot/README.md), [`READMEDEV.md`](/Users/moldovancsaba/Projects/spot/READMEDEV.md), and [`docs/LOCAL_APPLIANCE_RUNBOOK.md`](/Users/moldovancsaba/Projects/spot/docs/LOCAL_APPLIANCE_RUNBOOK.md)
+- current operator and startup guidance lives in [`README.md`](/Users/Shared/Projects/spot/README.md), [`READMEDEV.md`](/Users/Shared/Projects/spot/READMEDEV.md), and [`docs/LOCAL_APPLIANCE_RUNBOOK.md`](/Users/Shared/Projects/spot/docs/LOCAL_APPLIANCE_RUNBOOK.md)
+
+## 2026-11-08 Europe/Budapest - Codex (cockpit reports and human threat decisions)
+
+- Added native Reports with per-run evaluation metrics, case totals, paginated cases and generated threat report history. Attached the existing German baseline and comparison evaluation summaries to their actual run records without altering original workbooks.
+- Added explicit human confirmed-threat / false-alarm / unresolved decisions, closed-taxonomy human categories, actor/time, evidence-bound write tokens, decision history and evidence-change invalidation. Original model assignments remain intact.
+- Added gated official `{spot}` PDF generation and current-report downloads with original post, saved human finding, model evidence, identities/times and hashes. Exact Unicode snapshots and export ledger records are retained locally. Stale decisions, false alarms, unresolved cases, operators and tampered reports cannot authorize current PDF downloads.
+- Added the pinned reportlab runtime dependency and PDF regressions; visually inspected a multi-page synthetic report. Actual client rows were not confirmed or dismissed by the agent.
+- Bounded learning exports now use an explicit human-corrected final label when present, while retaining the original model interpretation and existing conservative failure/fallback exclusions.
+
+## 2026-11-08 Europe/Budapest - Codex (visible German acceptance evaluation)
+
+- The project owner approved the German sample workbook and identified themselves as the designated acceptance reviewer.
+- Added a reproducible balanced 30-row sample and scoring harness that keeps reference labels out of inference and never scores failed-analysis negative placeholders as successful predictions.
+- Exercised watched intake in the installed cockpit and uncovered a missing `DEFAULT_PROGRESS_EVERY` import on the real production start path; fixed it and added a regression that executes the actual start builder.
+- Exercised pause/resume/stop on the initial control run and started the full-review evaluation visibly in the cockpit.
+- Replaced the obsolete native acceptance smoke's artificial run fixtures with attachment to a real run, explicit auth/permission checks, invalid-schema intake, and artifact download/hash checks.
+- Baseline comparison exposed substantial drafter edits and malformed string metadata. Added source-preserving drafter validation and metadata shape handling, with regressions. Full suite: 70 tests passed before the comparison rerun.
+- Final numerical evidence is in `docs/ACCEPTANCE_EVIDENCE_2026-11-08.md`: baseline 5/30 vs source-preserving 8/30 reference-label matches; operational smoke/hash checks and the synthetic none-mode failure review/sign-off gate passed. Engineering recommendation: hold acceptance pending reviewer adjudication.
+- Corrected terminal-progress precedence, required complete canonical row coverage before sign-off, and preserved explicitly selected historical runs across native refresh. The final 71-test suite and native build passed.
+
+## 2026-11-08 Europe/Budapest - Codex (local audit hardening)
+
+- Added mandatory failure review, zero-confidence failure placeholders, and shared safety enforcement at canonical persistence/workbook boundaries.
+- Added regressions for absent/invalid categories, total request failure, unstructured output, export eligibility, and inference smoke reporting.
+- Corrected MLX response parsing and raised the bounded inference deadline to 120 seconds; added explicit primary/fallback smoke verification to preflight.
+- Kept startup readiness separate from inference verification in the health response.
+- Enabled native local authentication, generated non-default installation codes, and corrected session reuse when the actor changes.
+- Blocked escalated/incomplete reviews from sign-off and excluded failed/escalated rows from learning export.
+- Aligned active maintainer paths and shared model defaults; added one local regression entrypoint and a model-free GitHub workflow.
+- Target-machine inference, native authentication, listener and deployment verification are recorded in `docs/AUDIT_EVIDENCE_2026-11-08.md`; fresh client acceptance is still required.
 
 ## 2026-05-20 Europe/Budapest - Codex ({spot} targeted code-comment audit cleanup)
 
 - Objective: verify the active runtime inline comments against the current native-only and canonical-state contracts, then correct stale wording instead of assuming the documentation pass was sufficient.
 - Changes:
-  - corrected [`backend/services/run_state_service.py`](/Users/moldovancsaba/Projects/spot/backend/services/run_state_service.py) so the artifact label for `review_state.json` no longer describes it as browser-specific state
-  - corrected the generated native config comments in [`app/macos/Sources/SpotCoreService.swift`](/Users/moldovancsaba/Projects/spot/app/macos/Sources/SpotCoreService.swift) so `SPOT_LOCAL_ACCESS_CODE` guidance is now conditional on auth actually being enabled for the runtime
-  - refreshed [`docs/CODE_COMMENT_AUDIT.md`](/Users/moldovancsaba/Projects/spot/docs/CODE_COMMENT_AUDIT.md) to record the follow-up audit result
+  - corrected [`backend/services/run_state_service.py`](/Users/Shared/Projects/spot/backend/services/run_state_service.py) so the artifact label for `review_state.json` no longer describes it as browser-specific state
+  - corrected the generated native config comments in [`app/macos/Sources/SpotCoreService.swift`](/Users/Shared/Projects/spot/app/macos/Sources/SpotCoreService.swift) so `SPOT_LOCAL_ACCESS_CODE` guidance is now conditional on auth actually being enabled for the runtime
+  - refreshed [`docs/CODE_COMMENT_AUDIT.md`](/Users/Shared/Projects/spot/docs/CODE_COMMENT_AUDIT.md) to record the follow-up audit result
 - Validation:
   - rescanned active code comments for the stale `browser` / `review_state.json` / native-auth wording that triggered the follow-up
   - `python3 -m py_compile backend/services/run_state_service.py src/trinity_spot_bundle.py` => passed
@@ -20,12 +50,12 @@ Historical note:
 
 - Objective: remove active documentation drift across the current `0.5.2` native-only baseline, including stale queue/native wording, missing runtime surfaces, and outdated planning references.
 - Changes:
-  - updated [`README.md`](/Users/moldovancsaba/Projects/spot/README.md) so the documentation map, active implementation summary, and backend endpoint inventory now reflect the current queue, recovery, intake, and native-runtime surface
-  - expanded [`docs/ARCHITECTURE.md`](/Users/moldovancsaba/Projects/spot/docs/ARCHITECTURE.md) with the canonical persistence model, current indexed entities, and the current read/write split in runtime state resolution
-  - rewrote [`docs/LOCAL_QUEUE_OPERATIONS_PLAN.md`](/Users/moldovancsaba/Projects/spot/docs/LOCAL_QUEUE_OPERATIONS_PLAN.md) around the current queue-backed appliance baseline instead of the earlier browser-dashboard transition framing
-  - refreshed [`docs/FOUNDATION_HARDENING_PLAN.md`](/Users/moldovancsaba/Projects/spot/docs/FOUNDATION_HARDENING_PLAN.md) and [`docs/PROJECT_MANAGEMENT.md`](/Users/moldovancsaba/Projects/spot/docs/PROJECT_MANAGEMENT.md) so they point at the current remaining execution lane rather than pre-hardening next steps
-  - marked [`docs/CODE_COMMENT_AUDIT.md`](/Users/moldovancsaba/Projects/spot/docs/CODE_COMMENT_AUDIT.md) and [`docs/NATIVE_APP_SCAFFOLD_SPEC.md`](/Users/moldovancsaba/Projects/spot/docs/NATIVE_APP_SCAFFOLD_SPEC.md) more clearly as point-in-time historical documents while aligning their top-level framing with the current `0.5.2` baseline
-  - updated [`docs/NATIVE_APP_BUILD_HANDOFF.md`](/Users/moldovancsaba/Projects/spot/docs/NATIVE_APP_BUILD_HANDOFF.md) to reflect the hardened read-model behavior and explicit `review_state.json` persistence contract
+  - updated [`README.md`](/Users/Shared/Projects/spot/README.md) so the documentation map, active implementation summary, and backend endpoint inventory now reflect the current queue, recovery, intake, and native-runtime surface
+  - expanded [`docs/ARCHITECTURE.md`](/Users/Shared/Projects/spot/docs/ARCHITECTURE.md) with the canonical persistence model, current indexed entities, and the current read/write split in runtime state resolution
+  - rewrote [`docs/LOCAL_QUEUE_OPERATIONS_PLAN.md`](/Users/Shared/Projects/spot/docs/LOCAL_QUEUE_OPERATIONS_PLAN.md) around the current queue-backed appliance baseline instead of the earlier browser-dashboard transition framing
+  - refreshed [`docs/FOUNDATION_HARDENING_PLAN.md`](/Users/Shared/Projects/spot/docs/FOUNDATION_HARDENING_PLAN.md) and [`docs/PROJECT_MANAGEMENT.md`](/Users/Shared/Projects/spot/docs/PROJECT_MANAGEMENT.md) so they point at the current remaining execution lane rather than pre-hardening next steps
+  - marked [`docs/CODE_COMMENT_AUDIT.md`](/Users/Shared/Projects/spot/docs/CODE_COMMENT_AUDIT.md) and [`docs/NATIVE_APP_SCAFFOLD_SPEC.md`](/Users/Shared/Projects/spot/docs/NATIVE_APP_SCAFFOLD_SPEC.md) more clearly as point-in-time historical documents while aligning their top-level framing with the current `0.5.2` baseline
+  - updated [`docs/NATIVE_APP_BUILD_HANDOFF.md`](/Users/Shared/Projects/spot/docs/NATIVE_APP_BUILD_HANDOFF.md) to reflect the hardened read-model behavior and explicit `review_state.json` persistence contract
 - Validation:
   - rescanned active docs for stale `0.5.1`, browser-dashboard, and missing endpoint drift and confirmed the remaining `0.5.1` markers now exist only in explicitly historical notes
   - rescanned active docs for current queue/recovery/runtime surfaces including `run_rows`, `run_attempts`, `upload_rows`, `heal`, `delete`, recovery candidates, and native runtime suspend
@@ -34,11 +64,11 @@ Historical note:
 
 - Objective: move runtime read paths onto an observational resolver so GETs stop mutating canonical run state.
 - Changes:
-  - split [`backend/services/run_state_service.py`](/Users/moldovancsaba/Projects/spot/backend/services/run_state_service.py) into a non-mutating `resolve_run_record(...)` path and a mutating `refresh_run_record(...)` path that is now reserved for explicit write-oriented flows
+  - split [`backend/services/run_state_service.py`](/Users/Shared/Projects/spot/backend/services/run_state_service.py) into a non-mutating `resolve_run_record(...)` path and a mutating `refresh_run_record(...)` path that is now reserved for explicit write-oriented flows
   - switched read builders and recovery-candidate listing to consume the non-mutating resolver, including run detail, artifact center, review queue, row inspector, run listing, and recovery-candidate projection
-  - switched GET read endpoints in [`backend/main.py`](/Users/moldovancsaba/Projects/spot/backend/main.py) onto the non-mutating resolver, including `/runs/{run_id}`, `/runs/{run_id}/state`, and `/classify/status/{run_id}`
-  - updated [`src/trinity_spot_bundle.py`](/Users/moldovancsaba/Projects/spot/src/trinity_spot_bundle.py) to consume resolved run state without rewriting the run record as a side effect
-  - extended [`backend/backend_contract_regression.py`](/Users/moldovancsaba/Projects/spot/backend/backend_contract_regression.py) to prove stale runs can be projected for reads without rewriting `run_record.json`, creating `review_state.json`, or bumping the indexed `runs` snapshot
+  - switched GET read endpoints in [`backend/main.py`](/Users/Shared/Projects/spot/backend/main.py) onto the non-mutating resolver, including `/runs/{run_id}`, `/runs/{run_id}/state`, and `/classify/status/{run_id}`
+  - updated [`src/trinity_spot_bundle.py`](/Users/Shared/Projects/spot/src/trinity_spot_bundle.py) to consume resolved run state without rewriting the run record as a side effect
+  - extended [`backend/backend_contract_regression.py`](/Users/Shared/Projects/spot/backend/backend_contract_regression.py) to prove stale runs can be projected for reads without rewriting `run_record.json`, creating `review_state.json`, or bumping the indexed `runs` snapshot
 - Validation:
   - `python3 -m py_compile backend/services/run_state_service.py backend/main.py backend/backend_contract_regression.py backend/ops_queue_regression.py src/trinity_spot_bundle.py` => passed
   - `.venv/bin/python backend/backend_contract_regression.py` => passed
@@ -48,11 +78,11 @@ Historical note:
 
 - Objective: finish the remaining relation-hardening slices by making segment claims atomic and by refusing to silently downgrade broken managed upload relations.
 - Changes:
-  - hardened [`backend/services/ops_db_service.py`](/Users/moldovancsaba/Projects/spot/backend/services/ops_db_service.py) so `claim_next_segment(...)` now claims work under a write lock with a conditional state guard and retry loop instead of a bare select-then-update sequence
+  - hardened [`backend/services/ops_db_service.py`](/Users/Shared/Projects/spot/backend/services/ops_db_service.py) so `claim_next_segment(...)` now claims work under a write lock with a conditional state guard and retry loop instead of a bare select-then-update sequence
   - added strict managed-upload resolution to `register_run(...)` and `update_run_snapshot(...)` so upload-backed runtime records fail explicitly when the referenced `uploads` row is missing instead of being downgraded to `None`
-  - kept passive historical reads compatible by letting [`backend/services/run_state_service.py`](/Users/moldovancsaba/Projects/spot/backend/services/run_state_service.py) refresh legacy run records without forcing a managed-upload rewrite on every list/detail read
-  - gated `/runs/{run_id}/retry`, `/recover`, and `/heal` in [`backend/main.py`](/Users/moldovancsaba/Projects/spot/backend/main.py) through the recovery-candidate audit so broken managed runs now return an explicit `409` with the integrity reason
-  - extended [`backend/ops_queue_regression.py`](/Users/moldovancsaba/Projects/spot/backend/ops_queue_regression.py) with a competing-claim regression and updated [`backend/backend_contract_regression.py`](/Users/moldovancsaba/Projects/spot/backend/backend_contract_regression.py) to cover strict managed-upload enforcement plus the new API refusal behavior
+  - kept passive historical reads compatible by letting [`backend/services/run_state_service.py`](/Users/Shared/Projects/spot/backend/services/run_state_service.py) refresh legacy run records without forcing a managed-upload rewrite on every list/detail read
+  - gated `/runs/{run_id}/retry`, `/recover`, and `/heal` in [`backend/main.py`](/Users/Shared/Projects/spot/backend/main.py) through the recovery-candidate audit so broken managed runs now return an explicit `409` with the integrity reason
+  - extended [`backend/ops_queue_regression.py`](/Users/Shared/Projects/spot/backend/ops_queue_regression.py) with a competing-claim regression and updated [`backend/backend_contract_regression.py`](/Users/Shared/Projects/spot/backend/backend_contract_regression.py) to cover strict managed-upload enforcement plus the new API refusal behavior
 - Validation:
   - `python3 -m py_compile backend/services/ops_db_service.py backend/services/run_state_service.py backend/main.py backend/ops_queue_regression.py backend/backend_contract_regression.py` => passed
   - `.venv/bin/python backend/ops_queue_regression.py` => passed
@@ -62,7 +92,7 @@ Historical note:
 
 - Objective: deliver the first relation-hardening slice by making upload-backed canonical run rows carry explicit source-row lineage instead of relying on best-effort reconstruction.
 - Changes:
-  - rebuilt the `run_rows` schema in [`backend/services/ops_db_service.py`](/Users/moldovancsaba/Projects/spot/backend/services/ops_db_service.py) so upload-backed run rows now carry `source_row_index` and `source_row_hash` and keep a composite foreign-key relation on `(upload_id, sequence_index)` back to `upload_rows`
+  - rebuilt the `run_rows` schema in [`backend/services/ops_db_service.py`](/Users/Shared/Projects/spot/backend/services/ops_db_service.py) so upload-backed run rows now carry `source_row_index` and `source_row_hash` and keep a composite foreign-key relation on `(upload_id, sequence_index)` back to `upload_rows`
   - added automatic table-rebuild migration logic so older local DBs are promoted onto the stronger lineage-aware schema when missing the new relation shape
   - tightened `upsert_run_rows(...)` so upload-backed writes now fail explicitly when canonical upload lineage cannot be resolved for the target row
   - extended backend and queue regressions so upload-backed canonical rows prove persisted lineage and so missing lineage now fails as an explicit integrity error
@@ -75,8 +105,8 @@ Historical note:
 
 - Objective: turn the May 2026 relation audit into a concrete implementation plan, deliverable issues, and dependency-aware GitHub board order.
 - Changes:
-  - added [`docs/RELATION_HARDENING_IMPLEMENTATION_PLAN.md`](/Users/moldovancsaba/Projects/spot/docs/RELATION_HARDENING_IMPLEMENTATION_PLAN.md) with the scoped hardening phases, deliverable issue map, recommended delivery order, and explicit gate in front of the DB-first ingest lane
-  - added the relation-hardening plan to the [`README.md`](/Users/moldovancsaba/Projects/spot/README.md) documentation map
+  - added [`docs/RELATION_HARDENING_IMPLEMENTATION_PLAN.md`](/Users/Shared/Projects/spot/docs/RELATION_HARDENING_IMPLEMENTATION_PLAN.md) with the scoped hardening phases, deliverable issue map, recommended delivery order, and explicit gate in front of the DB-first ingest lane
+  - added the relation-hardening plan to the [`README.md`](/Users/Shared/Projects/spot/README.md) documentation map
   - created GitHub issues `#61` through `#63` for immutable row lineage, atomic segment claiming, and fail-fast managed relation handling
   - updated GitHub issues `#3`, `#17`, `#18`, `#22`, `#23`, `#24`, `#50`, and `#54` so their dependency sections and execution notes now reflect the audited delivery order
   - synced the new issues to GitHub Project `{spot} - From IDEA to LIVE`
@@ -90,7 +120,7 @@ Historical note:
 
 - Objective: document the now-implemented native recovery candidate surface and record the current health-check status for the shared model-root and unfinished-run relations.
 - Changes:
-  - expanded [`docs/LOCAL_APPLIANCE_RUNBOOK.md`](/Users/moldovancsaba/Projects/spot/docs/LOCAL_APPLIANCE_RUNBOOK.md) so the operator contract now includes unfinished-run recovery candidates, deletion semantics for inactive runs, and the native settings exposure of the shared model-root paths
+  - expanded [`docs/LOCAL_APPLIANCE_RUNBOOK.md`](/Users/Shared/Projects/spot/docs/LOCAL_APPLIANCE_RUNBOOK.md) so the operator contract now includes unfinished-run recovery candidates, deletion semantics for inactive runs, and the native settings exposure of the shared model-root paths
   - recorded the recovery-action semantics explicitly: `resume` for attached paused workers, `recover` for upload-backed queued segment recovery, `retry` for non-upload restarts, and `broken` for runs missing required restart state
   - confirmed the shared model-root contract is now wired end to end across bootstrap, preflight, bundled launch, and the native SwiftUI settings surface
 - Validation:
@@ -110,7 +140,7 @@ Historical note:
   - migrated the active MLX/Hugging Face cache and Ollama store into the new `{spot}` shared roots
   - pulled the missing Ollama fallback tag `llama3.2:1b` into the shared `{spot}` store
   - replaced the legacy per-user Hugging Face cache path `~/.cache/huggingface` with a symlink to `/Users/Shared/Models/spot/huggingface`
-  - expanded [`docs/LOCAL_APPLIANCE_RUNBOOK.md`](/Users/moldovancsaba/Projects/spot/docs/LOCAL_APPLIANCE_RUNBOOK.md) and [`READMEDEV.md`](/Users/moldovancsaba/Projects/spot/READMEDEV.md) so future machine installs have a concrete shared-model provisioning checklist
+  - expanded [`docs/LOCAL_APPLIANCE_RUNBOOK.md`](/Users/Shared/Projects/spot/docs/LOCAL_APPLIANCE_RUNBOOK.md) and [`READMEDEV.md`](/Users/Shared/Projects/spot/READMEDEV.md) so future machine installs have a concrete shared-model provisioning checklist
 - Validation:
   - `python3 -m py_compile src/defaults.py src/bootstrap.py src/preflight.py src/classifier.py src/cli.py backend/main.py` => passed
   - `bash -n app/macos/build-bundle.sh` => passed
@@ -122,7 +152,7 @@ Historical note:
 
 - Objective: turn the repo discussion about canonical-schema-first ingest, DB-backed runtime truth, and bounded model improvement into an executable `{spot}` implementation lane.
 - Changes:
-  - added [`docs/DB_FIRST_SELF_LEARNING_EXECUTION_PLAN.md`](/Users/moldovancsaba/Projects/spot/docs/DB_FIRST_SELF_LEARNING_EXECUTION_PLAN.md) with the target architecture, guardrails, delivery phases, and recommended local training stack
+  - added [`docs/DB_FIRST_SELF_LEARNING_EXECUTION_PLAN.md`](/Users/Shared/Projects/spot/docs/DB_FIRST_SELF_LEARNING_EXECUTION_PLAN.md) with the target architecture, guardrails, delivery phases, and recommended local training stack
   - created milestone `{spot} v0.6.0 DB-First Ingest & Learning Loop`
   - created GitHub epic `#50` plus concrete delivery issues `#51` through `#60` covering canonical intake schema, importer/exporter adapters, DB-first classification, governed feedback capture, offline evaluation, Apple Silicon fine-tuning, candidate registry, and active learning
   - added the new issues to GitHub Project `{spot} - From IDEA to LIVE` and placed them in dependency-aware status lanes behind the active canonical-state hardening work
@@ -134,7 +164,7 @@ Historical note:
 
 - Objective: remove accidental secondary-framework framing from the new planning lane and make the training/runtime roadmap explicitly Apple-Silicon-only.
 - Changes:
-  - updated [`docs/DB_FIRST_SELF_LEARNING_EXECUTION_PLAN.md`](/Users/moldovancsaba/Projects/spot/docs/DB_FIRST_SELF_LEARNING_EXECUTION_PLAN.md) so the active `{spot}` learning plan uses `mlx-lm` only and excludes `Axolotl`, `LLaMA-Factory`, and `Unsloth` from the delivery lane
+  - updated [`docs/DB_FIRST_SELF_LEARNING_EXECUTION_PLAN.md`](/Users/Shared/Projects/spot/docs/DB_FIRST_SELF_LEARNING_EXECUTION_PLAN.md) so the active `{spot}` learning plan uses `mlx-lm` only and excludes `Axolotl`, `LLaMA-Factory`, and `Unsloth` from the delivery lane
   - updated GitHub issues `#50` and `#58` so the public implementation plan now states that the active training path is Apple Silicon only
 - Validation:
   - `gh issue view 50`
@@ -144,11 +174,11 @@ Historical note:
 
 - Objective: start issue `#51` by making the intake contract explicit in code and by persisting source-row provenance in the DB-backed upload layer.
 - Changes:
-  - added canonical intake schema definitions to [`src/models.py`](/Users/moldovancsaba/Projects/spot/src/models.py) with schema version `spot.input-row.v1alpha1`
-  - changed [`src/excel_io.py`](/Users/moldovancsaba/Projects/spot/src/excel_io.py) so workbook intake rows are canonicalized into a structured row shape before manifest/storage projection
-  - extended `upload_rows` in [`backend/services/ops_db_service.py`](/Users/moldovancsaba/Projects/spot/backend/services/ops_db_service.py) with schema version, normalization status, and source provenance fields
-  - changed [`backend/services/excel_service.py`](/Users/moldovancsaba/Projects/spot/backend/services/excel_service.py) to persist the canonical schema version in upload validation metadata and to write canonicalized intake rows into the DB
-  - rewrote [`docs/INGESTION.md`](/Users/moldovancsaba/Projects/spot/docs/INGESTION.md) around the canonical-row contract instead of only the workbook header order
+  - added canonical intake schema definitions to [`src/models.py`](/Users/Shared/Projects/spot/src/models.py) with schema version `spot.input-row.v1alpha1`
+  - changed [`src/excel_io.py`](/Users/Shared/Projects/spot/src/excel_io.py) so workbook intake rows are canonicalized into a structured row shape before manifest/storage projection
+  - extended `upload_rows` in [`backend/services/ops_db_service.py`](/Users/Shared/Projects/spot/backend/services/ops_db_service.py) with schema version, normalization status, and source provenance fields
+  - changed [`backend/services/excel_service.py`](/Users/Shared/Projects/spot/backend/services/excel_service.py) to persist the canonical schema version in upload validation metadata and to write canonicalized intake rows into the DB
+  - rewrote [`docs/INGESTION.md`](/Users/Shared/Projects/spot/docs/INGESTION.md) around the canonical-row contract instead of only the workbook header order
 - Validation:
   - `python3 -m py_compile src/models.py src/excel_io.py backend/services/excel_service.py backend/services/ops_db_service.py` => passed
 
@@ -156,10 +186,10 @@ Historical note:
 
 - Objective: continue issues `#51` and `#52` by formalizing canonical intake validation summaries and introducing the first source-adapter abstraction for the existing workbook path.
 - Changes:
-  - added `summarize_canonical_input_rows(...)` in [`src/excel_io.py`](/Users/moldovancsaba/Projects/spot/src/excel_io.py) so accepted-row, quarantine, rejection, schema-version, and source-type semantics are explicit in code
-  - changed [`backend/services/excel_service.py`](/Users/moldovancsaba/Projects/spot/backend/services/excel_service.py) so upload validation metadata now carries canonical validation summary fields instead of only workbook-specific counters
-  - added [`src/intake_adapters.py`](/Users/moldovancsaba/Projects/spot/src/intake_adapters.py) with the first importer abstraction and `.xlsx` implementation, so the current workbook path now flows through a source-adapter seam
-  - extended [`backend/backend_contract_regression.py`](/Users/moldovancsaba/Projects/spot/backend/backend_contract_regression.py) to assert schema version, normalization status, provenance, and canonical validation summary fields for both fresh intake and legacy materialization
+  - added `summarize_canonical_input_rows(...)` in [`src/excel_io.py`](/Users/Shared/Projects/spot/src/excel_io.py) so accepted-row, quarantine, rejection, schema-version, and source-type semantics are explicit in code
+  - changed [`backend/services/excel_service.py`](/Users/Shared/Projects/spot/backend/services/excel_service.py) so upload validation metadata now carries canonical validation summary fields instead of only workbook-specific counters
+  - added [`src/intake_adapters.py`](/Users/Shared/Projects/spot/src/intake_adapters.py) with the first importer abstraction and `.xlsx` implementation, so the current workbook path now flows through a source-adapter seam
+  - extended [`backend/backend_contract_regression.py`](/Users/Shared/Projects/spot/backend/backend_contract_regression.py) to assert schema version, normalization status, provenance, and canonical validation summary fields for both fresh intake and legacy materialization
 - Validation:
   - `python3 -m py_compile src/intake_adapters.py src/models.py src/excel_io.py backend/services/excel_service.py backend/services/ops_db_service.py backend/backend_contract_regression.py` => passed
   - `.venv/bin/python -m unittest backend.backend_contract_regression.BackendContractRegressionTests.test_intake_writes_row_manifest_for_accepted_upload backend.backend_contract_regression.BackendContractRegressionTests.test_ensure_upload_rows_materialized_backfills_legacy_upload` => passed
@@ -190,8 +220,8 @@ Historical note:
   - `docs/HANDOVER.md`
 - Validation:
   - `python3 -m py_compile src/*.py src/ensemble/*.py src/evaluation/*.py backend/main.py backend/models/*.py backend/routes/*.py backend/services/*.py backend/backend_contract_regression.py backend/ops_queue_regression.py backend/segment_worker.py src/benchmark.py src/targeted_adjudication_regression.py src/trinity_spot_bundle.py src/trinity_spot_bundle_regression.py` => passed
-  - `PYTHONPATH=/Users/moldovancsaba/Projects/spot .venv/bin/python backend/backend_contract_regression.py` => passed
-  - `PYTHONPATH=/Users/moldovancsaba/Projects/spot .venv/bin/python backend/ops_queue_regression.py` => passed
+  - `PYTHONPATH=/Users/Shared/Projects/spot .venv/bin/python backend/backend_contract_regression.py` => passed
+  - `PYTHONPATH=/Users/Shared/Projects/spot .venv/bin/python backend/ops_queue_regression.py` => passed
   - `cd app/macos && swift package dump-package >/dev/null && swift build && bash -n ./build-icon.sh && bash -n ./build-bundle.sh && bash -n ./install-bundle.sh && plutil -lint ./Info.plist` => passed
 
 ## 2026-05-11 Europe/Budapest - Codex ({spot} bounded Trinity/Train bundle export)
@@ -211,7 +241,7 @@ Historical note:
   - `docs/HANDOVER.md`
 - Validation:
   - `python3 -m py_compile src/*.py src/ensemble/*.py src/evaluation/*.py backend/main.py backend/models/*.py backend/routes/*.py backend/services/*.py backend/backend_contract_regression.py backend/ops_queue_regression.py backend/segment_worker.py src/benchmark.py src/targeted_adjudication_regression.py src/trinity_spot_bundle.py src/trinity_spot_bundle_regression.py` => passed
-  - `PYTHONPATH=/Users/moldovancsaba/Projects/spot .venv/bin/python src/trinity_spot_bundle_regression.py` => passed
+  - `PYTHONPATH=/Users/Shared/Projects/spot .venv/bin/python src/trinity_spot_bundle_regression.py` => passed
   - generated a real bundle with `{spot}` and loaded it via `{train}` using `PYTHONPATH=core uv run python -c 'from train_core.trinity_trace_loader import load_trinity_spot_training_bundle ...'` => passed
 
 ## 2026-05-11 Europe/Budapest - Codex ({spot} P0 Run Presentation Canonicalization)
@@ -1191,3 +1221,23 @@ Historical note:
   - `bash ./script/build_and_run.sh --verify` => passed; `spot.app runtime ready on 127.0.0.1:8765`
 - Known follow-up:
   - native runtime summary can later consume richer health payload fields if the backend grows a fuller appliance health model
+
+Cockpit report workflow verification (2026-11-08): 81 model-free regression tests passed; production preflight passed 54 checks with zero errors (one expected occupied-port warning while the installed app was running; inference was not rechecked). Native bundle built and installed at `/Applications/spot.app`. The installed UI showed the preserved German comparison at 26.7% (8/30), all 30 cases awaiting decision, and the human decision/PDF controls. Current Operator role correctly leaves decision/export controls disabled with a Reviewer access link. No real sample decisions or threat exports were created. A synthetic three-page Unicode PDF was visually checked for pagination and readable layout.
+
+Full workbook system test started at the user’s request: `german-full-system-20261108-160954`, upload `upload-1794150590-93fd44c2`, German language, full human review, no row limit. Intake accepted all 62,024 posts with zero quarantined/rejected rows; 125 segments. Installed cockpit showed PROCESSING and the first saved case under Reports. Original workbook and prior acceptance runs retained. No human case decisions were made. This is an active long-running workload, not a completed evaluation or acceptance decision.
+
+Reviewer queue update verified (2026-11-08): 84 model-free regressions passed, including exclusive bucket transitions, follow-up separation, oldest-created ordering/ties, filtering across pages, pagination clamping and new arrivals. Native Swift build, bundle/install, shell syntax and Info.plist checks passed. Installed UI verified Row 3 selected automatically in Waiting for review and the user’s saved Row 2 only in Not antisemitic; temporary unsaved note survived Refresh Queue and was then removed without saving. Full German run was safely suspended for installation and recovered to PROCESSING; 218 canonical cases and the original single user decision verified intact after restart. No additional real human decisions were made.
+
+Exception-only review correction (2026-11-08): the full German run was mistakenly started in full mode, and Review queued all undecided posts. Review now queues only canonical `review_required` exceptions; confident results appear in Automatic with no implied human confirmation. Intake labels partial mode as Automatic / review exceptions, and full as Manual review / every post. Generative drafter normalization was replaced by deterministic whitespace-only preparation: a three-post local reproduction showed the legacy model changed all three texts (1,028→65, 520→512, and 1,964→84 characters), while deterministic preparation preserved every source. Original stored evidence was already protected by rejection and fallback to the original.
+
+The stopped German run was converted to partial mode with `review_routing_service.reconcile_exception_review`: 411 existing rows, 368 verified source-preserving drafter recoveries, 275 genuine review exceptions, 136 eligible automatic results (one has the user’s existing human decision). The original human decision, audit history, and classification evidence were retained; a SQLite backup, previous run record and per-row routing explanation were saved under the run’s `review_policy_history/`. Only review_required and run policy changed. Historical warning flags remain as evidence; current routing and future workbook Review Required cells use canonical review state. Low confidence (<0.65), soft signals, malformed/missing analysis, model disagreement and failed quality checks continue requiring review. Numeric confidence alone does not bypass these checks. Automatically classified threats remain distinct from human-confirmed threats; official confirmed PDF export still requires an explicit human confirmation.
+
+Installed exception-only workflow verification: 89 regression checks passed; native build/bundle/install and syntax/plist checks passed. Installed UI showed Waiting for review and Automatic buckets separately, a reason for each queued exception, and the original Row 2 human decision intact. All 411 original canonical rows matched a full before/after fingerprint excluding only the intentionally changed review_required bit; decision, history and export records matched exactly. The run recovered to PROCESSING in partial mode and produced 5 new results with zero new preparation warnings. At verification: {'total': 416, 'waiting': 278, 'automatic': 137, 'follow_up': 0, 'confirmed_threat': 0, 'false_alarm': 1}. Production preflight passed with 54 checks and zero errors; occupied-port warning expected while the cockpit was running. No actual human case decisions were added or modified by the agent.
+
+Independent-resolution improvement (2026-11-08): SSOT 0.3 / prompt-v0.3-independent-checks activates schema-constrained Qwen 2.5 7B, Gemma 2 9B independent verification, and Llama 3.1 8B quality checks. The old snapshot had 281 review-required rows among 419: 223 second-pass markers, 221 soft-signal review flags, 93 invalid metadata, 47 unstructured outputs (overlapping causes). Source-exact evidence validation replaced the previous single-token overlap acceptance. One bounded structured retry retains both responses. A model cannot grant itself an automatic resolution marker. Automatic completion requires distinct model identities, >=0.85 independent classifier scores, matching categories, a third distinct model PASS >=0.85, no unresolved failure/context flags, source-bound audit traces and exact source evidence for positive classifications. Confidence is the minimum independent score, not the maximum. Full manual-review mode remains available. Oversized prompts fail explicitly instead of being silently truncated.
+
+Controlled pilot: 9/12 oldest waiting cases passed independent checks and were applied; three stayed human exceptions. All 30 balanced German reference posts stayed exceptions under the stricter checks; reference agreement was 9/30, so no taxonomy accuracy improvement or formal acceptance is claimed. Diagnostic evidence and recipes are under `runs/automation-investigation-20261108/`. The pilot is small and ordered, not a prevalence estimate.
+
+A resumable automatic recheck plan now covers 420 earlier machine-analyzed rows and skips the single saved human decision. Machine replacements are transactional, retain the entire previous canonical row in `analysis_revisions`, and refuse to overwrite a human decision or changed evidence. The cockpit shows recheck progress, independent answers/quality results, and Earlier analyses retained. Unfinished notes survive refresh and background rechecks. A full DB backup and preservation baseline precede activation. Installed UI verified automatic Row 3, its previous warnings, preserved human Row 2 and the next waiting exception. At verification all 421 source rows were unchanged, the complete human-reviewed row/decision/history/export records matched the baseline exactly; 16 cases checked, 12 resolved automatically, 404 still scheduled. The live run is PROCESSING: it finishes rechecking prior machine results, then continues the full workbook. 97 regressions passed, native build/install checks passed; production preflight: 49 checks, 0 errors, one expected occupied-port warning. No new real human decisions were made.
+
+Automatic-pending queue separation verified (2026-11-08): Review now defaults to Needs your review and offers a distinct Automatic checks pending bucket. The durable row-level completion markers gate the entire run before pagination. Previous automatic results scheduled for recheck are also pending until finished. A saved human decision takes precedence. Pending cases show no-action-needed text, disabled decision controls, and an API conflict if a premature decision is attempted; pending/ready tokens differ so a stale pre-check view cannot save after completion. Reports and dashboard totals use the same split. Tests cover unresolved/successful completion transitions, page-wide filtering, human precedence, paused plans, incomplete completion state, invalid plans, stale tokens and dashboard totals. 99 regressions passed; native build/bundle/install, syntax/plist, and production preflight passed (49 checks, no errors, one expected occupied-port warning). Installed UI verified both buckets and left the oldest completed exception selected. Live verification: {'total': 421, 'waiting': 77, 'automatic_pending': 300, 'automatic': 43, 'follow_up': 0, 'confirmed_threat': 0, 'false_alarm': 1}; recheck {'state': 'running', 'total': 420, 'processed': 120, 'resolved': 43, 'remaining': 300}. The saved human decision/history, all 421 original source rows, and completed recheck markers were preserved. The run resumed in PROCESSING.

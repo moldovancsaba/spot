@@ -244,11 +244,11 @@ Operational capabilities include:
 ## 15. Source Layout
 
 Maintainer-facing source layout:
-- native app: [`app/macos/`](/Users/moldovancsaba/Projects/spot/app/macos)
-- backend: [`backend/`](/Users/moldovancsaba/Projects/spot/backend)
-- pipeline and CLI: [`src/`](/Users/moldovancsaba/Projects/spot/src)
-- SSOT: [`ssot/`](/Users/moldovancsaba/Projects/spot/ssot)
-- active docs: [`docs/`](/Users/moldovancsaba/Projects/spot/docs)
+- native app: [`app/macos/`](/Users/Shared/Projects/spot/app/macos)
+- backend: [`backend/`](/Users/Shared/Projects/spot/backend)
+- pipeline and CLI: [`src/`](/Users/Shared/Projects/spot/src)
+- SSOT: [`ssot/`](/Users/Shared/Projects/spot/ssot)
+- active docs: [`docs/`](/Users/Shared/Projects/spot/docs)
 
 Generated native build folders:
 - `app/macos/.build/`
@@ -321,16 +321,16 @@ The project is now aligned so that:
 ## 19. The Most Important Documents
 
 If you want to understand {spot} in layers, read these documents in this order:
-1. this file: [`README_BRIEF.md`](/Users/moldovancsaba/Projects/spot/README_BRIEF.md)
-2. SSOT contract: [`ssot/SSOT.md`](/Users/moldovancsaba/Projects/spot/ssot/SSOT.md)
-3. machine/runtime SSOT: [`ssot/ssot.json`](/Users/moldovancsaba/Projects/spot/ssot/ssot.json)
-4. main operational overview: [`README.md`](/Users/moldovancsaba/Projects/spot/README.md)
-5. architecture: [`docs/ARCHITECTURE.md`](/Users/moldovancsaba/Projects/spot/docs/ARCHITECTURE.md)
-6. foundation baseline: [`FOUNDATION.md`](/Users/moldovancsaba/Projects/spot/FOUNDATION.md)
-7. ingestion contract: [`docs/INGESTION.md`](/Users/moldovancsaba/Projects/spot/docs/INGESTION.md)
-8. production plan: [`docs/PRODUCTION_PLAN.md`](/Users/moldovancsaba/Projects/spot/docs/PRODUCTION_PLAN.md)
-9. client quote: [`quote.md`](/Users/moldovancsaba/Projects/spot/quote.md)
-10. handover log: [`docs/HANDOVER.md`](/Users/moldovancsaba/Projects/spot/docs/HANDOVER.md)
+1. this file: [`README_BRIEF.md`](/Users/Shared/Projects/spot/README_BRIEF.md)
+2. SSOT contract: [`ssot/SSOT.md`](/Users/Shared/Projects/spot/ssot/SSOT.md)
+3. machine/runtime SSOT: [`ssot/ssot.json`](/Users/Shared/Projects/spot/ssot/ssot.json)
+4. main operational overview: [`README.md`](/Users/Shared/Projects/spot/README.md)
+5. architecture: [`docs/ARCHITECTURE.md`](/Users/Shared/Projects/spot/docs/ARCHITECTURE.md)
+6. foundation baseline: [`FOUNDATION.md`](/Users/Shared/Projects/spot/FOUNDATION.md)
+7. ingestion contract: [`docs/INGESTION.md`](/Users/Shared/Projects/spot/docs/INGESTION.md)
+8. production plan: [`docs/PRODUCTION_PLAN.md`](/Users/Shared/Projects/spot/docs/PRODUCTION_PLAN.md)
+9. client quote: [`quote.md`](/Users/Shared/Projects/spot/quote.md)
+10. handover log: [`docs/HANDOVER.md`](/Users/Shared/Projects/spot/docs/HANDOVER.md)
 
 ## 20. Bottom Line
 

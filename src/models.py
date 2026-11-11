@@ -65,6 +65,7 @@ class ClassificationResult:
     judge_score: float | None = None
     judge_verdict: str | None = None
     fallback_events: List[str] | None = None
+    audit_trace: dict | None = None
 
 
 @dataclass(frozen=True)

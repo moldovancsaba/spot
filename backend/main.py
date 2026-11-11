@@ -23,7 +23,12 @@ from backend.services.auth_service import (
 )
 from backend.services.request_auth import require_permission, session_payload
 from backend.services.excel_service import intake_workbook, list_upload_records, read_upload_record
-from backend.services.run_lifecycle_service import discover_run_process_pid, pid_alive, pid_command
+from backend.services.run_lifecycle_service import (
+    DEFAULT_ACTIVE_RUN_STATES,
+    discover_run_process_pid,
+    pid_alive,
+    pid_command,
+)
 from backend.services.ops_db_service import (
     build_operations_overview,
     build_run_segment_summary,
@@ -31,6 +36,7 @@ from backend.services.ops_db_service import (
     reset_run_segments,
     resume_run_segments,
     start_run_attempt,
+    summarize_run_rows,
 )
 from backend.services.run_state_service import (
     _run_recovery_candidate,
@@ -62,6 +68,7 @@ from src.defaults import (
     DEFAULT_LANGUAGE,
     DEFAULT_LOCKED_SSOT_PATH,
     DEFAULT_MAX_WORKERS,
+    DEFAULT_PROGRESS_EVERY,
     DEFAULT_OLLAMA_URL,
     DEFAULT_PRODUCTION_MODE,
     DEFAULT_REVIEW_MODE,
@@ -73,7 +80,8 @@ app = FastAPI(title="{spot} Classification Backend", version="0.5.2")
 RUNS_DIR = Path(os.getenv("RUNS_DIR", str(Path(__file__).resolve().parent.parent / "runs")))
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 PYTHON_BIN = Path(os.getenv("SPOT_NATIVE_PYTHON_BIN") or sys.executable)
-BACKEND_ACTIVE_RUN_STATES = {"STARTING", "PENDING", "VALIDATING", "PROCESSING", "WRITING", "PAUSED"}
+# Single source of truth in run_lifecycle_service; keep the local name for call sites.
+BACKEND_ACTIVE_RUN_STATES = DEFAULT_ACTIVE_RUN_STATES
 SUPERVISOR_PID = int(os.getenv("SPOT_NATIVE_SUPERVISOR_PID", "0") or "0")
 _SUPERVISOR_WATCHDOG_STARTED = False
 
@@ -93,6 +101,7 @@ def api_health():
         "ok": True,
         "status": "online",
         "launch": {"ready": True},
+        "inference": {"status": "not_checked", "verification": "preflight --inference-smoke"},
         "service": "{spot} Classification Backend",
         "version": "0.5.2",
         "auth_enabled": auth_enabled(),
@@ -275,6 +284,8 @@ def get_review_row(run_id: str, row_index: int, request: Request):
     detail = build_row_inspector(runs_dir=RUNS_DIR, run_id=run_id, row_index=row_index)
     if not detail:
         raise HTTPException(status_code=404, detail="review row not found")
+    from backend.services.case_report_service import get_case
+    detail["case_review"] = get_case(runs_dir=RUNS_DIR, run_id=run_id, row_index=row_index)
     return detail
 
 
@@ -301,6 +312,93 @@ def update_review_row(run_id: str, row_index: int, request: Request, payload: di
     return row
 
 
+@app.get("/runs/{run_id}/cases")
+def list_cases(run_id: str, request: Request, offset: int = Query(default=0, ge=0), limit: int = Query(default=100, ge=1, le=200), bucket: str = Query(default="all", pattern="^(all|waiting|follow_up|confirmed_threat|false_alarm|automatic|automatic_pending|reporting)$")):
+    require_permission(request, "view")
+    from backend.services.case_report_service import case_page
+    if not read_run_record(runs_dir=RUNS_DIR, run_id=run_id):
+        raise HTTPException(status_code=404, detail="run not found")
+    return case_page(runs_dir=RUNS_DIR, run_id=run_id, offset=offset, limit=limit, bucket=bucket)
+
+
+@app.get("/runs/{run_id}/reports")
+def get_reports(run_id: str, request: Request):
+    require_permission(request, "view")
+    from backend.services.case_report_service import run_reports
+    if not read_run_record(runs_dir=RUNS_DIR, run_id=run_id):
+        raise HTTPException(status_code=404, detail="run not found")
+    return run_reports(runs_dir=RUNS_DIR, run_id=run_id)
+
+
+@app.post("/runs/{run_id}/cases/{row_index}/decision")
+def save_case_decision(run_id: str, row_index: int, request: Request, payload: dict = Body(...)):
+    session = require_permission(request, "review")
+    from backend.services.case_report_service import record_decision, CaseConflict
+    try:
+        result = record_decision(runs_dir=RUNS_DIR, run_id=run_id, row_index=row_index, outcome=str(payload.get("outcome") or ""), category=payload.get("category"), note=str(payload.get("note") or ""), actor=str(session["actor_name"]), case_token=str(payload.get("case_token") or ""))
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+    except CaseConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    return result
+
+
+@app.post("/runs/{run_id}/cases/{row_index}/report.pdf")
+def export_case_report(run_id: str, row_index: int, request: Request):
+    session = require_permission(request, "export_threat_report")
+    from backend.services.case_report_service import export_threat_pdf, CaseConflict
+    try:
+        path = export_threat_pdf(runs_dir=RUNS_DIR, run_id=run_id, row_index=row_index, actor=str(session["actor_name"]))
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+    except CaseConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    return FileResponse(path, filename=path.name, media_type="application/pdf")
+
+
+@app.get("/runs/{run_id}/automatic-reports/{report_id}.pdf")
+def download_ai_report(run_id: str,report_id: str,request: Request):
+    require_permission(request,"export_threat_report")
+    from backend.services.automatic_report_service import download_automatic_report
+    from backend.services.case_report_service import CaseConflict
+    try:
+        path=download_automatic_report(runs_dir=RUNS_DIR,run_id=run_id,report_id=report_id)
+    except LookupError as exc:raise HTTPException(status_code=404,detail=str(exc)) from None
+    except CaseConflict as exc:raise HTTPException(status_code=409,detail=str(exc)) from None
+    return FileResponse(path,filename=path.name,media_type='application/pdf')
+
+
+@app.post("/runs/{run_id}/cases/{row_index}/automatic-report.pdf")
+def generate_ai_report(run_id: str,row_index: int,request: Request):
+    require_permission(request,"export_threat_report")
+    from backend.services.ops_db_service import _connect
+    from backend.services.automatic_report_service import refresh_automatic_report,download_automatic_report
+    from backend.services.case_report_service import CaseConflict
+    with _connect(RUNS_DIR) as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        result=refresh_automatic_report(conn,runs_dir=RUNS_DIR,run_id=run_id,row_index=row_index)
+    if not result or not result.get('report_id'):
+        raise HTTPException(status_code=409,detail='No eligible positive analysis >=30%, a human decision takes precedence, or PDF generation needs retry.')
+    try:path=download_automatic_report(runs_dir=RUNS_DIR,run_id=run_id,report_id=result['report_id'])
+    except (LookupError,CaseConflict) as exc:raise HTTPException(status_code=409,detail=str(exc)) from None
+    return FileResponse(path,filename=path.name,media_type='application/pdf')
+
+
+@app.get("/runs/{run_id}/threat-reports/{report_id}.pdf")
+def download_threat_report(run_id: str, report_id: str, request: Request):
+    require_permission(request, "export_threat_report")
+    from backend.services.case_report_service import existing_threat_pdf, CaseConflict
+    try:
+        path = existing_threat_pdf(runs_dir=RUNS_DIR, run_id=run_id, report_id=report_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+    except CaseConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    return FileResponse(path, filename=path.name, media_type="application/pdf")
+
+
 @app.get("/runs/{run_id}/actions")
 def get_run_actions(run_id: str, request: Request):
     require_permission(request, "view")
@@ -317,6 +415,10 @@ def run_signoff(run_id: str, request: Request, payload: dict | None = Body(defau
         raise HTTPException(status_code=404, detail="run not found")
     if str(record.get("state")) != "COMPLETED":
         raise HTTPException(status_code=409, detail="run sign-off is only allowed after a completed run")
+    canonical_count = int(summarize_run_rows(runs_dir=RUNS_DIR, run_id=run_id).get("processed_rows") or 0)
+    processed_count = int(record.get("processed_rows") or 0)
+    if processed_count <= 0 or canonical_count != processed_count:
+        raise HTTPException(status_code=409, detail="run sign-off requires complete canonical row coverage; explicitly migrate legacy rows before reviewing and signing off")
     review_summary = record.get("review_summary") or {}
     if int(review_summary.get("pending_rows") or 0) > 0:
         raise HTTPException(status_code=409, detail="run sign-off is blocked while review rows are still pending")
@@ -347,6 +449,14 @@ def get_run_artifacts(run_id: str, request: Request):
     if not center:
         raise HTTPException(status_code=404, detail="run not found")
     return center
+
+
+@app.get("/runs/{run_id}/events")
+def get_run_events(run_id: str, request: Request, limit: int = 200):
+    require_permission(request, "view")
+    from backend.services.ops_db_service import list_run_events
+    events = list_run_events(runs_dir=RUNS_DIR, run_id=run_id, limit=limit)
+    return {"run_id": run_id, "count": len(events), "events": events}
 
 
 @app.get("/runs/{run_id}/artifacts/download/{artifact_name}")
@@ -691,6 +801,8 @@ def _start_classify_run(*, run_id: str, payload: dict, actor: str, resume_existi
             review_mode=review_mode,
             start_payload=payload,
         )
+    from backend.services.automatic_report_service import enable_reporting_policy
+    enable_reporting_policy(runs_dir=RUNS_DIR,run_id=run_id,ssot_path=Path(ssot_path))
     attempt = start_run_attempt(
         runs_dir=RUNS_DIR,
         run_id=run_id,
@@ -769,14 +881,14 @@ def _start_classify_run(*, run_id: str, payload: dict, actor: str, resume_existi
     if limit is not None:
         cmd.extend(["--limit", str(limit)])
 
-    log = log_path.open("w", encoding="utf-8")
-    proc = subprocess.Popen(
-        cmd,
-        cwd=PROJECT_ROOT,
-        stdout=log,
-        stderr=log,
-        start_new_session=True,
-    )
+    with log_path.open("w", encoding="utf-8") as log:
+        proc = subprocess.Popen(
+            cmd,
+            cwd=PROJECT_ROOT,
+            stdout=log,
+            stderr=log,
+            start_new_session=True,
+        )
     _write_control(
         run_id,
         {
@@ -1053,7 +1165,7 @@ def migrate_run_row_state(
 
 
 @app.delete("/runs/{run_id}")
-def delete_run(run_id: str, request: Request, purge_source: bool = Query(default=True)):
+def delete_run(run_id: str, request: Request, purge_source: bool = Query(default=False)):
     require_permission(request, "manage_run")
     try:
         result = purge_run_state(runs_dir=RUNS_DIR, run_id=run_id, purge_source=purge_source)

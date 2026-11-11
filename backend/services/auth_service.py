@@ -10,9 +10,9 @@ SESSION_TTL_SECONDS = 12 * 60 * 60
 ALLOWED_ROLES = {"operator", "reviewer", "acceptance_lead", "admin"}
 ROLE_PERMISSIONS = {
     "operator": {"view", "upload", "start_run", "manage_run", "download_artifact"},
-    "reviewer": {"view", "review"},
-    "acceptance_lead": {"view", "download_artifact", "signoff"},
-    "admin": {"view", "upload", "start_run", "manage_run", "download_artifact", "review", "signoff"},
+    "reviewer": {"view", "review", "export_threat_report"},
+    "acceptance_lead": {"view", "download_artifact", "signoff", "export_threat_report"},
+    "admin": {"view", "upload", "start_run", "manage_run", "download_artifact", "review", "signoff", "export_threat_report"},
 }
 
 _SESSIONS: dict[str, dict] = {}

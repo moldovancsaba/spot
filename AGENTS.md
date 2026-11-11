@@ -1,10 +1,10 @@
 # Agent Guide
 
 Read these first:
-- [`READMEDEV.md`](/Users/moldovancsaba/Projects/spot/READMEDEV.md)
-- [`README.md`](/Users/moldovancsaba/Projects/spot/README.md)
-- [`docs/LOCAL_APPLIANCE_RUNBOOK.md`](/Users/moldovancsaba/Projects/spot/docs/LOCAL_APPLIANCE_RUNBOOK.md)
-- [`docs/HANDOVER.md`](/Users/moldovancsaba/Projects/spot/docs/HANDOVER.md)
+- [`READMEDEV.md`](/Users/Shared/Projects/spot/READMEDEV.md)
+- [`README.md`](/Users/Shared/Projects/spot/README.md)
+- [`docs/LOCAL_APPLIANCE_RUNBOOK.md`](/Users/Shared/Projects/spot/docs/LOCAL_APPLIANCE_RUNBOOK.md)
+- [`docs/HANDOVER.md`](/Users/Shared/Projects/spot/docs/HANDOVER.md)
 
 Working rules:
 - inspect the repo directly before changing it
@@ -18,6 +18,7 @@ Common commands:
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+pip install -r requirements-dev.txt   # test-only pins (httpx2, pypdf); needed to run the regressions
 ```
 
 ```bash
@@ -114,7 +115,5 @@ Minimum validation:
 ```bash
 git status --short --branch
 python3 -m py_compile src/*.py src/ensemble/*.py src/evaluation/*.py backend/main.py backend/models/*.py backend/routes/*.py backend/services/*.py backend/backend_contract_regression.py backend/ops_queue_regression.py backend/segment_worker.py src/benchmark.py src/targeted_adjudication_regression.py
-.venv/bin/python backend/backend_contract_regression.py
-.venv/bin/python backend/ops_queue_regression.py
-.venv/bin/python src/targeted_adjudication_regression.py
+bash script/verify-contracts.sh
 ```

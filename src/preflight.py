@@ -55,6 +55,20 @@ def _is_port_bindable(host: str, port: int) -> tuple[bool, str]:
     return True, "port is available for local bind"
 
 
+def _ollama_listener_check(url: str) -> tuple[bool, str]:
+    port = urllib.parse.urlparse(url).port or 11434
+    lsof = shutil.which("lsof")
+    if not lsof:
+        return False, "Cannot verify the actual Ollama listener: lsof is unavailable"
+    try:
+        probe = subprocess.run([lsof, "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-Fn"], capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.TimeoutExpired):
+        return False, "Cannot inspect the actual Ollama listener"
+    addresses = [line[1:].rsplit(":", 1)[0].strip("[]") for line in probe.stdout.splitlines() if line.startswith("n")]
+    local_only = bool(addresses) and all(address in {"127.0.0.1", "::1"} for address in addresses)
+    return local_only, "Actual Ollama listener is loopback-only" if local_only else "Ollama is absent or has a non-loopback listener; disable network exposure in Ollama settings"
+
+
 def _python_dependency_exists(module_name: str) -> bool:
     return importlib.util.find_spec(module_name) is not None
 
@@ -173,7 +187,7 @@ def _mlx_cli_contract_check() -> tuple[bool, str]:
     return True, "mlx_lm generate CLI contract exposes --model and --prompt"
 
 
-def run_preflight(ssot_path: Path, runs_dir: Path, port: int = 8765) -> dict:
+def run_preflight(ssot_path: Path, runs_dir: Path, port: int = 8765, inference_smoke: bool = False) -> dict:
     checks: list[dict] = []
     project_root = Path(__file__).resolve().parent.parent
     requirements_path = project_root / "requirements.txt"
@@ -219,6 +233,7 @@ def run_preflight(ssot_path: Path, runs_dir: Path, port: int = 8765) -> dict:
 
     required_modules = [
         ("openpyxl", "openpyxl"),
+        ("reportlab", "reportlab"),
         ("fastapi", "fastapi"),
         ("uvicorn", "uvicorn"),
     ]
@@ -230,7 +245,7 @@ def run_preflight(ssot_path: Path, runs_dir: Path, port: int = 8765) -> dict:
                 f"Python module '{module_name}' {'is' if _python_dependency_exists(module_name) else 'is not'} importable",
             )
         )
-    required_pins = ["openpyxl", "fastapi", "uvicorn", "mlx", "mlx-lm"]
+    required_pins = ["openpyxl", "fastapi", "uvicorn", "mlx", "mlx-lm", "reportlab"]
     for package_name in required_pins:
         pinned_version = pinned_requirements.get(package_name)
         installed_version = _python_dependency_version(package_name)
@@ -367,6 +382,10 @@ def run_preflight(ssot_path: Path, runs_dir: Path, port: int = 8765) -> dict:
         )
     )
 
+    if is_loopback:
+        listener_ok, listener_detail = _ollama_listener_check(DEFAULT_OLLAMA_URL)
+        checks.append(_check("ollama_listener", listener_ok, listener_detail))
+
     writable, writable_detail = _writable_directory(runs_dir)
     checks.append(_check("runs_directory", writable, f"{runs_dir}: {writable_detail}"))
     runs_perm_ok, runs_perm_detail = _permissions_ok(runs_dir, 0o700)
@@ -388,7 +407,33 @@ def run_preflight(ssot_path: Path, runs_dir: Path, port: int = 8765) -> dict:
     port_ok, port_detail = _is_port_bindable("127.0.0.1", port)
     checks.append(_check("backend_port", port_ok, f"127.0.0.1:{port} {port_detail}", severity="warning"))
 
-    return _finalize_report(checks)
+    if inference_smoke:
+        checks.extend(_inference_smoke_checks(ssot))
+    report = _finalize_report(checks)
+    report["inference_status"] = ("passed" if all(c["ok"] for c in checks if c["name"].startswith("inference_")) else "failed") if inference_smoke else "not_checked"
+    return report
+
+
+def _inference_smoke_checks(ssot) -> list[dict]:
+    from .classifier import _classify_with_backend
+    from .failure_policy import MANDATORY_REVIEW_FLAGS
+
+    checks = []
+    # Synthetic input only. Never include model output or source text in the report.
+    routes = [
+        ("primary", ssot.runtime.classifier.backend, ssot.runtime.classifier.model),
+        ("fallback", ssot.runtime.classifier.fallback_backend, ssot.runtime.classifier.fallback_model),
+    ]
+    for name, backend, model in routes:
+        try:
+            result = _classify_with_backend("Das Wetter ist heute sonnig.", ssot, backend, model)
+            ok = result.raw_category == "Not Antisemitic" and not (set(result.flags) & MANDATORY_REVIEW_FLAGS)
+            detail = f"{backend} structured classifier response: {'passed' if ok else 'failed'}"
+        except Exception as exc:
+            ok = False
+            detail = f"{backend} classifier request failed ({type(exc).__name__})"
+        checks.append(_check(f"inference_{name}", ok, detail))
+    return checks
 
 
 def _finalize_report(checks: list[dict]) -> dict:
@@ -396,6 +441,7 @@ def _finalize_report(checks: list[dict]) -> dict:
     warnings = [check for check in checks if not check["ok"] and check["severity"] == "warning"]
     return {
         "status": "ok" if not failures else "error",
+        "inference_status": "not_checked",
         "summary": {
             "checks_total": len(checks),
             "errors": len(failures),

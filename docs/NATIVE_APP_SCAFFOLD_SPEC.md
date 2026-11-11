@@ -3,7 +3,7 @@
 Historical note:
 - this scaffold spec was written during the first native-shell bring-up phase
 - references to browser-era review routing or startup paths below are historical implementation context, not the current delivery contract
-- the active native build, launch, auth, and runtime contract now lives in [`docs/NATIVE_APP_BUILD_HANDOFF.md`](/Users/moldovancsaba/Projects/spot/docs/NATIVE_APP_BUILD_HANDOFF.md) and [`docs/LOCAL_APPLIANCE_RUNBOOK.md`](/Users/moldovancsaba/Projects/spot/docs/LOCAL_APPLIANCE_RUNBOOK.md)
+- the active native build, launch, auth, and runtime contract now lives in [`docs/NATIVE_APP_BUILD_HANDOFF.md`](/Users/Shared/Projects/spot/docs/NATIVE_APP_BUILD_HANDOFF.md) and [`docs/LOCAL_APPLIANCE_RUNBOOK.md`](/Users/Shared/Projects/spot/docs/LOCAL_APPLIANCE_RUNBOOK.md)
 
 Document date: `2026-05-05`
 Target baseline at scaffold time: `0.5.1`
@@ -77,19 +77,19 @@ Stage 1 security non-goals:
 
 Current scaffold files:
 
-- `/Users/moldovancsaba/Projects/spot/app/macos/Package.swift`
-- `/Users/moldovancsaba/Projects/spot/app/macos/Info.plist`
-- `/Users/moldovancsaba/Projects/spot/app/macos/build-icon.sh`
-- `/Users/moldovancsaba/Projects/spot/app/macos/build-bundle.sh`
-- `/Users/moldovancsaba/Projects/spot/app/macos/install-bundle.sh`
-- `/Users/moldovancsaba/Projects/spot/script/build_and_run.sh`
-- `/Users/moldovancsaba/Projects/spot/app/macos/Sources/SpotApp.swift`
-- `/Users/moldovancsaba/Projects/spot/app/macos/Sources/SpotCoreService.swift`
-- `/Users/moldovancsaba/Projects/spot/docs/NATIVE_APP_BUILD_HANDOFF.md`
+- `/Users/Shared/Projects/spot/app/macos/Package.swift`
+- `/Users/Shared/Projects/spot/app/macos/Info.plist`
+- `/Users/Shared/Projects/spot/app/macos/build-icon.sh`
+- `/Users/Shared/Projects/spot/app/macos/build-bundle.sh`
+- `/Users/Shared/Projects/spot/app/macos/install-bundle.sh`
+- `/Users/Shared/Projects/spot/script/build_and_run.sh`
+- `/Users/Shared/Projects/spot/app/macos/Sources/SpotApp.swift`
+- `/Users/Shared/Projects/spot/app/macos/Sources/SpotCoreService.swift`
+- `/Users/Shared/Projects/spot/docs/NATIVE_APP_BUILD_HANDOFF.md`
 
 Optional helper:
 
-- `/Users/moldovancsaba/Projects/spot/app/macos/Sources/SpotHelper/main.swift`
+- `/Users/Shared/Projects/spot/app/macos/Sources/SpotHelper/main.swift`
 
 Only add the helper target if the app genuinely needs a protected local helper for file or mirror operations.
 
@@ -423,9 +423,9 @@ Security rules for launch:
 
 Phase 1 launch strategy should prefer the current supported native path:
 
-- `cd /Users/moldovancsaba/Projects/spot/app/macos && swift build`
-- `cd /Users/moldovancsaba/Projects/spot/app/macos && bash build-bundle.sh`
-- `cd /Users/moldovancsaba/Projects/spot/app/macos && bash install-bundle.sh`
+- `cd /Users/Shared/Projects/spot/app/macos && swift build`
+- `cd /Users/Shared/Projects/spot/app/macos && bash build-bundle.sh`
+- `cd /Users/Shared/Projects/spot/app/macos && bash install-bundle.sh`
 - `open /Applications/spot.app`
 
 That keeps the app aligned with the current repo-supported native runtime behavior.
@@ -556,7 +556,7 @@ Do not use these implementation shortcuts:
 Required syntax validation once scaffold files exist:
 
 ```bash
-cd /Users/moldovancsaba/Projects/spot/app/macos
+cd /Users/Shared/Projects/spot/app/macos
 swift package dump-package >/dev/null
 bash -n ./build-icon.sh
 bash -n ./build-bundle.sh
@@ -565,7 +565,7 @@ plutil -lint ./Info.plist
 ```
 
 ```bash
-cd /Users/moldovancsaba/Projects/spot
+cd /Users/Shared/Projects/spot
 bash -n ./script/build_and_run.sh
 ```
 

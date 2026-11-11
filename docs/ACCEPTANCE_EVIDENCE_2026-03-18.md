@@ -14,7 +14,7 @@ SSOT: `0.2`
 - Python version: `3.14.3`
 - `{spot}` commit hash: `efbbce887405b6fde888e4f34e6601630f010b50`
 - Release tag: `v0.3.1`
-- SSOT path: `/Users/moldovancsaba/Projects/spot/ssot/ssot.json`
+- SSOT path: `/Users/Shared/Projects/spot/ssot/ssot.json`
 - Production mode: `SPOT_PRODUCTION_MODE=1` used for bootstrap/preflight/classify runs
 - Operator: `Codex`
 - Reviewer: `Pending client review`
@@ -28,7 +28,7 @@ SSOT: `0.2`
 - Duration: `55s` (`2026-03-18T10:30:46Z` to `2026-03-18T10:31:41Z`)
 - Rows per minute: `1.09`
 - Output workbook: `/tmp/spot_acceptance_primary_limit1.xlsx`
-- Artefact directory: `/Users/moldovancsaba/Projects/spot/runs/acceptance-primary-limit1-20260318`
+- Artefact directory: `/Users/Shared/Projects/spot/runs/acceptance-primary-limit1-20260318`
 - Result summary: run completed and artefacts were written; policy shows the expected Apertus MLX primary route, but the workbook row recorded `CLASSIFIER_FALLBACK_FAILED`, so the primary route did not produce a clean accepted classification result on the tested row. Additional benchmark finding: `samples/sample_germany.xlsx` was rejected before inference because row `257` exceeded the `10000`-character `Post text` guardrail.
 
 ## Fallback Record
@@ -38,7 +38,7 @@ SSOT: `0.2`
 - Trigger reason: controlled empty-text row
 - Fallback event type: `EMPTY_TEXT_FALLBACK`
 - Affected rows: `1`
-- Evidence files: `/Users/moldovancsaba/Projects/spot/runs/acceptance-fallback-20260318/integrity_report.json`, `/Users/moldovancsaba/Projects/spot/runs/acceptance-fallback-20260318/artifact_manifest.json`, `/tmp/spot_acceptance_fallback.xlsx`
+- Evidence files: `/Users/Shared/Projects/spot/runs/acceptance-fallback-20260318/integrity_report.json`, `/Users/Shared/Projects/spot/runs/acceptance-fallback-20260318/artifact_manifest.json`, `/tmp/spot_acceptance_fallback.xlsx`
 - Operator visibility confirmed: `yes`
 
 ## Disagreement Record
@@ -48,7 +48,7 @@ SSOT: `0.2`
 - Disagreement row count: `0`
 - `disagreement_report.json` present: `no`
 - Judge participation confirmed: `no`
-- Evidence files: `/Users/moldovancsaba/Projects/spot/runs/acceptance-eval-limit1-20260318/evaluation_report.json`, `/Users/moldovancsaba/Projects/spot/runs/acceptance-eval-limit1-20260318-ensemble/integrity_report.json`, `/Users/moldovancsaba/Projects/spot/runs/acceptance-eval-limit1-20260318-ensemble/artifact_manifest.json`
+- Evidence files: `/Users/Shared/Projects/spot/runs/acceptance-eval-limit1-20260318/evaluation_report.json`, `/Users/Shared/Projects/spot/runs/acceptance-eval-limit1-20260318-ensemble/integrity_report.json`, `/Users/Shared/Projects/spot/runs/acceptance-eval-limit1-20260318-ensemble/artifact_manifest.json`
 
 ## Workbook Output Review
 
@@ -66,7 +66,7 @@ SSOT: `0.2`
 - `artifact_manifest.json` present: `yes`
 - `logs.txt` present: `yes`
 - Artefact access path confirmed: `yes`
-- Notes: verified on `acceptance-primary-limit1-20260318`, `acceptance-fallback-20260318`, and both evaluation sub-runs. The ensemble evaluation also produced `/Users/moldovancsaba/Projects/spot/runs/acceptance-eval-limit1-20260318/evaluation_report.json`.
+- Notes: verified on `acceptance-primary-limit1-20260318`, `acceptance-fallback-20260318`, and both evaluation sub-runs. The ensemble evaluation also produced `/Users/Shared/Projects/spot/runs/acceptance-eval-limit1-20260318/evaluation_report.json`.
 
 ## Operational Review
 

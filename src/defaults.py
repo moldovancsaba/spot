@@ -85,7 +85,7 @@ DEFAULT_ALLOW_REMOTE_OLLAMA = (
 DEFAULT_PRODUCTION_MODE = (_env("SPOT_PRODUCTION_MODE", None, "0") or "0").strip() == "1"
 DEFAULT_LOCKED_SSOT_PATH = _env("SPOT_LOCKED_SSOT_PATH", None, DEFAULT_SSOT_PATH) or DEFAULT_SSOT_PATH
 
-DEFAULT_MODELS_HOME = _env("SPOT_MODELS_HOME", None, "/Users/Shared/Models/spot") or "/Users/Shared/Models/spot"
+DEFAULT_MODELS_HOME = _env("SPOT_MODELS_HOME", None, "/Users/Shared/Models") or "/Users/Shared/Models"
 DEFAULT_HF_HOME = _env(
     "SPOT_HF_HOME",
     None,
@@ -99,8 +99,8 @@ DEFAULT_HF_HUB_CACHE = _env(
 DEFAULT_OLLAMA_MODELS = _env(
     "SPOT_OLLAMA_MODELS",
     None,
-    str(Path(DEFAULT_MODELS_HOME) / "ollama"),
-) or str(Path(DEFAULT_MODELS_HOME) / "ollama")
+    str(Path(DEFAULT_MODELS_HOME)),
+) or str(Path(DEFAULT_MODELS_HOME))
 DEFAULT_MLX_MODELS_DIR = _env(
     "SPOT_MLX_MODELS_DIR",
     None,

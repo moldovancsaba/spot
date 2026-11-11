@@ -7,7 +7,7 @@ Historical note:
 This document breaks the browser operator phase into deliverable units under the active project-board stack.
 
 Primary contract:
-- [`docs/BROWSER_OPERATOR_CONTRACT.md`](/Users/moldovancsaba/Projects/spot/docs/BROWSER_OPERATOR_CONTRACT.md)
+- [`docs/BROWSER_OPERATOR_CONTRACT.md`](/Users/Shared/Projects/spot/docs/BROWSER_OPERATOR_CONTRACT.md)
 
 Board SSOT:
 - GitHub Project `{spot}` items `#1` through `#11`

@@ -13,3 +13,4 @@ samples/*_proof.xlsx
 samples/*_smoke*.xlsx
 samples/*_probe*.xlsx
 samples/progress_test.xlsx
+.build/

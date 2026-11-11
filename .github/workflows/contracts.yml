@@ -1,0 +1,27 @@
+name: Runtime contracts
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install backend and test dependencies
+        # Runtime pins come from requirements.txt, minus the Apple-Silicon-only MLX stack.
+        # Test-only pins (httpx2, pypdf) come from requirements-dev.txt, so CI and a local
+        # maintainer install resolve the same set instead of CI hiding the gap.
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          pins = [line for line in Path('requirements.txt').read_text().splitlines()
+                  if not line.startswith(('mlx==', 'mlx-lm=='))]
+          Path('/tmp/spot-contract-requirements.txt').write_text('\n'.join(pins) + '\n')
+          PY
+          python -m pip install -r /tmp/spot-contract-requirements.txt -r requirements-dev.txt
+      - name: Check runtime contracts without local models
+        run: bash script/verify-contracts.sh

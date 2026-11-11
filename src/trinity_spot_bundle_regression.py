@@ -7,7 +7,7 @@ from pathlib import Path
 
 from backend.services.ops_db_service import upsert_run_rows
 from backend.services.run_state_service import create_run_record
-from src.trinity_spot_bundle import export_trinity_spot_training_bundles
+from src.trinity_spot_bundle import export_trinity_spot_training_bundles, build_trinity_spot_training_bundle
 
 
 class TrinitySpotBundleRegressionTests(unittest.TestCase):
@@ -75,6 +75,17 @@ class TrinitySpotBundleRegressionTests(unittest.TestCase):
         self.assertEqual(payload["spot_reasoning_result"]["confidence_bundle"]["combined_confidence"], 0.76)
         self.assertEqual(payload["spot_review_outcome"]["disposition"], "CONFIRMED_NEGATIVE")
         self.assertEqual(payload["spot_review_outcome"]["final_label"], "Not Antisemitic")
+
+    def test_export_excludes_escalated_and_failed_rows_even_with_saved_decisions(self) -> None:
+        base = {"row_index": 2, "assigned_category": "Not Antisemitic", "post_text": "Synthetic text", "review_state": "reviewed", "review_decision": "confirm"}
+        for fields in ({"review_state": "escalated"}, {"flags": ["ANALYSIS_FAILED"]}, {"flags": ["TAXONOMY_VIOLATION"]}, {"fallback_events": ["CLASSIFIER_ROUTE_FALLBACK"]}):
+            with self.subTest(fields=fields):
+                self.assertIsNone(build_trinity_spot_training_bundle(run_id="audit", company_id="company", language="de", review_mode="none", row={**base, **fields}))
+
+    def test_explicit_human_correction_is_the_exported_final_label(self) -> None:
+        row = {"row_index": 2, "assigned_category": "Anti-Israel", "post_text": "Synthetic text", "review_state": "reviewed", "review_decision": "adjust", "human_category": "Not Antisemitic", "review_required": True, "flags": ["REVIEW_REQUIRED"]}
+        bundle = build_trinity_spot_training_bundle(run_id="test", company_id="company", language="de", review_mode="full", row=row)
+        self.assertEqual(bundle["spot_review_outcome"]["final_label"], "Not Antisemitic")
 
 
 if __name__ == "__main__":

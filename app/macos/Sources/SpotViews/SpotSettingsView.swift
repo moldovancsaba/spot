@@ -6,6 +6,19 @@ struct SpotSettingsView: View {
 
     var body: some View {
         Form {
+            Section("Local access") {
+                TextField("Reviewer or operator name", text: $service.operatorActorName)
+                Picker("Role", selection: $service.operatorRole) {
+                    Text("Operator").tag("operator")
+                    Text("Reviewer").tag("reviewer")
+                    Text("Acceptance lead").tag("acceptance_lead")
+                    Text("Administrator").tag("admin")
+                }
+                SecureField("Access code (optional on this Mac)", text: $service.operatorAccessCode)
+                Text(service.authSummary).font(.caption).foregroundStyle(.secondary)
+                Button("Apply identity") { Task { await service.loginCurrentOperatorSession() } }
+            }
+
             Picker("Appearance", selection: $appearanceMode) {
                 ForEach(SpotAppearanceMode.allCases) { mode in
                     Text(mode.label).tag(mode.rawValue)

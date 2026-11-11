@@ -133,6 +133,6 @@ Intentional limits still remain:
 ## Release References
 
 - Tag: `v0.3.1`
-- Client package: [`docs/CLIENT_PACKAGE.md`](/Users/moldovancsaba/Projects/spot/docs/CLIENT_PACKAGE.md)
-- Brief: [`README_BRIEF.md`](/Users/moldovancsaba/Projects/spot/README_BRIEF.md)
-- Production plan: [`docs/PRODUCTION_PLAN.md`](/Users/moldovancsaba/Projects/spot/docs/PRODUCTION_PLAN.md)
+- Client package: [`docs/CLIENT_PACKAGE.md`](/Users/Shared/Projects/spot/docs/CLIENT_PACKAGE.md)
+- Brief: [`README_BRIEF.md`](/Users/Shared/Projects/spot/README_BRIEF.md)
+- Production plan: [`docs/PRODUCTION_PLAN.md`](/Users/Shared/Projects/spot/docs/PRODUCTION_PLAN.md)

@@ -10,9 +10,9 @@ Maintenance note:
 
 ## Canonical Path
 
-- document: `/Users/moldovancsaba/Projects/spot/docs/NATIVE_APP_BUILD_HANDOFF.md`
-- app root: `/Users/moldovancsaba/Projects/spot/app/macos`
-- packaged bundle output: `/Users/moldovancsaba/Projects/spot/app/macos/dist/spot.app`
+- document: `/Users/Shared/Projects/spot/docs/NATIVE_APP_BUILD_HANDOFF.md`
+- app root: `/Users/Shared/Projects/spot/app/macos`
+- packaged bundle output: `/Users/Shared/Projects/spot/app/macos/dist/spot.app`
 - installed app target: `/Applications/spot.app`
 
 ## What The Native App Is
@@ -34,14 +34,14 @@ The native shell is the operator-facing entrypoint. The Python classification ru
 
 These files define the native app build and launch contract:
 
-- package manifest: `/Users/moldovancsaba/Projects/spot/app/macos/Package.swift`
-- app metadata: `/Users/moldovancsaba/Projects/spot/app/macos/Info.plist`
-- icon build script: `/Users/moldovancsaba/Projects/spot/app/macos/build-icon.sh`
-- bundle build script: `/Users/moldovancsaba/Projects/spot/app/macos/build-bundle.sh`
-- bundle install script: `/Users/moldovancsaba/Projects/spot/app/macos/install-bundle.sh`
-- dev build-and-launch script: `/Users/moldovancsaba/Projects/spot/script/build_and_run.sh`
-- app entrypoint: `/Users/moldovancsaba/Projects/spot/app/macos/Sources/SpotApp.swift`
-- runtime supervisor and health probing: `/Users/moldovancsaba/Projects/spot/app/macos/Sources/SpotCoreService.swift`
+- package manifest: `/Users/Shared/Projects/spot/app/macos/Package.swift`
+- app metadata: `/Users/Shared/Projects/spot/app/macos/Info.plist`
+- icon build script: `/Users/Shared/Projects/spot/app/macos/build-icon.sh`
+- bundle build script: `/Users/Shared/Projects/spot/app/macos/build-bundle.sh`
+- bundle install script: `/Users/Shared/Projects/spot/app/macos/install-bundle.sh`
+- dev build-and-launch script: `/Users/Shared/Projects/spot/script/build_and_run.sh`
+- app entrypoint: `/Users/Shared/Projects/spot/app/macos/Sources/SpotApp.swift`
+- runtime supervisor and health probing: `/Users/Shared/Projects/spot/app/macos/Sources/SpotCoreService.swift`
 
 If any of those files change, this document must be reviewed.
 
@@ -215,28 +215,28 @@ The preferred bundled health probe is:
 ### Build only
 
 ```bash
-cd /Users/moldovancsaba/Projects/spot/app/macos
+cd /Users/Shared/Projects/spot/app/macos
 ./build-bundle.sh
 ```
 
 ### Install into `/Applications`
 
 ```bash
-cd /Users/moldovancsaba/Projects/spot/app/macos
+cd /Users/Shared/Projects/spot/app/macos
 ./install-bundle.sh
 ```
 
 ### Build and launch for development
 
 ```bash
-cd /Users/moldovancsaba/Projects/spot
+cd /Users/Shared/Projects/spot
 bash ./script/build_and_run.sh --verify
 ```
 
 ## Validation Checklist
 
 ```bash
-cd /Users/moldovancsaba/Projects/spot/app/macos
+cd /Users/Shared/Projects/spot/app/macos
 swift package dump-package >/dev/null
 bash -n ./build-icon.sh
 bash -n ./build-bundle.sh
@@ -245,6 +245,6 @@ plutil -lint ./Info.plist
 ```
 
 ```bash
-cd /Users/moldovancsaba/Projects/spot
+cd /Users/Shared/Projects/spot
 bash -n ./script/build_and_run.sh
 ```

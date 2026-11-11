@@ -1,6 +1,6 @@
 # {spot} Acceptance Evidence Template
 
-Document date: `2026-05-03`
+Document date: `2026-11-08`
 Workspace baseline: `0.5.2`
 SSOT: `0.2`
 
@@ -15,13 +15,13 @@ SSOT: `0.2`
 - `{spot}` commit hash: `<git commit hash>`
 - Workspace baseline: `0.5.2`
 - Latest shipped release: `v0.3.1`
-- SSOT path: `/Users/moldovancsaba/Projects/spot/ssot/ssot.json`
+- SSOT path: `/Users/Shared/Projects/spot/ssot/ssot.json`
 - Production mode: `SPOT_PRODUCTION_MODE=1` for bootstrap/preflight/runtime acceptance commands
 - Supported native build/install path: `cd app/macos && swift build && bash build-bundle.sh && bash install-bundle.sh`
-- Native acceptance smoke command: `.venv/bin/python app/macos/native_acceptance_smoke.py`
+- Native acceptance smoke command: `.venv/bin/python app/macos/native_acceptance_smoke.py --run-id <actual-run-id> --check-intake`
 - Operator: `<operator>`
 - Reviewer: `<reviewer>`
-- Historical acceptance record for the prior `0.3.2` session: [`docs/ACCEPTANCE_EVIDENCE_2026-03-18.md`](/Users/moldovancsaba/Projects/spot/docs/ACCEPTANCE_EVIDENCE_2026-03-18.md)
+- Historical acceptance record for the prior `0.3.2` session: [`docs/ACCEPTANCE_EVIDENCE_2026-03-18.md`](/Users/Shared/Projects/spot/docs/ACCEPTANCE_EVIDENCE_2026-03-18.md)
 
 ## Native Operator Workflow Record
 

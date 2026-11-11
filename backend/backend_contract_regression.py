@@ -220,6 +220,7 @@ class BackendContractRegressionTests(unittest.TestCase):
             json={"decision": "accepted_with_conditions", "note": "blocked until review is complete"},
         )
         self.assertEqual(blocked.status_code, 409, blocked.text)
+        self.assertIn("canonical row coverage", blocked.json()["detail"])
 
         reviewed = self.client.post(
             f"/runs/{run_id}/review-rows/2",
@@ -236,6 +237,61 @@ class BackendContractRegressionTests(unittest.TestCase):
             json={"decision": "accepted_with_conditions", "note": "all review rows complete"},
         )
         self.assertEqual(allowed.status_code, 200, allowed.text)
+
+    def test_escalated_review_does_not_allow_signoff(self) -> None:
+        self._login_admin()
+        run_id = "escalated-signoff"
+        _prepare_synthetic_run(self.runs_dir, run_id)
+        response = self.client.post(f"/runs/{run_id}/review-rows/2", json={"review_state": "escalated", "review_decision": "confirm", "reviewer_note": "Needs specialist review"})
+        self.assertEqual(response.status_code, 200, response.text)
+        blocked = self.client.post(f"/runs/{run_id}/signoff", json={"decision": "accepted"})
+        self.assertEqual(blocked.status_code, 409, blocked.text)
+
+    def test_canonical_failure_cannot_disable_review(self) -> None:
+        run_id = "canonical-failure"
+        _prepare_synthetic_run(self.runs_dir, run_id)
+        upsert_run_rows(runs_dir=self.runs_dir, run_id=run_id, upload_id=None, rows=[{"row_index": 3, "assigned_category": "Not Antisemitic", "confidence_score": .99, "flags": ["TAXONOMY_VIOLATION"], "review_required": False}])
+        row = fetch_run_row(runs_dir=self.runs_dir, run_id=run_id, row_index=3)
+        self.assertTrue(row["review_required"])
+        self.assertEqual(row["confidence_score"], 0)
+        self.assertIn("ANALYSIS_FAILED", row["flags"])
+
+    def test_health_distinguishes_launch_from_inference(self) -> None:
+        response = self.client.get("/api/health")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["launch"]["ready"])
+        self.assertEqual(response.json()["inference"]["status"], "not_checked")
+
+    def test_production_start_uses_default_progress_and_real_start_builder(self) -> None:
+        self._login_admin()
+        main_module.DEFAULT_PRODUCTION_MODE = True
+        upload = intake_workbook(runs_dir=self.runs_dir, ssot_path=PROJECT_ROOT / "ssot/ssot.json", upload_id="start-defaults-upload", filename="start-defaults.xlsx", content=_build_workbook_bytes())
+        self.assertEqual(upload["status"], "accepted")
+        with patch.object(main_module, "_assert_required_local_model_services_ready"), patch.object(main_module.subprocess, "Popen") as start:
+            start.return_value.pid = 987654321
+            response = self.client.post("/classify/start/start-defaults", json={"upload_id": upload["upload_id"], "language": "de", "review_mode": "full"})
+        self.assertEqual(response.status_code, 200, response.text)
+        command = next(call.args[0] for call in start.call_args_list if any(str(argument).endswith("segment_worker.py") for argument in call.args[0]))
+        self.assertEqual(command[command.index("--progress-every") + 1], str(main_module.DEFAULT_PROGRESS_EVERY))
+        self.assertTrue(any(argument.endswith("segment_worker.py") for argument in command))
+
+    def test_terminal_progress_wins_over_stale_starting_snapshot_without_read_mutation(self) -> None:
+        self._login_admin()
+        run_id = "completed-stale-starting"
+        run_path = _prepare_synthetic_run(self.runs_dir, run_id)
+        path = run_path / "run_record.json"
+        record = json.loads(path.read_text())
+        record["state"] = "STARTING"
+        path.write_text(json.dumps(record))
+        before = path.read_bytes()
+        response = self.client.get(f"/runs/{run_id}/detail")
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["state"], "COMPLETED")
+        self.assertEqual(path.read_bytes(), before)
+        from backend.services.run_lifecycle_service import resolve_run_state
+        with patch("backend.services.run_lifecycle_service.run_process_alive", return_value=False):
+            for terminal in ("COMPLETED", "FAILED", "CANCELLED", "BLOCKED"):
+                self.assertEqual(resolve_run_state(run_id=run_id, existing_state="STARTING", progress={"state": terminal}, control={}), terminal)
 
     def test_archive_existing_run_state_preserves_old_attempt(self) -> None:
         run_id = "archive-check"
@@ -862,6 +918,183 @@ class BackendContractRegressionTests(unittest.TestCase):
         self.assertFalse(run_path.exists())
         self.assertFalse(upload_dir.exists())
         self.assertIsNone(run_state_service.read_run_record(runs_dir=self.runs_dir, run_id=run_id))
+
+    def test_delete_run_does_not_purge_managed_source_by_default(self) -> None:
+        """A bare DELETE must not destroy the source workbook; purging is opt-in."""
+        self._login_admin()
+        upload_id = "default-keep-upload"
+        upload_dir = self.runs_dir / "uploads" / upload_id
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        workbook_path = upload_dir / "keep.xlsx"
+        workbook_path.write_bytes(_build_workbook_bytes())
+        upload_record = {
+            "upload_id": upload_id,
+            "filename": "keep.xlsx",
+            "stored_path": str(workbook_path),
+            "bytes": workbook_path.stat().st_size,
+            "status": "accepted",
+            "created_at": 1771000000,
+            "validation": {"accepted": True, "row_count": 1},
+        }
+        from backend.services.ops_db_service import record_upload, register_run
+
+        (upload_dir / "upload.json").write_text(json.dumps(upload_record), encoding="utf-8")
+        record_upload(runs_dir=self.runs_dir, record=upload_record)
+        run_id = "default-keep-run"
+        run_path = self.runs_dir / run_id
+        run_path.mkdir(parents=True, exist_ok=True)
+        create_run_record(
+            runs_dir=self.runs_dir,
+            run_id=run_id,
+            input_path=str(workbook_path),
+            output_path=str(run_path / "output.xlsx"),
+            upload_id=upload_id,
+            language="de",
+            review_mode="partial",
+            start_payload={"upload_id": upload_id, "language": "de", "review_mode": "partial"},
+        )
+        register_run(
+            runs_dir=self.runs_dir,
+            run_id=run_id,
+            upload_id=upload_id,
+            language="de",
+            review_mode="partial",
+            state="FAILED",
+        )
+        (run_path / "progress.json").write_text(
+            json.dumps({"run_id": run_id, "state": "FAILED", "processed_rows": 1, "total_rows": 10, "progress_percentage": 10.0}),
+            encoding="utf-8",
+        )
+        (run_path / "control.json").write_text(
+            json.dumps({"run_id": run_id, "pid": None, "paused": False, "output": str(run_path / "output.xlsx")}),
+            encoding="utf-8",
+        )
+
+        response = self.client.delete(f"/runs/{run_id}")
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertFalse(payload["purged_source"])
+        self.assertFalse(run_path.exists())
+        self.assertTrue(upload_dir.exists(), "source workbook must survive a default delete")
+        self.assertTrue(workbook_path.exists())
+
+    def test_run_events_trail_is_readable(self) -> None:
+        """The append-only event trail had six writers and no reader; it now has an endpoint."""
+        self._login_admin()
+        run_id = "events-run"
+        run_path = self.runs_dir / run_id
+        run_path.mkdir(parents=True, exist_ok=True)
+        create_run_record(
+            runs_dir=self.runs_dir, run_id=run_id, input_path="in.xlsx",
+            output_path=str(run_path / "output.xlsx"), upload_id=None,
+            language="de", review_mode="partial",
+        )
+        from backend.services.ops_db_service import _append_event, _connect
+
+        with _connect(self.runs_dir) as conn:
+            _append_event(conn, "run", run_id, "synthetic_audit_event", {"note": "reader test"})
+            conn.commit()
+
+        response = self.client.get(f"/runs/{run_id}/events")
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertGreaterEqual(payload["count"], 1)
+        self.assertIn("synthetic_audit_event", [e["event_type"] for e in payload["events"]])
+        self.assertTrue(any(e["payload"].get("note") == "reader test" for e in payload["events"]))
+
+    def test_run_events_endpoint_requires_auth(self) -> None:
+        self.assertEqual(self.client.get("/runs/anything/events").status_code, 401)
+
+    def test_dead_feedback_items_table_is_not_created(self) -> None:
+        """feedback_items had no writer and no reader; a fresh database must not carry it."""
+        from backend.services.ops_db_service import _connect
+
+        with _connect(self.runs_dir) as conn:
+            names = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")]
+        self.assertNotIn("feedback_items", names)
+        self.assertIn("events", names)
+
+    def test_empty_legacy_feedback_items_table_is_dropped_on_init(self) -> None:
+        import sqlite3
+
+        from backend.services.ops_db_service import _connect, db_path
+
+        raw = sqlite3.connect(db_path(self.runs_dir))
+        raw.execute(
+            "CREATE TABLE feedback_items (id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT, "
+            "row_index INTEGER NOT NULL, feedback_type TEXT NOT NULL, payload_json TEXT NOT NULL, "
+            "created_at INTEGER NOT NULL)"
+        )
+        raw.commit()
+        raw.close()
+        with _connect(self.runs_dir) as conn:
+            names = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")]
+        self.assertNotIn("feedback_items", names)
+
+    def test_legacy_feedback_items_with_rows_is_preserved(self) -> None:
+        """The migration is guarded: it must never destroy data it does not understand."""
+        import sqlite3
+
+        from backend.services.ops_db_service import _connect, db_path
+
+        raw = sqlite3.connect(db_path(self.runs_dir))
+        raw.execute(
+            "CREATE TABLE feedback_items (id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT, "
+            "row_index INTEGER NOT NULL, feedback_type TEXT NOT NULL, payload_json TEXT NOT NULL, "
+            "created_at INTEGER NOT NULL)"
+        )
+        raw.execute(
+            "INSERT INTO feedback_items (run_id, row_index, feedback_type, payload_json, created_at) "
+            "VALUES ('legacy-run', 1, 'note', '{}', 0)"
+        )
+        raw.commit()
+        raw.close()
+        with _connect(self.runs_dir) as conn:
+            names = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")]
+            count = conn.execute("SELECT COUNT(*) FROM feedback_items").fetchone()[0]
+        self.assertIn("feedback_items", names)
+        self.assertEqual(count, 1)
+
+    def test_processed_row_precedence_is_shared_between_projections(self) -> None:
+        """One rule for processed rows, so the dashboard and the queue cannot disagree.
+
+        Precedence: canonical committed rows -> segment counters -> indexed snapshot -> progress.json,
+        the last being a last-resort tier for legacy/interrupted runs that have no canonical rows.
+        """
+        from backend.services.ops_db_service import resolve_processed_rows
+        from backend.services.run_state_service import _resolved_processed_rows as run_state_rows
+
+        # full ladder
+        self.assertEqual(resolve_processed_rows(
+            canonical_processed_rows=3, segment_processed_rows=5,
+            indexed_processed_rows=7, progress_processed_rows=9), 3)
+        self.assertEqual(resolve_processed_rows(
+            canonical_processed_rows=0, segment_processed_rows=5,
+            indexed_processed_rows=7, progress_processed_rows=9), 5)
+        self.assertEqual(resolve_processed_rows(
+            canonical_processed_rows=0, segment_processed_rows=0,
+            indexed_processed_rows=7, progress_processed_rows=9), 7)
+        self.assertEqual(resolve_processed_rows(
+            canonical_processed_rows=0, segment_processed_rows=0,
+            indexed_processed_rows=0, progress_processed_rows=9), 9)
+
+        # the run-record projection resolves through the same ladder
+        record = {"processed_rows": 7}
+        segment = {"processed_rows": 5}
+        canonical = {"processed_rows": 3}
+        self.assertEqual(run_state_rows(
+            record=record, progress={"processed_rows": 9},
+            canonical_stats=canonical, segment_summary=segment), 3)
+        self.assertEqual(run_state_rows(
+            record=record, progress={"processed_rows": 9},
+            canonical_stats={}, segment_summary=segment), 5)
+        self.assertEqual(run_state_rows(
+            record=record, progress={"processed_rows": 9},
+            canonical_stats={}, segment_summary={}), 7)
+        # legacy run: no canonical rows, no snapshot counter -> the file tier is the only source
+        self.assertEqual(run_state_rows(
+            record={"processed_rows": 0}, progress={"processed_rows": 9},
+            canonical_stats={}, segment_summary={}), 9)
 
     def test_run_classification_resumes_from_checkpoint(self) -> None:
         workbook_path = self.runs_dir / "resume-input.xlsx"
