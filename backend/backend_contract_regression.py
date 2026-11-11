@@ -220,6 +220,7 @@ class BackendContractRegressionTests(unittest.TestCase):
             json={"decision": "accepted_with_conditions", "note": "blocked until review is complete"},
         )
         self.assertEqual(blocked.status_code, 409, blocked.text)
+        self.assertIn("canonical row coverage", blocked.json()["detail"])
 
         reviewed = self.client.post(
             f"/runs/{run_id}/review-rows/2",
@@ -236,6 +237,61 @@ class BackendContractRegressionTests(unittest.TestCase):
             json={"decision": "accepted_with_conditions", "note": "all review rows complete"},
         )
         self.assertEqual(allowed.status_code, 200, allowed.text)
+
+    def test_escalated_review_does_not_allow_signoff(self) -> None:
+        self._login_admin()
+        run_id = "escalated-signoff"
+        _prepare_synthetic_run(self.runs_dir, run_id)
+        response = self.client.post(f"/runs/{run_id}/review-rows/2", json={"review_state": "escalated", "review_decision": "confirm", "reviewer_note": "Needs specialist review"})
+        self.assertEqual(response.status_code, 200, response.text)
+        blocked = self.client.post(f"/runs/{run_id}/signoff", json={"decision": "accepted"})
+        self.assertEqual(blocked.status_code, 409, blocked.text)
+
+    def test_canonical_failure_cannot_disable_review(self) -> None:
+        run_id = "canonical-failure"
+        _prepare_synthetic_run(self.runs_dir, run_id)
+        upsert_run_rows(runs_dir=self.runs_dir, run_id=run_id, upload_id=None, rows=[{"row_index": 3, "assigned_category": "Not Antisemitic", "confidence_score": .99, "flags": ["TAXONOMY_VIOLATION"], "review_required": False}])
+        row = fetch_run_row(runs_dir=self.runs_dir, run_id=run_id, row_index=3)
+        self.assertTrue(row["review_required"])
+        self.assertEqual(row["confidence_score"], 0)
+        self.assertIn("ANALYSIS_FAILED", row["flags"])
+
+    def test_health_distinguishes_launch_from_inference(self) -> None:
+        response = self.client.get("/api/health")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["launch"]["ready"])
+        self.assertEqual(response.json()["inference"]["status"], "not_checked")
+
+    def test_production_start_uses_default_progress_and_real_start_builder(self) -> None:
+        self._login_admin()
+        main_module.DEFAULT_PRODUCTION_MODE = True
+        upload = intake_workbook(runs_dir=self.runs_dir, ssot_path=PROJECT_ROOT / "ssot/ssot.json", upload_id="start-defaults-upload", filename="start-defaults.xlsx", content=_build_workbook_bytes())
+        self.assertEqual(upload["status"], "accepted")
+        with patch.object(main_module, "_assert_required_local_model_services_ready"), patch.object(main_module.subprocess, "Popen") as start:
+            start.return_value.pid = 987654321
+            response = self.client.post("/classify/start/start-defaults", json={"upload_id": upload["upload_id"], "language": "de", "review_mode": "full"})
+        self.assertEqual(response.status_code, 200, response.text)
+        command = next(call.args[0] for call in start.call_args_list if any(str(argument).endswith("segment_worker.py") for argument in call.args[0]))
+        self.assertEqual(command[command.index("--progress-every") + 1], str(main_module.DEFAULT_PROGRESS_EVERY))
+        self.assertTrue(any(argument.endswith("segment_worker.py") for argument in command))
+
+    def test_terminal_progress_wins_over_stale_starting_snapshot_without_read_mutation(self) -> None:
+        self._login_admin()
+        run_id = "completed-stale-starting"
+        run_path = _prepare_synthetic_run(self.runs_dir, run_id)
+        path = run_path / "run_record.json"
+        record = json.loads(path.read_text())
+        record["state"] = "STARTING"
+        path.write_text(json.dumps(record))
+        before = path.read_bytes()
+        response = self.client.get(f"/runs/{run_id}/detail")
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["state"], "COMPLETED")
+        self.assertEqual(path.read_bytes(), before)
+        from backend.services.run_lifecycle_service import resolve_run_state
+        with patch("backend.services.run_lifecycle_service.run_process_alive", return_value=False):
+            for terminal in ("COMPLETED", "FAILED", "CANCELLED", "BLOCKED"):
+                self.assertEqual(resolve_run_state(run_id=run_id, existing_state="STARTING", progress={"state": terminal}, control={}), terminal)
 
     def test_archive_existing_run_state_preserves_old_attempt(self) -> None:
         run_id = "archive-check"

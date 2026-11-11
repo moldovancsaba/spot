@@ -54,7 +54,8 @@ class TargetedAdjudicationRegressionTests(unittest.TestCase):
             adjudicated = _adjudicate_targeted_row(row, initial, SSOT, "partial")
         self.assertEqual(adjudicated.category, "Anti-Israel")
         self.assertEqual(adjudicated.judge_verdict, "PASS")
-        self.assertGreaterEqual(adjudicated.confidence, 0.81)
+        self.assertEqual(adjudicated.confidence, 0.58)
+        self.assertIn("REVIEW_REQUIRED", adjudicated.flags)
         self.assertIn("SECOND_PASS_CONFIRMED", adjudicated.flags)
 
     def test_second_pass_can_override_category_when_judge_favors_alternate(self) -> None:
