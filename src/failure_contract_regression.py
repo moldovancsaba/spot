@@ -46,23 +46,65 @@ class FailureContractRegressionTests(unittest.TestCase):
                                    confidence=.99, explanation='synthetic', flags=[], audit_trace=retry_trace)
         self.assertTrue(any_positive_analysis(res))
 
-    def test_mlx_adapter_path_is_forwarded_when_configured(self):
-        """A fine-tuned adapter must be usable through the normal classifier route."""
+    def test_mlx_adapter_path_is_forwarded_in_cli_mode(self):
+        """The CLI fallback must still honour a configured adapter."""
         import os
         from unittest.mock import patch as _patch
 
         completed = type("Done", (), {"stdout": '{"category": "Not Antisemitic", "confidence": 0.9}'})()
         with _patch("src.classifier.subprocess.run", return_value=completed) as run, \
-                _patch.dict(os.environ, {"SPOT_MLX_ADAPTER_PATH": "/tmp/adapter-dir"}):
+                _patch.dict(os.environ, {"SPOT_MLX_ADAPTER_PATH": "/tmp/adapter-dir", "SPOT_MLX_CLI": "1"}):
             _mlx_generate_json("mlx-community/synthetic", "prompt text")
         command = run.call_args.args[0]
         self.assertIn("--adapter-path", command)
         self.assertEqual(command[command.index("--adapter-path") + 1], "/tmp/adapter-dir")
 
         with _patch("src.classifier.subprocess.run", return_value=completed) as run, \
-                _patch.dict(os.environ, {"SPOT_MLX_ADAPTER_PATH": ""}):
+                _patch.dict(os.environ, {"SPOT_MLX_ADAPTER_PATH": "", "SPOT_MLX_CLI": "1"}):
             _mlx_generate_json("mlx-community/synthetic", "prompt text")
         self.assertNotIn("--adapter-path", run.call_args.args[0])
+
+    def test_mlx_in_process_loads_the_model_once_per_process(self):
+        """Per-row process spawn reloaded the model every row; the in-process path must load once."""
+        import os
+        import sys
+        import types
+        from unittest.mock import patch as _patch
+
+        from src.classifier import clear_mlx_cache
+
+        loads = []
+        generations = []
+
+        class FakeTokenizer:
+            chat_template = "{{ messages }}"
+
+            def apply_chat_template(self, messages, add_generation_prompt=True, tokenize=False):
+                return "PROMPT:" + messages[0]["content"]
+
+        def fake_load(model, adapter_path=None):
+            loads.append((model, adapter_path))
+            return ("MODEL", FakeTokenizer())
+
+        def fake_generate(model, tokenizer, prompt, max_tokens=0, sampler=None, verbose=False):
+            generations.append((model, prompt))
+            return '{"category": "Anti-Israel", "confidence": 0.9}'
+
+        fake_sample_utils = types.SimpleNamespace(make_sampler=lambda temp=0.0: "SAMPLER")
+        fake_module = types.SimpleNamespace(load=fake_load, generate=fake_generate, sample_utils=fake_sample_utils)
+        with _patch.dict(sys.modules, {"mlx_lm": fake_module, "mlx_lm.sample_utils": fake_sample_utils}), \
+                _patch.dict(os.environ, {"SPOT_MLX_ADAPTER_PATH": "/tmp/adapter-x", "SPOT_MLX_CLI": "0"}):
+            clear_mlx_cache()
+            first = _mlx_generate_json("mlx-community/synthetic", "first prompt")
+            second = _mlx_generate_json("mlx-community/synthetic", "second prompt")
+            clear_mlx_cache()
+
+        self.assertEqual(first["category"], "Anti-Israel")
+        self.assertEqual(second["category"], "Anti-Israel")
+        self.assertEqual(len(loads), 1, "the model must load once per process, not once per row")
+        self.assertEqual(loads[0][1], "/tmp/adapter-x")
+        self.assertEqual(len(generations), 2)
+        self.assertTrue(generations[0][1].startswith("PROMPT:first prompt"))
 
     def test_training_record_can_mirror_the_live_pipeline_prompt(self):
         """Training data must be able to match what the classifier actually sends, or an adapter is undeployable."""
@@ -114,15 +156,19 @@ class FailureContractRegressionTests(unittest.TestCase):
         self.assertEqual(_extract_last_json_object('[{"category":"Not Antisemitic"}]'), {})
 
     def test_mlx_uses_response_only_stdout_and_keeps_valid_json(self):
+        import os
         import subprocess
-        with patch('src.classifier.subprocess.run', return_value=subprocess.CompletedProcess([], 0, '{"category":"Not Antisemitic"}', 'diagnostic')) as run:
+        with patch.dict(os.environ, {'SPOT_MLX_CLI': '1'}), \
+                patch('src.classifier.subprocess.run', return_value=subprocess.CompletedProcess([], 0, '{"category":"Not Antisemitic"}', 'diagnostic')) as run:
             self.assertEqual(_mlx_generate_json('mock', 'synthetic'), {'category': 'Not Antisemitic'})
         cmd = run.call_args.args[0]
         self.assertEqual(cmd[cmd.index('--verbose') + 1], 'false')
 
     def test_mlx_timeout_does_not_expose_prompt(self):
+        import os
         import subprocess
-        with patch('src.classifier.subprocess.run', side_effect=subprocess.TimeoutExpired(['command', 'private source text'], 1)):
+        with patch.dict(os.environ, {'SPOT_MLX_CLI': '1'}), \
+                patch('src.classifier.subprocess.run', side_effect=subprocess.TimeoutExpired(['command', 'private source text'], 1)):
             with self.assertRaises(TimeoutError) as caught:
                 _mlx_generate_json('mock', 'private source text')
         self.assertNotIn('private source text', str(caught.exception))

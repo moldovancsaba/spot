@@ -114,3 +114,45 @@ through the normal pipeline. Two blockers remain before adopting it for a full r
 The learning loop works end to end: labels -> weighted dataset -> LoRA -> held-out measurement -> deployable
 adapter path. What it lacks is **labels** — 183 training rows cannot define this boundary. Each review the
 queue collects feeds the next iteration, which is the mechanism the service was built for.
+
+
+---
+
+# Deployment pass — 2026-11-12
+
+## Fixed: per-row process spawn
+
+The MLX route used to shell out to `mlx_lm generate` for **every row**, reloading the model each time. It now
+loads the model once per process and generates in-process (`_mlx_loaded` cache, `clear_mlx_cache()` for tests),
+with the CLI retained behind `SPOT_MLX_CLI=1`.
+
+Measured through the real pipeline, adapter loaded once: **3.3 s, 2.2 s, 2.8 s** for three rows, versus
+14.5 s/row before. The 62,024-row projection drops from ~10 days of loading overhead to work that is actually
+inference.
+
+Also fixed in this pass: this mlx_lm version samples via `sampler=make_sampler(temp=0.0)` (a `temp=` kwarg
+raises `TypeError`), and a tuned adapter's answer is parsed from the FIRST category-bearing JSON object so
+trailing chatter cannot change a verdict.
+
+## Deployment status
+
+Deployed to the supervised runtime and verified in the backend environment:
+
+- `SPOT_DISABLE_AUTO_CLEAR=1` — no certificate clearance; every row reaches review.
+- `SPOT_MLX_ADAPTER_PATH=/Users/Shared/Models/spot-adapters/live-20261112` — adapter staged and wired.
+- Native launcher ships both by default; bundle rebuilt and installed from `main`.
+
+**The adapter is not yet the primary classifier.** Its answer is `{"category": ...}` only, while the pipeline's
+metadata contract requires confidence, flags and the soft-signal fields; every row was flagged
+`INVALID_MODEL_METADATA`. The route therefore stays `gemma2:9b` (contract-compliant) with `qwen2.5:7b` as
+verifier, and the adapter remains staged behind `SPOT_MLX_ADAPTER_PATH`.
+
+## Remaining work, precisely
+
+1. **Retrain with the full schema** as the assistant target (category, confidence, explanation, flags,
+   soft-signal fields). The dataset builder needs a schema-conforming assistant record; the labels already
+   exist. This is the only blocker to adopting the better model.
+2. **Review volume**: adapter flags 60% of the balanced split (models: 84%). Projected ~35-45% on the real
+   corpus. Needs either a calibrated confidence from (1) or an intersection policy measured on a larger split.
+3. **Decision gate**: widen the held-out set beyond 45 rows — evaluate on valid+test (102) and record the
+   decision, rather than adopting on a small sample.

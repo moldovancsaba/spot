@@ -314,46 +314,101 @@ def _extract_verdict_from_text(text: str) -> str:
     return "REVIEW"
 
 
+# In-process MLX inference. Spawning `mlx_lm generate` per row reloads the model on every call, which
+# dominates runtime and makes a 62k-row run take days in loading alone. One model per process, cached.
+_MLX_MODEL_CACHE: dict[tuple[str, str], object] = {}
+_MLX_CACHE_LOCK = None
+
+
+def _mlx_cache_lock():
+    global _MLX_CACHE_LOCK
+    if _MLX_CACHE_LOCK is None:
+        import threading
+
+        _MLX_CACHE_LOCK = threading.Lock()
+    return _MLX_CACHE_LOCK
+
+
+def _mlx_loaded(model_name: str, adapter_path: str):
+    key = (model_name, adapter_path or "")
+    with _mlx_cache_lock():
+        cached = _MLX_MODEL_CACHE.get(key)
+        if cached is None:
+            from mlx_lm import load
+
+            cached = load(model_name, adapter_path=adapter_path) if adapter_path else load(model_name)
+            _MLX_MODEL_CACHE[key] = cached
+        return cached
+
+
+def clear_mlx_cache() -> None:
+    with _mlx_cache_lock():
+        _MLX_MODEL_CACHE.clear()
+
+
 def _mlx_generate_json(model_name: str, prompt: str, timeout: int = OLLAMA_TIMEOUT_SEC) -> dict:
-    cmd = [
-        sys.executable,
-        "-m",
-        "mlx_lm",
-        "generate",
-        "--model",
-        model_name,
-        "--prompt",
-        prompt,
-        "--verbose",
-        "false",
-        "--prefill-response",
-        "{",
-        "--max-tokens",
-        "512",
-        "--temp",
-        "0",
-        "--top-p",
-        "1.0",
-        "--seed",
-        str(OLLAMA_SEED),
-    ]
     adapter_path = os.getenv("SPOT_MLX_ADAPTER_PATH", "").strip()
-    if adapter_path:
-        cmd += ["--adapter-path", adapter_path]
+    prefer_cli = os.getenv("SPOT_MLX_CLI", "0").strip().lower() in {"1", "true", "yes", "on"}
+
+    if prefer_cli:
+        cmd = [
+            sys.executable, "-m", "mlx_lm", "generate",
+            "--model", model_name, "--prompt", prompt,
+            "--verbose", "false", "--prefill-response", "{",
+            "--max-tokens", "512", "--temp", "0", "--top-p", "1.0", "--seed", str(OLLAMA_SEED),
+        ]
+        if adapter_path:
+            cmd += ["--adapter-path", adapter_path]
+        try:
+            raw = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=True).stdout
+        except FileNotFoundError:
+            raise RuntimeError("MLX backend selected but mlx_lm is not installed.") from None
+        except subprocess.TimeoutExpired:
+            raise TimeoutError("MLX generation deadline exceeded.") from None
+        except subprocess.CalledProcessError:
+            raise RuntimeError("MLX generation failed; inspect the local runtime installation.") from None
+        txt = strip_reasoning_artifacts(raw)
+        txt = txt.replace("\r", "\n").strip()
+        if not txt.startswith("{"):
+            txt = "{" + txt
+        obj = _extract_last_json_object(txt)
+        return obj if obj else {"raw_text": txt}
+
     try:
-        raw = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=True).stdout
-    except FileNotFoundError:
+        from mlx_lm import generate
+    except ImportError:
         raise RuntimeError("MLX backend selected but mlx_lm is not installed.") from None
-    except subprocess.TimeoutExpired:
-        raise TimeoutError("MLX generation deadline exceeded.") from None
-    except subprocess.CalledProcessError:
-        raise RuntimeError("MLX generation failed; inspect the local runtime installation.") from None
-    txt = strip_reasoning_artifacts(raw)
+
+    try:
+        from mlx_lm.sample_utils import make_sampler
+
+        model, tokenizer = _mlx_loaded(model_name, adapter_path)
+        # The training set was built from the same prompt string, so the chat template wraps it as a
+        # single user turn exactly as it did during fine-tuning.
+        formatted = (
+            tokenizer.apply_chat_template([{"role": "user", "content": prompt}],
+                                          add_generation_prompt=True, tokenize=False)
+            if getattr(tokenizer, "chat_template", None) else prompt
+        )
+        raw = generate(model, tokenizer, prompt=formatted, max_tokens=96,
+                       sampler=make_sampler(temp=0.0), verbose=False)
+    except TimeoutError:
+        raise
+    except Exception as exc:  # noqa: BLE001 - surface a stable contract, not an MLX-specific trace
+        raise RuntimeError(f"MLX generation failed: {type(exc).__name__}") from None
+
+    txt = strip_reasoning_artifacts(str(raw))
     txt = txt.replace("\r", "\n").strip()
-    # The CLI prints generated tokens only, excluding the assistant prefill.
-    if not txt.startswith("{"):
-        txt = "{" + txt
-    obj = _extract_last_json_object(txt)
+    # A tuned adapter answers with one JSON object; take the FIRST category-bearing object so any
+    # trailing chatter cannot change the verdict.
+    for match in re.finditer(r"\{.*?\}", txt, re.S):
+        try:
+            candidate = json.loads(match.group(0))
+        except json.JSONDecodeError:
+            continue
+        if isinstance(candidate, dict) and candidate.get("category"):
+            return candidate
+    obj = _extract_last_json_object(txt if txt.lstrip().startswith("{") else "{" + txt)
     return obj if obj else {"raw_text": txt}
 
 

@@ -82,6 +82,9 @@ PRODUCTION_MODE="${SPOT_PRODUCTION_MODE:-1}"
 # Safest review posture by default: no row is cleared by model agreement alone.
 # {spot} exists to put suspected antisemitic rows in front of a human.
 DISABLE_AUTO_CLEAR="${SPOT_DISABLE_AUTO_CLEAR:-1}"
+# Tuned adapter produced by the learning pipeline; empty disables it.
+DEFAULT_ADAPTER="/Users/Shared/Models/spot-adapters/live-20261112"
+MLX_ADAPTER_PATH="${SPOT_MLX_ADAPTER_PATH:-$DEFAULT_ADAPTER}"
 
 mkdir -p "$RUNS_DIR" "$LOGS_DIR" "$MODELS_HOME" "$HF_HOME" "$HF_HUB_CACHE" "$OLLAMA_MODELS" "$MLX_MODELS_DIR" "$MODELS_HOME/manifest"
 cd "$CORE_ROOT"
@@ -107,6 +110,9 @@ export SPOT_AUTH_ENABLED="$AUTH_ENABLED"
 export SPOT_PRODUCTION_MODE="$PRODUCTION_MODE"
 export SPOT_LOCKED_SSOT_PATH="$LOCKED_SSOT_PATH"
 export SPOT_DISABLE_AUTO_CLEAR="$DISABLE_AUTO_CLEAR"
+if [[ -d "$MLX_ADAPTER_PATH" ]]; then
+  export SPOT_MLX_ADAPTER_PATH="$MLX_ADAPTER_PATH"
+fi
 if [[ -n "$ACCESS_CODE" ]]; then
   export SPOT_LOCAL_ACCESS_CODE="$ACCESS_CODE"
 fi
