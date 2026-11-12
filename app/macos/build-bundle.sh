@@ -83,7 +83,7 @@ PRODUCTION_MODE="${SPOT_PRODUCTION_MODE:-1}"
 # {spot} exists to put suspected antisemitic rows in front of a human.
 DISABLE_AUTO_CLEAR="${SPOT_DISABLE_AUTO_CLEAR:-1}"
 # Tuned adapter produced by the learning pipeline; empty disables it.
-DEFAULT_ADAPTER="/Users/Shared/Models/spot-adapters/live-20261112"
+DEFAULT_ADAPTER="/Users/Shared/Models/spot-adapters/schema-20261112"
 MLX_ADAPTER_PATH="${SPOT_MLX_ADAPTER_PATH:-$DEFAULT_ADAPTER}"
 
 mkdir -p "$RUNS_DIR" "$LOGS_DIR" "$MODELS_HOME" "$HF_HOME" "$HF_HUB_CACHE" "$OLLAMA_MODELS" "$MLX_MODELS_DIR" "$MODELS_HOME/manifest"

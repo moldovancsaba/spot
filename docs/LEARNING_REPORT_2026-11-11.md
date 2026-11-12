@@ -156,3 +156,48 @@ verifier, and the adapter remains staged behind `SPOT_MLX_ADAPTER_PATH`.
    corpus. Needs either a calibrated confidence from (1) or an intersection policy measured on a larger split.
 3. **Decision gate**: widen the held-out set beyond 45 rows — evaluate on valid+test (102) and record the
    decision, rather than adopting on a small sample.
+
+
+---
+
+# Adoption — 2026-11-12
+
+## Decision
+
+**The fine-tuned adapter is now the primary classifier.** Route: `mlx://mlx-community/Apertus-8B-Instruct-2509-4bit`
+with the `schema-20261112` adapter as classifier, `ollama://qwen2.5:7b` as independent verifier, `ollama://llama3.1:8b`
+as judge. Recorded here, not implied.
+
+## Basis: the 102-row decision gate (valid + test, never trained on)
+
+| Metric | Base Apertus-8B | Adapter | Delta |
+|---|---:|---:|---|
+| Six-way agreement | 8.51% | **50.00%** | **+41.49 pp** |
+| Six-way macro-F1 | 0.052 | **0.366** | **+0.314** |
+| Binary precision | 0.63 | 0.61 | -0.02 |
+| Binary recall | 1.00 (47 rows parsed) | 0.887 (all 102) | not comparable |
+| Unparsed / unstructured outputs | **55 of 102** | **0** | — |
+
+The base model's binary figures are computed only on the 47 rows it managed to parse, so its higher recall is
+an artefact of the denominator. The adapter is better on agreement, macro-F1, and output reliability, and it
+clears the metadata contract (0 `INVALID_MODEL_METADATA` in the live run).
+
+## Why a fixed confidence is acceptable here
+
+The adapter emits `confidence: 0.9` as a documented prior, not a calibrated probability. That is honest but
+weak: it cannot be used to threshold review volume. Calibrated confidence is the next learning target.
+
+## Live verification after adoption
+
+- `analysis_trace` on real rows: primary `mlx:...Apertus-8B...`, verifier `ollama:qwen2.5:7b`, judge `ollama:llama3.1:8b`.
+- 33 rows: 29 Not Antisemitic, 3 Classical Antisemitism, 1 Anti-Israel — plausible mix, no metadata failures.
+- 33/33 review-required, 0 auto-cleared (safest posture intact).
+- Throughput 9.4 s/row for the three-lane pipeline, versus 12 s/row on the previous route.
+
+## Still open
+
+1. **Review volume.** The adapter flags ~60% on a balanced split; on the live corpus the positive rate is far
+   lower, but no policy yet reaches high recall at a comfortable volume. Needs calibrated confidence.
+2. **Recall-first objective vs precision.** The adapter's gate recall (0.887) reflects the strict reference;
+   refining the boundary needs more labelled rows, which the review queue now supplies.
+3. Structural Antisemitism remains unsupported (F1 0.000, 1 support row).

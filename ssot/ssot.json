@@ -14,7 +14,7 @@
   },
   "policy": {
     "prompt_version": "prompt-v0.3-independent-checks",
-    "model_version": "ollama:gemma2:9b",
+    "model_version": "mlx:mlx-community/Apertus-8B-Instruct-2509-4bit",
     "expected_columns": [
       "Item number",
       "Post text",
@@ -40,8 +40,8 @@
   },
   "runtime": {
     "classifier": {
-      "backend": "ollama",
-      "model": "gemma2:9b",
+      "backend": "mlx",
+      "model": "mlx-community/Apertus-8B-Instruct-2509-4bit",
       "fallback_backend": "ollama",
       "fallback_model": "qwen2.5:7b"
     },

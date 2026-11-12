@@ -101,7 +101,19 @@ def chat_record(text: str, label: str, pipeline_prompt: bool = False) -> dict:
     else:
         messages.append({"role": "system", "content": SYSTEM_PROMPT})
         messages.append({"role": "user", "content": f"SOURCE_POST_JSON: {json.dumps(text, ensure_ascii=False)}"})
-    messages.append({"role": "assistant", "content": json.dumps({"category": label}, ensure_ascii=False)})
+    # Emit the full pipeline metadata contract, not just the category. A category-only answer is rejected
+    # with INVALID_MODEL_METADATA, so an adapter must produce confidence, explanation and the three arrays.
+    # The confidence is a fixed prior here, not a calibrated probability; calibrating it is separate work.
+    assistant = {
+        "category": label,
+        "confidence": 0.9,
+        "explanation": "Assigned by the projected taxonomy decision procedure.",
+        "flags": [],
+        "soft_signal_score": 0.0,
+        "soft_signal_flags": [],
+        "soft_signal_evidence": [],
+    }
+    messages.append({"role": "assistant", "content": json.dumps(assistant, ensure_ascii=False)})
     return {"messages": messages}
 
 
