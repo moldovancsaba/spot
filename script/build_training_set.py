@@ -100,6 +100,10 @@ def main() -> int:
     ap.add_argument("--sample-seed", type=int, default=20261110)
     ap.add_argument("--seed", type=int, default=20261111, help="split seed")
     ap.add_argument("--valid-fraction", type=float, default=0.2)
+    ap.add_argument("--positive-repeat", type=int, default=1,
+                    help="Repeat antisemitic training rows N times to bias the model toward recall")
+    ap.add_argument("--min-per-class", type=int, default=0,
+                    help="Oversample any training class below this count up to it (capped)")
     args = ap.parse_args()
 
     out = Path(args.out)
@@ -135,6 +139,24 @@ def main() -> int:
     n_test = max(1, int(len(rest) * args.valid_fraction))
     test, train = rest[:n_test], rest[n_test:]
 
+    # Recall-aware weighting. The first adapter learned to be conservative because plain supervised
+    # training optimises agreement, and most rows are Not Antisemitic. Repeating positive rows and
+    # lifting thin classes trades some precision for the recall this product needs.
+    if args.positive_repeat > 1:
+        positives = [row for row in train if row["label"] != "Not Antisemitic"]
+        train = train + positives * (args.positive_repeat - 1)
+    if args.min_per_class > 0:
+        import collections
+
+        counts = collections.Counter(row["label"] for row in train)
+        cap = max(args.min_per_class, 1) * 4
+        for label, count in list(counts.items()):
+            if count and count < min(args.min_per_class, cap):
+                pool = [row for row in train if row["label"] == label]
+                need = min(args.min_per_class, cap) - count
+                train = train + [pool[i % len(pool)] for i in range(need)]
+    rng.shuffle(train)
+
     def write(name: str, rows: list[dict]) -> None:
         with (out / name).open("w", encoding="utf-8") as fh:
             for row in rows:
@@ -152,6 +174,7 @@ def main() -> int:
         "split_seed": args.seed,
         "rows_total": len(joined),
         "splits": {"train": len(train), "valid": len(valid), "test": len(test)},
+        "weighting": {"positive_repeat": args.positive_repeat, "min_per_class": args.min_per_class},
         "class_support": dict(collections.Counter(r["label"] for r in joined)),
         "note": "Rows join the accepted reference on sha256 of the normalised post text. No post text is committed.",
     }
