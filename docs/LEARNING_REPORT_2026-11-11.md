@@ -65,3 +65,52 @@ achievable trade (27% volume) and what it costs (21 misses of 36 positives).
 The 62,024-row run is **paused** rather than consuming ~9 days of compute to produce a review queue that is
 not maintainable. It resumes from committed state with one call once the model is good enough that its flags
 are worth a human's time.
+
+
+---
+
+# Iteration 2 — 2026-11-12
+
+## Recall-aware weighting
+
+Iteration 1 optimised agreement and became conservative (recall 0.875 -> 0.417). The builder now repeats
+antisemitic rows and lifts thin classes (`--positive-repeat 3 --min-per-class 40`), giving a training set
+that is 78.8% positive while keeping the identical held-out split.
+
+## Results on the same 45 held-out rows
+
+| Model | Six-way agreement | Macro-F1 | Binary P | Binary R | Binary F1 |
+|---|---:|---:|---:|---:|---:|
+| Base `Apertus-8B` | 27.27% | 0.150 | 0.700 | 0.875 | 0.778 |
+| Adapter 1 — chat prompt, agreement-optimised | 60.00% | 0.294 | 0.833 | 0.417 | 0.556 |
+| Adapter 2 — chat prompt, recall-weighted | **64.44%** | **0.445** | 0.750 | **0.875** | **0.808** |
+| Adapter 3 — **live pipeline prompt**, recall-weighted | **64.44%** | 0.401 | 0.741 | 0.833 | 0.784 |
+
+Adapter 3 is the deployable one: it trains on exactly the string `src.classifier` sends, so there is no
+prompt-shift at serving time. Its checkpoint-200 was chosen because validation loss rose afterwards
+(0.382 -> 0.618), i.e. it overfits past that point.
+
+## What changed in the model
+
+- `Not Antisemitic` F1 0.000 -> 0.718; `Conspiracy Theories` 0.000 -> 0.333; `Anti-Israel` 0.750 -> 0.686;
+  `Anti-Judaism` 0.000 -> 0.667.
+- JSON reliability: 0 unparsed of 45, versus 89.7% malformed for the untuned Apertus route earlier.
+- Positive-prediction volume on this balanced split: 60% (27 of 45), versus 84% for the model ensemble and
+  100% under the no-auto-clear posture. On the real corpus (~17% positive) that projects to roughly 35-45%
+  review volume — better, still not yet a maintainable queue.
+
+## Deployment status
+
+`SPOT_MLX_ADAPTER_PATH` is wired into the classifier route and covered by tests, so the adapter can serve
+through the normal pipeline. Two blockers remain before adopting it for a full run:
+
+1. **Per-row process spawn.** The MLX route shells out to `mlx_lm generate` per row and reloads the model
+   each time; 62,024 rows would take days just in loading. Adoption wants a persistent inference worker.
+2. **Decision gate.** The gain is measured on 45 rows. It is a real improvement, but adopting it as the
+   primary classifier should be a recorded decision with a larger held-out set.
+
+## Honest state
+
+The learning loop works end to end: labels -> weighted dataset -> LoRA -> held-out measurement -> deployable
+adapter path. What it lacks is **labels** — 183 training rows cannot define this boundary. Each review the
+queue collects feeds the next iteration, which is the mechanism the service was built for.
