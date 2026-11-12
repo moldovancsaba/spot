@@ -81,14 +81,28 @@ def read_workbook_rows(path: Path) -> dict[str, dict]:
     return rows
 
 
-def chat_record(text: str, label: str) -> dict:
-    return {
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": f"SOURCE_POST_JSON: {json.dumps(text, ensure_ascii=False)}"},
-            {"role": "assistant", "content": json.dumps({"category": label}, ensure_ascii=False)},
-        ]
-    }
+def chat_record(text: str, label: str, pipeline_prompt: bool = False) -> dict:
+    messages = []
+    if pipeline_prompt:
+        # Mirror exactly what src.classifier sends to the MLX backend: a single prompt string, no system
+        # message. mlx_lm wraps it as a user turn at inference, so training and serving agree.
+        import sys
+
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+        from pathlib import Path as _Path
+
+        from src.classifier import _build_prompt
+        from src.ssot_loader import load_ssot
+
+        ssot = load_ssot(_Path(__file__).resolve().parents[1] / "ssot" / "ssot.json")
+        messages.append({"role": "user", "content": _build_prompt(
+            text, list(ssot.taxonomy.categories), ssot.taxonomy.fallback_category,
+            list(ssot.policy.soft_signal_flags))})
+    else:
+        messages.append({"role": "system", "content": SYSTEM_PROMPT})
+        messages.append({"role": "user", "content": f"SOURCE_POST_JSON: {json.dumps(text, ensure_ascii=False)}"})
+    messages.append({"role": "assistant", "content": json.dumps({"category": label}, ensure_ascii=False)})
+    return {"messages": messages}
 
 
 def main() -> int:
@@ -100,6 +114,9 @@ def main() -> int:
     ap.add_argument("--sample-seed", type=int, default=20261110)
     ap.add_argument("--seed", type=int, default=20261111, help="split seed")
     ap.add_argument("--valid-fraction", type=float, default=0.2)
+    ap.add_argument("--pipeline-prompt", action="store_true",
+                    help="Train on the live pipeline prompt instead of the standalone rubric, so the "
+                         "adapter is deployable without a prompt change")
     ap.add_argument("--positive-repeat", type=int, default=1,
                     help="Repeat antisemitic training rows N times to bias the model toward recall")
     ap.add_argument("--min-per-class", type=int, default=0,
@@ -160,7 +177,7 @@ def main() -> int:
     def write(name: str, rows: list[dict]) -> None:
         with (out / name).open("w", encoding="utf-8") as fh:
             for row in rows:
-                fh.write(json.dumps(chat_record(row["text"], row["label"]), ensure_ascii=False) + "\n")
+                fh.write(json.dumps(chat_record(row["text"], row["label"], args.pipeline_prompt), ensure_ascii=False) + "\n")
 
     write("train.jsonl", train)
     write("valid.jsonl", valid)
@@ -175,6 +192,7 @@ def main() -> int:
         "rows_total": len(joined),
         "splits": {"train": len(train), "valid": len(valid), "test": len(test)},
         "weighting": {"positive_repeat": args.positive_repeat, "min_per_class": args.min_per_class},
+        "pipeline_prompt": args.pipeline_prompt,
         "class_support": dict(collections.Counter(r["label"] for r in joined)),
         "note": "Rows join the accepted reference on sha256 of the normalised post text. No post text is committed.",
     }

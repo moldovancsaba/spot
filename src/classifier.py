@@ -337,6 +337,9 @@ def _mlx_generate_json(model_name: str, prompt: str, timeout: int = OLLAMA_TIMEO
         "--seed",
         str(OLLAMA_SEED),
     ]
+    adapter_path = os.getenv("SPOT_MLX_ADAPTER_PATH", "").strip()
+    if adapter_path:
+        cmd += ["--adapter-path", adapter_path]
     try:
         raw = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=True).stdout
     except FileNotFoundError:

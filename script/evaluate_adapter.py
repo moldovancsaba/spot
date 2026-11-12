@@ -97,6 +97,7 @@ def main() -> int:
     ap.add_argument("--model", required=True)
     ap.add_argument("--split", required=True)
     ap.add_argument("--adapter")
+    ap.add_argument("--skip-base", action="store_true", help="Evaluate only the adapter (base numbers already known)")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--max-tokens", type=int, default=48)
     ap.add_argument("--out")
@@ -106,20 +107,26 @@ def main() -> int:
     rows = sum(1 for line in split.read_text().splitlines() if line.strip())
     limit = args.limit or rows
 
-    print(f"base model: {args.model}", file=sys.stderr)
-    baseline = run_split(args.model, None, split, limit, args.max_tokens)
-    result = {"split": str(split), "rows": limit, "base": baseline}
+    result = {"split": str(split), "rows": limit}
+    baseline = None
+    if args.skip_base:
+        result["base"] = "skipped"
+    else:
+        print(f"base model: {args.model}", file=sys.stderr)
+        baseline = run_split(args.model, None, split, limit, args.max_tokens)
+        result["base"] = baseline
 
     if args.adapter:
         print(f"adapter: {args.adapter}", file=sys.stderr)
         tuned = run_split(args.model, args.adapter, split, limit, args.max_tokens)
         result["adapter"] = tuned
-        result["delta"] = {
-            "six_way_agreement_pct": round(tuned["six_way_agreement_pct"] - baseline["six_way_agreement_pct"], 2),
-            "six_way_macro_f1": round(tuned["six_way_macro_f1"] - baseline["six_way_macro_f1"], 4),
-            "binary_f1": round(tuned["binary"]["f1"] - baseline["binary"]["f1"], 3),
-            "binary_recall": round(tuned["binary"]["recall"] - baseline["binary"]["recall"], 3),
-        }
+        if baseline:
+            result["delta"] = {
+                "six_way_agreement_pct": round(tuned["six_way_agreement_pct"] - baseline["six_way_agreement_pct"], 2),
+                "six_way_macro_f1": round(tuned["six_way_macro_f1"] - baseline["six_way_macro_f1"], 4),
+                "binary_f1": round(tuned["binary"]["f1"] - baseline["binary"]["f1"], 3),
+                "binary_recall": round(tuned["binary"]["recall"] - baseline["binary"]["recall"], 3),
+            }
 
     print(json.dumps(result, indent=2))
     if args.out:

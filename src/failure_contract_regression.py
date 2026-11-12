@@ -46,6 +46,40 @@ class FailureContractRegressionTests(unittest.TestCase):
                                    confidence=.99, explanation='synthetic', flags=[], audit_trace=retry_trace)
         self.assertTrue(any_positive_analysis(res))
 
+    def test_mlx_adapter_path_is_forwarded_when_configured(self):
+        """A fine-tuned adapter must be usable through the normal classifier route."""
+        import os
+        from unittest.mock import patch as _patch
+
+        completed = type("Done", (), {"stdout": '{"category": "Not Antisemitic", "confidence": 0.9}'})()
+        with _patch("src.classifier.subprocess.run", return_value=completed) as run, \
+                _patch.dict(os.environ, {"SPOT_MLX_ADAPTER_PATH": "/tmp/adapter-dir"}):
+            _mlx_generate_json("mlx-community/synthetic", "prompt text")
+        command = run.call_args.args[0]
+        self.assertIn("--adapter-path", command)
+        self.assertEqual(command[command.index("--adapter-path") + 1], "/tmp/adapter-dir")
+
+        with _patch("src.classifier.subprocess.run", return_value=completed) as run, \
+                _patch.dict(os.environ, {"SPOT_MLX_ADAPTER_PATH": ""}):
+            _mlx_generate_json("mlx-community/synthetic", "prompt text")
+        self.assertNotIn("--adapter-path", run.call_args.args[0])
+
+    def test_training_record_can_mirror_the_live_pipeline_prompt(self):
+        """Training data must be able to match what the classifier actually sends, or an adapter is undeployable."""
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "build_training_set",
+            Path(__file__).resolve().parents[1] / "script" / "build_training_set.py",
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        piped = module.chat_record("Synthetic post text.", "Not Antisemitic", pipeline_prompt=True)
+        self.assertEqual([message["role"] for message in piped["messages"]], ["user", "assistant"])
+        self.assertTrue(piped["messages"][0]["content"].startswith("Classify the author's expressed position"))
+        standalone = module.chat_record("Synthetic post text.", "Not Antisemitic", pipeline_prompt=False)
+        self.assertEqual([message["role"] for message in standalone["messages"]], ["system", "user", "assistant"])
+
     def test_missing_invalid_and_null_categories_cannot_become_unreviewed_negatives(self):
         for category in ('missing', None, '', 'invalid-label', [], {}):
             for mode in ('full', 'partial', 'none'):
