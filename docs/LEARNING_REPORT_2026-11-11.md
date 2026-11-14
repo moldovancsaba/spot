@@ -241,3 +241,45 @@ volume is genuine ambiguity, not tuning error - the judge's blockers were `MISSI
 
 That is the honest shape of the task: roughly half of real rows cannot be cleared confidently by this model
 and need a human. Reducing it further needs a better model (more labels), not a looser policy.
+
+
+---
+
+# Judge semantics and final routing posture — 2026-11-14
+
+## Finding
+
+The judge (llama3.1:8b) returned `MISSING_CONTEXT` on 32% of live rows, including posts of 500-2,845
+characters, and its flags block certificate clearance. Reading its prompt showed why: `MISSING_CONTEXT` had no
+definition beyond "context is insufficient", so the model used it as a generic hedge.
+
+## Fix
+
+The judge prompt now defines it narrowly: use `MISSING_CONTEXT` only when the source is a fragment with no
+discernible author position (bare URL, hashtag list, title with no claim, truncated text); a long post whose
+position is clear but category is debatable is `REVIEW` with `judge_flags: []`.
+
+Measured on the 102-row gate with the same policy: recall 88.68% and miss rate 11.32%, versus 84.91% and
+15.09% before - the stricter definition recovered recall rather than costing it.
+
+## Final live posture
+
+Run `full-62024-final-20261114` (judge v2, suspicious policy, 10% audit):
+
+| Metric | Value |
+|---|---|
+| Rows processed (first sample) | 51 |
+| Review required | 29 (56.9%) |
+| Cleared | 22 |
+| Audit-sampled to review | 7 |
+| Metadata failures | 0 |
+
+Down from 100% review under the safest posture. Remaining drivers are genuine model uncertainty:
+`ANY_POSITIVE_ANALYSIS` 18 (verifier disagreeing with the primary), `SOFT_SIGNAL_REVIEW` 13,
+`SECOND_PASS_DISAGREEMENT` 13, `MISSING_CONTEXT` 11.
+
+## Honest conclusion
+
+The workload cannot be reduced further without weakening the recall safety net. The verifier disagreeing is
+exactly the signal that catches a primary-model miss, so ignoring it to shrink the queue would trade the
+product requirement for comfort. What remains is model quality: more labelled rows and a stronger judge.
