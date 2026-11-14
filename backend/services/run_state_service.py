@@ -1065,6 +1065,32 @@ def build_artifact_center(*, runs_dir: Path, run_id: str) -> dict | None:
     }
 
 
+def _review_priority(row: dict) -> tuple:
+    """Triage order for humans: most likely a true antisemitic finding first, random audit samples last.
+
+    Volume is only half of a maintainable queue; order is the other half. A reviewer who stops after an hour
+    should have spent it on the rows most likely to be real.
+    """
+    flags = set(row.get("flags") or [])
+    category = str(row.get("assigned_category") or "")
+    positive = category not in ("", "Not Antisemitic")
+    score = 0
+    if positive:
+        score += 100
+    if "ANY_POSITIVE_ANALYSIS" in flags:
+        score += 40
+    if "SOFT_SIGNAL_REVIEW" in flags:
+        score += 25
+    if "SECOND_PASS_DISAGREEMENT" in flags:
+        score += 15
+    if "MISSING_CONTEXT" in flags:
+        score += 10
+    if "AUDIT_SAMPLE" in flags:
+        score -= 50
+    confidence = float(row.get("confidence_score") or 0)
+    return (score, confidence, -int(row.get("row_index") or 0))
+
+
 def build_review_queue(
     *,
     runs_dir: Path,
@@ -1086,7 +1112,9 @@ def build_review_queue(
         rows = [row for row in rows if str(row.get("review_decision") or "") == decision_filter]
 
     reverse = sort_order == "desc"
-    if sort_by == "confidence":
+    if sort_by == "priority":
+        rows.sort(key=_review_priority, reverse=not reverse)
+    elif sort_by == "confidence":
         rows.sort(key=lambda row: float(row.get("confidence_score") or 0), reverse=reverse)
     elif sort_by == "category":
         rows.sort(key=lambda row: str(row.get("assigned_category") or ""), reverse=reverse)

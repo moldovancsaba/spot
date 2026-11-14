@@ -162,6 +162,23 @@ class BackendContractRegressionTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200, response.text)
 
+    def test_review_queue_priority_puts_likely_findings_first_and_audit_last(self):
+        """Volume is half of a maintainable queue; order is the other half."""
+        from backend.services.run_state_service import _review_priority
+
+        rows = [
+            {"row_index": 1, "assigned_category": "Not Antisemitic", "confidence_score": 0.9, "flags": ["AUDIT_SAMPLE"]},
+            {"row_index": 2, "assigned_category": "Not Antisemitic", "confidence_score": 0.9, "flags": ["MISSING_CONTEXT"]},
+            {"row_index": 3, "assigned_category": "Anti-Israel", "confidence_score": 0.9, "flags": []},
+            {"row_index": 4, "assigned_category": "Not Antisemitic", "confidence_score": 0.95,
+             "flags": ["ANY_POSITIVE_ANALYSIS"]},
+            {"row_index": 5, "assigned_category": "Conspiracy Theories", "confidence_score": 0.9,
+             "flags": ["ANY_POSITIVE_ANALYSIS", "SOFT_SIGNAL_REVIEW"]},
+        ]
+        ordered = sorted(rows, key=_review_priority, reverse=True)
+        self.assertEqual([r["row_index"] for r in ordered], [5, 3, 4, 2, 1])
+        self.assertEqual(ordered[-1]["flags"], ["AUDIT_SAMPLE"])
+
     def test_read_endpoints_require_authentication(self) -> None:
         self.assertEqual(self.client.get("/runs").status_code, 401)
         self.assertEqual(self.client.get("/uploads").status_code, 401)

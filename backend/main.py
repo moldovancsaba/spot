@@ -277,7 +277,7 @@ def list_review_rows(
     request: Request,
     review_state: str = Query(default="all"),
     review_decision: str = Query(default="all"),
-    sort_by: str = Query(default="row_index"),
+    sort_by: str = Query(default="priority", description="priority, row_index, category, confidence or review_state"),
     sort_order: str = Query(default="asc"),
 ):
     require_permission(request, "view")

@@ -28,6 +28,17 @@ from pathlib import Path
 POSITIVE = {"Anti-Israel", "Anti-Judaism", "Classical Antisemitism", "Structural Antisemitism", "Conspiracy Theories"}
 
 
+def _verifier_only(rows, positive):
+    """How many reference positives are caught ONLY by the independent verifier."""
+    only = [r for r in rows
+            if r.get("initial_category") not in positive and r.get("alternate_category") in positive]
+    return {
+        "rows": len(only),
+        "positives_caught_exclusively": sum(1 for r in only if r["gold"] in positive),
+        "would_be_missed_without_verifier": sum(1 for r in only if r["gold"] in positive),
+    }
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--gate", required=True)
@@ -62,8 +73,11 @@ def main() -> int:
         result = classify_row(InputRow(row_index=index, item_number=str(index), post_text=str(text)),
                               ssot, args.review_mode)
         flags = set(result.flags or [])
+        trace = result.audit_trace or {}
         rows.append({
             "gold": gold,
+            "initial_category": ((trace.get("initial") or {}).get("category")),
+            "alternate_category": ((trace.get("alternate") or {}).get("category")),
             "predicted": result.category,
             "confidence": result.confidence,
             "review_required": bool(flags & {"REVIEW_REQUIRED", "ANALYSIS_FAILED", "ANY_POSITIVE_ANALYSIS"}),
@@ -93,6 +107,7 @@ def main() -> int:
             sum(1 for r in flagged_positive if r["gold"] in POSITIVE) / len(flagged_positive), 3
         ) if flagged_positive else 0.0,
         "cleared_flag_mix": dict(collections.Counter(f for r in cleared for f in r["flags"]).most_common(6)),
+        "verifier_only": _verifier_only(rows, POSITIVE),
         "rows": rows,
     }
     print(json.dumps({k: v for k, v in report.items() if k != "rows"}, indent=2))
