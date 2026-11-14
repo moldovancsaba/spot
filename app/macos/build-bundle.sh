@@ -79,9 +79,12 @@ AUTH_ENABLED="${SPOT_AUTH_ENABLED:-1}"
 ACCESS_CODE="${SPOT_LOCAL_ACCESS_CODE:-}"
 LOCKED_SSOT_PATH="${SPOT_LOCKED_SSOT_PATH:-$SSOT_PATH}"
 PRODUCTION_MODE="${SPOT_PRODUCTION_MODE:-1}"
-# Safest review posture by default: no row is cleared by model agreement alone.
-# {spot} exists to put suspected antisemitic rows in front of a human.
-DISABLE_AUTO_CLEAR="${SPOT_DISABLE_AUTO_CLEAR:-1}"
+# Review routing. {spot} exists to put suspected antisemitic rows in front of a human, but a queue equal to
+# the whole corpus is unusable, so the default clears rows with nothing suspicious about them and routes a
+# deterministic audit sample of cleared rows to review, keeping the miss rate measurable.
+#   SPOT_REVIEW_POLICY: all | certificate | suspicious   (SPOT_DISABLE_AUTO_CLEAR=1 forces "all")
+SPOT_REVIEW_POLICY="${SPOT_REVIEW_POLICY:-suspicious}"
+SPOT_AUDIT_SAMPLE_PCT="${SPOT_AUDIT_SAMPLE_PCT:-10}"
 # Tuned adapter produced by the learning pipeline; empty disables it.
 DEFAULT_ADAPTER="/Users/Shared/Models/spot-adapters/schema-20261112"
 MLX_ADAPTER_PATH="${SPOT_MLX_ADAPTER_PATH:-$DEFAULT_ADAPTER}"
@@ -109,7 +112,8 @@ export OLLAMA_MODELS="$OLLAMA_MODELS"
 export SPOT_AUTH_ENABLED="$AUTH_ENABLED"
 export SPOT_PRODUCTION_MODE="$PRODUCTION_MODE"
 export SPOT_LOCKED_SSOT_PATH="$LOCKED_SSOT_PATH"
-export SPOT_DISABLE_AUTO_CLEAR="$DISABLE_AUTO_CLEAR"
+export SPOT_REVIEW_POLICY="$SPOT_REVIEW_POLICY"
+export SPOT_AUDIT_SAMPLE_PCT="$SPOT_AUDIT_SAMPLE_PCT"
 if [[ -d "$MLX_ADAPTER_PATH" ]]; then
   export SPOT_MLX_ADAPTER_PATH="$MLX_ADAPTER_PATH"
 fi

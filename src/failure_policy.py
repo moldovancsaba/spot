@@ -71,6 +71,49 @@ def any_positive_analysis(result, threshold: float = ANY_POSITIVE_REVIEW_THRESHO
     return any(as_positive(entry) for entry in branches)
 
 
+def review_policy_mode() -> str:
+    """How aggressively rows are routed to human review.
+
+    all        - every row requires review (maximum recall, maximum workload)
+    certificate- clear only with a complete independent-consensus proof (the strict precedent)
+    suspicious - clear a row only when nothing about it is suspicious (default)
+
+    SPOT_DISABLE_AUTO_CLEAR=1 forces `all`, so the safest posture remains reachable with one switch.
+    """
+    import os
+
+    if os.getenv("SPOT_DISABLE_AUTO_CLEAR", "0").strip().lower() in {"1", "true", "yes", "on"}:
+        return "all"
+    mode = os.getenv("SPOT_REVIEW_POLICY", "suspicious").strip().lower()
+    return mode if mode in {"all", "certificate", "suspicious"} else "suspicious"
+
+
+def audit_sample_percent() -> int:
+    """Percentage of otherwise-cleared rows that are still routed to review.
+
+    This is the recall safety net: a cleared row is never visible to a human, so a deterministic sample of
+    cleared rows keeps the miss rate measurable and feeds labelled negatives back into learning.
+    """
+    import os
+
+    try:
+        value = int(os.getenv("SPOT_AUDIT_SAMPLE_PCT", "10") or "0")
+    except ValueError:
+        return 0
+    return max(0, min(value, 100))
+
+
+def audit_sampled(*, source_sha256: str | None, row_index: int) -> bool:
+    """Deterministic audit selection, stable across reruns of the same row."""
+    pct = audit_sample_percent()
+    if pct <= 0 or not source_sha256:
+        return False
+    import hashlib
+
+    digest = hashlib.sha256(f"{source_sha256}:{row_index}".encode()).hexdigest()
+    return int(digest[:8], 16) % 100 < pct
+
+
 def enforce_result_safety(result):
     from .models import CANONICAL_CATEGORIES
 
@@ -81,12 +124,34 @@ def enforce_result_safety(result):
     if flags & ANALYSIS_FAILURE_FLAGS:
         flags.add("ANALYSIS_FAILED")
         result.confidence = 0.0
-    if requires_safety_review(flags, result.fallback_events) and not validated_auto_consensus(result):
+    mode = review_policy_mode()
+    suspicious = requires_safety_review(flags, result.fallback_events) or any_positive_analysis(result)
+    certificate = mode != "all" and validated_auto_consensus(result)
+
+    if mode == "all":
         flags.add("REVIEW_REQUIRED")
-    # Safety routing: any single analysis calling the row antisemitic outranks a negative aggregate.
-    if any_positive_analysis(result) and not validated_auto_consensus(result):
+    elif suspicious:
+        # Any suspicion outranks model agreement: a negative aggregate is not evidence of a clean row.
         flags.add("REVIEW_REQUIRED")
-        flags.add(ANY_POSITIVE_REVIEW_FLAG)
+        if any_positive_analysis(result):
+            flags.add(ANY_POSITIVE_REVIEW_FLAG)
+    elif mode == "certificate" and not certificate:
+        flags.add("REVIEW_REQUIRED")
+    else:
+        # Nothing suspicious and (in certificate mode) a complete proof: the row may clear, but a
+        # deterministic audit sample still reaches a human so misses stay measurable.
+        trace = getattr(result, "audit_trace", None) or {}
+        source_key = trace.get("source_sha256")
+        if source_key is None:
+            # The trace is not always attached when safety runs; the drafted text is stable per row, so it
+            # still gives a deterministic, reproducible sample.
+            import hashlib as _hashlib
+
+            drafted = getattr(result, "drafted_text", None) or ""
+            source_key = _hashlib.sha256(drafted.encode()).hexdigest() if drafted else None
+        if audit_sampled(source_sha256=source_key, row_index=getattr(result, "row_index", 0)):
+            flags.add("REVIEW_REQUIRED")
+            flags.add("AUDIT_SAMPLE")
     result.flags = sorted(flags)
     return result
 

@@ -201,3 +201,43 @@ weak: it cannot be used to threshold review volume. Calibrated confidence is the
 2. **Recall-first objective vs precision.** The adapter's gate recall (0.887) reflects the strict reference;
    refining the boundary needs more labelled rows, which the review queue now supplies.
 3. Structural Antisemitism remains unsupported (F1 0.000, 1 support row).
+
+
+---
+
+# Review economics — 2026-11-14
+
+## The problem stated plainly
+
+Under the safest posture (`SPOT_DISABLE_AUTO_CLEAR=1`) every processed row demanded review: 11,144 rows
+produced 11,144 pending reviews. A queue equal to the corpus is not a process; it is a backlog.
+
+## Measured options (102-row gate, real pipeline with verifier and judge)
+
+| Policy | Review volume | Effective recall | Missed positives |
+|---|---:|---:|---:|
+| No auto-clear | 100% | 100% | 0 |
+| Certificate auto-clear | 74.5% | 84.9% | 8 of 53 |
+| Clear unless suspicious (adopted) | 74% (gate, 52% positive) | 84.9% | 8 of 53 |
+
+On the balanced gate the adapter flags 73% of rows, so gate volume cannot show the live effect. On the live
+corpus the adapter flags **13.87%**, which is the number that matters for workload.
+
+## Adopted policy
+
+`SPOT_REVIEW_POLICY=suspicious` (default): a row is reviewed when anything is suspicious - any branch names a
+positive category, a soft antisemitic signal fires, the judge returns REVIEW/FAIL or carries flags, the passes
+disagree, or context is missing. Otherwise it clears.
+
+`SPOT_AUDIT_SAMPLE_PCT=10`: a deterministic hash-based sample of cleared rows is still routed to review with
+`AUDIT_SAMPLE`. A cleared row is invisible to humans, so this keeps the miss rate measurable and feeds
+labelled negatives back into learning. `SPOT_DISABLE_AUTO_CLEAR=1` still forces 100% review.
+
+## Live result
+
+First 74 rows under the policy: **37 review-required (50%), 38 cleared**, down from 100%. The remaining
+volume is genuine ambiguity, not tuning error - the judge's blockers were `MISSING_CONTEXT` (23 rows),
+`CONTRADICTORY_EVIDENCE` (13) and `SOURCE_UNCLEAR` (3), with a clean judge in 65 of 75 rows.
+
+That is the honest shape of the task: roughly half of real rows cannot be cleared confidently by this model
+and need a human. Reducing it further needs a better model (more labels), not a looser policy.

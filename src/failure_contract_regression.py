@@ -122,6 +122,55 @@ class FailureContractRegressionTests(unittest.TestCase):
         standalone = module.chat_record("Synthetic post text.", "Not Antisemitic", pipeline_prompt=False)
         self.assertEqual([message["role"] for message in standalone["messages"]], ["system", "user", "assistant"])
 
+    def test_review_policy_modes_control_workload(self):
+        """The operator must be able to trade recall against review volume, explicitly and reversibly."""
+        import os
+        from unittest.mock import patch as _patch
+
+        from src.failure_policy import enforce_result_safety
+        from src.models import ClassificationResult
+
+        def clean_result():
+            return ClassificationResult(row_index=2, raw_category='Not Antisemitic', category='Not Antisemitic',
+                                        confidence=.96, explanation='clean', flags=[],
+                                        audit_trace={'source_sha256': 'a' * 64})
+
+        with _patch.dict(os.environ, {'SPOT_REVIEW_POLICY': 'all', 'SPOT_AUDIT_SAMPLE_PCT': '0'}):
+            self.assertIn('REVIEW_REQUIRED', enforce_result_safety(clean_result()).flags)
+
+        with _patch.dict(os.environ, {'SPOT_REVIEW_POLICY': 'suspicious', 'SPOT_AUDIT_SAMPLE_PCT': '0'}):
+            self.assertNotIn('REVIEW_REQUIRED', enforce_result_safety(clean_result()).flags)
+
+        # A complete certificate with no suspicion may clear in certificate mode.
+        with _patch.dict(os.environ, {'SPOT_REVIEW_POLICY': 'certificate', 'SPOT_AUDIT_SAMPLE_PCT': '0'}):
+            self.assertIn('REVIEW_REQUIRED', enforce_result_safety(clean_result()).flags)
+
+        # SPOT_DISABLE_AUTO_CLEAR always wins, so the safest posture is one switch away.
+        with _patch.dict(os.environ, {'SPOT_REVIEW_POLICY': 'suspicious', 'SPOT_DISABLE_AUTO_CLEAR': '1',
+                                      'SPOT_AUDIT_SAMPLE_PCT': '0'}):
+            self.assertIn('REVIEW_REQUIRED', enforce_result_safety(clean_result()).flags)
+
+    def test_audit_sample_routes_a_deterministic_share_of_cleared_rows(self):
+        """Cleared rows are invisible; a stable sample keeps the miss rate measurable."""
+        import os
+        from unittest.mock import patch as _patch
+
+        from src.failure_policy import enforce_result_safety
+        from src.models import ClassificationResult
+
+        def clean_result():
+            return ClassificationResult(row_index=2, raw_category='Not Antisemitic', category='Not Antisemitic',
+                                        confidence=.96, explanation='clean', flags=[],
+                                        audit_trace={'source_sha256': 'b' * 64})
+
+        with _patch.dict(os.environ, {'SPOT_REVIEW_POLICY': 'suspicious', 'SPOT_AUDIT_SAMPLE_PCT': '100'}):
+            flags = enforce_result_safety(clean_result()).flags
+            self.assertIn('REVIEW_REQUIRED', flags)
+            self.assertIn('AUDIT_SAMPLE', flags)
+
+        with _patch.dict(os.environ, {'SPOT_REVIEW_POLICY': 'suspicious', 'SPOT_AUDIT_SAMPLE_PCT': '0'}):
+            self.assertNotIn('AUDIT_SAMPLE', enforce_result_safety(clean_result()).flags)
+
     def test_missing_invalid_and_null_categories_cannot_become_unreviewed_negatives(self):
         for category in ('missing', None, '', 'invalid-label', [], {}):
             for mode in ('full', 'partial', 'none'):
