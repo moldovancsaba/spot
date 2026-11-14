@@ -283,3 +283,38 @@ Down from 100% review under the safest posture. Remaining drivers are genuine mo
 The workload cannot be reduced further without weakening the recall safety net. The verifier disagreeing is
 exactly the signal that catches a primary-model miss, so ignoring it to shrink the queue would trade the
 product requirement for comfort. What remains is model quality: more labelled rows and a stronger judge.
+
+
+---
+
+# Verifier disagreement measured — 2026-11-14
+
+## Hypothesis tested
+
+The verifier (qwen2.5:7b) was suspected of inflating the queue with cheap over-calling, so that raising its
+confidence bar would cut volume without cost.
+
+## Result: hypothesis rejected
+
+Of 359 live rows where the verifier calls a positive category while the primary says `Not Antisemitic`,
+**354 (98.6%) are at confidence >= 0.85**. It is not hedging; it is a confident split of opinion.
+
+On the 102-row balanced gate the verifier contributes **0 exclusive positives** - every positive it names is
+also named by the primary - but on the live distribution it touches **8.4% of rows**. The gate's 52%-positive
+composition hides the effect, so gate-only measurement would have wrongly justified dropping the verifier.
+
+## Conclusion
+
+The verifier cannot be removed from routing to shrink the queue: that trades recall for comfort instead of
+removing waste. **48.4% review-required stands as justified** by the models' current agreement.
+
+What changed instead is ordering: `/runs/{run_id}/review-rows` now sorts by `priority` by default - primary
+positive first, then verifier disagreement, soft signals, pass disagreement, missing context, with random
+`AUDIT_SAMPLE` rows last. Verified live: the queue opens on rows 233, 249, 319 (Anti-Israel, Anti-Judaism,
+`ANY_POSITIVE_ANALYSIS`), not row 1.
+
+## Live state
+
+Run `full-62024-final-20261114`: 4,402 / 62,024 rows (7.1%), 48.4% review-required, 10 s/row, ~6.7 days
+remaining, ~30,000 review items projected. Real further reduction requires a better verifier model - a
+labelled-data problem, not a routing-rule problem.
