@@ -61,6 +61,62 @@ class OpsQueueRegressionTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200, response.text)
 
+    def test_parallel_workers_claim_distinct_segments_atomically(self) -> None:
+        """T16: N workers must each claim a different segment; the queue claim is the concurrency primitive."""
+        import threading
+
+        self._login_admin()
+        upload_id = "upload-parallel"
+        upload_dir = self.runs_dir / "uploads" / upload_id
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        record = {
+            "upload_id": upload_id,
+            "filename": "parallel.xlsx",
+            "stored_path": str(upload_dir / "parallel.xlsx"),
+            "bytes": 1024,
+            "status": "accepted",
+            "created_at": 1770000000,
+            "validation": {"accepted": True, "row_count": 1200},
+        }
+        (upload_dir / "upload.json").write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+        from backend.services.excel_service import read_upload_record
+        record_upload(runs_dir=self.runs_dir, record=record)
+
+        run_id = "parallel-run-001"
+        run_dir = self.runs_dir / run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+        create_run_record(runs_dir=self.runs_dir, run_id=run_id,
+                          input_path=str(upload_dir / "parallel.xlsx"),
+                          output_path=str(run_dir / "output.xlsx"),
+                          upload_id=upload_id, language="de", review_mode="partial",
+                          start_payload={"upload_id": upload_id, "language": "de", "review_mode": "partial"})
+        register_run(runs_dir=self.runs_dir, run_id=run_id, upload_id=upload_id,
+                     language="de", review_mode="partial", state="PROCESSING")
+
+        claimed: list[dict] = []
+        lock = threading.Lock()
+
+        def worker(index: int) -> None:
+            while True:
+                segment = claim_next_segment(runs_dir=self.runs_dir, run_id=run_id,
+                                             worker_id=f"{run_id}-w{index}")
+                if not segment:
+                    return
+                with lock:
+                    claimed.append(segment)
+
+        threads = [threading.Thread(target=worker, args=(i,)) for i in range(3)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        self.assertEqual(len(claimed), 3)
+        ids = [str(segment["segment_id"]) for segment in claimed]
+        self.assertEqual(len(set(ids)), 3, "parallel claims must never hand the same segment twice")
+        workers = {str(segment["worker_id"]) for segment in claimed}
+        self.assertLessEqual(len(workers), 3, "only the three launched workers may claim")
+
     def test_operations_overview_tracks_segment_queue_and_progress(self) -> None:
         self._login_admin()
         upload_response = self.client.post(

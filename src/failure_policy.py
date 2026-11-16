@@ -85,7 +85,7 @@ def review_policy_mode() -> str:
     if os.getenv("SPOT_DISABLE_AUTO_CLEAR", "0").strip().lower() in {"1", "true", "yes", "on"}:
         return "all"
     mode = os.getenv("SPOT_REVIEW_POLICY", "suspicious").strip().lower()
-    return mode if mode in {"all", "certificate", "suspicious"} else "suspicious"
+    return mode if mode in {"all", "certificate", "suspicious", "trinity"} else "suspicious"
 
 
 def audit_sample_percent() -> int:

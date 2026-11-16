@@ -162,6 +162,129 @@ class BackendContractRegressionTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200, response.text)
 
+    def test_backup_and_bakeoff_tools(self):
+        """Deck p.11 backup/restore drill and D7 promotion records."""
+        import importlib.util
+        import json
+        import tempfile
+
+        spec = importlib.util.spec_from_file_location("backup_runs", Path(__file__).resolve().parents[1] / "script" / "backup_runs.py")
+        backup_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(backup_module)
+
+        spec2 = importlib.util.spec_from_file_location("model_bakeoff", Path(__file__).resolve().parents[1] / "script" / "model_bakeoff.py")
+        bakeoff_module = importlib.util.module_from_spec(spec2)
+        spec2.loader.exec_module(bakeoff_module)
+
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            runs = base / "runs"
+            (runs / "run-a").mkdir(parents=True)
+            (runs / "run-a" / "progress.json").write_text('{"state": "PROCESSING"}')
+            backup = backup_module.backup(runs, base / "backups")
+            self.assertGreater(backup["files"], 0)
+            restored = backup_module.restore(Path(backup["backup_dir"]), base / "runs-restored")
+            self.assertTrue((base / "runs-restored" / "run-a" / "progress.json").is_file())
+
+            registry = base / "models" / "registry" / "promotions.jsonl"
+            record = bakeoff_module.write_promotion(
+                registry=registry, language="de", lane="primary",
+                candidate="ollama://qwen2.5:7b", incumbent="ollama://gemma2:9b",
+                candidate_metrics={"six_way_agreement_pct": 60.0, "six_way_macro_f1": 0.4, "binary_f1": 0.8},
+                incumbent_metrics={"six_way_agreement_pct": 50.0, "six_way_macro_f1": 0.35, "binary_f1": 0.75},
+                promote=True,
+            )
+            self.assertEqual(record["decision"], "promote")
+            self.assertEqual(record["rollback"], "ollama://gemma2:9b")
+            self.assertEqual(json.loads(registry.read_text())["candidate"], "ollama://qwen2.5:7b")
+
+    def test_learning_approval_and_verification_records(self):
+        """Deck p.9: TEV decides; the system records the decision and the before/after measurement."""
+        from backend.services.learning_cycle_service import (approve_cycle, list_approvals, verify_cycle)
+
+        run_id = "learn-run"
+        run_path = self.runs_dir / run_id
+        (run_path / "learning").mkdir(parents=True, exist_ok=True)
+        approve_cycle(runs_dir=self.runs_dir, run_id=run_id, cycle_id="c1", approver="tev-owner",
+                      decision="approved", notes="pattern accepted")
+        verify_cycle(runs_dir=self.runs_dir, run_id=run_id, cycle_id="c1",
+                     before_metrics={"macro_f1": 0.4}, after_metrics={"macro_f1": 0.45},
+                     sample_size=60, verified_by="tev-owner")
+        approvals = list_approvals(runs_dir=self.runs_dir, run_id=run_id)
+        self.assertEqual(len(approvals), 1)
+        self.assertEqual(approvals[0]["decision"], "approved")
+        self.assertIsNotNone(approvals[0]["verification"])
+        self.assertEqual(approvals[0]["verification"]["after_metrics"]["macro_f1"], 0.45)
+
+    def test_sla_and_escalation_records(self):
+        """Deck p.8/p.12: daily-batch deadlines and suspected-crime case preparation."""
+        import datetime
+        from backend.services.ops_db_service import list_case_escalations, upsert_case_escalation
+        from backend.services.run_state_service import run_sla_status, set_run_sla
+
+        run_id = "sla-run"
+        run_path = self.runs_dir / run_id
+        run_path.mkdir(parents=True, exist_ok=True)
+        from backend.services.excel_service import intake_workbook
+        intake_workbook(runs_dir=self.runs_dir, ssot_path=PROJECT_ROOT / "ssot" / "ssot.json",
+                        upload_id="up-1", filename="in.xlsx", content=_build_workbook_bytes())
+        create_run_record(runs_dir=self.runs_dir, run_id=run_id, upload_id="up-1", language="de",
+                          review_mode="trinity",
+                          input_path=str(run_path / "in.xlsx"), output_path=str(run_path / "out.xlsx"))
+        past = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=1)).isoformat()
+        set_run_sla(runs_dir=self.runs_dir, run_id=run_id, delivery_deadline_utc=past)
+        status = run_sla_status(runs_dir=self.runs_dir, run_id=run_id)
+        self.assertEqual(status["status"], "missed")
+        self.assertIsNone(run_sla_status(runs_dir=self.runs_dir, run_id="missing-run"))
+
+        upsert_case_escalation(runs_dir=self.runs_dir, run_id=run_id, row_index=7, fields={
+            "case_id": "C-1", "source_ref": "url-1", "snapshot_text": "post text",
+            "known_dates": "2026-11-16", "context": "platform X", "fact_summary": "short factual summary",
+            "escalated_by": "analyst", "escalated_at": past,
+        })
+        cases = list_case_escalations(runs_dir=self.runs_dir, run_id=run_id)
+        self.assertEqual(len(cases), 1)
+        self.assertEqual(cases[0]["case_id"], "C-1")
+        self.assertIsNone(cases[0]["legal_decision"], "the system prepares cases; it never decides them")
+
+    def test_handover_exporter_writes_deck_fields_and_manifest(self):
+        """The TEV handover package (deck p.10) must be deterministic and integrity-checked."""
+        import hashlib
+        import importlib.util
+        import json
+        import tempfile
+
+        spec = importlib.util.spec_from_file_location(
+            "export_handover", Path(__file__).resolve().parents[1] / "script" / "export_handover.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        rows = [{
+            "run_id": "run-x", "row_index": 2, "item_number": "2",
+            "post_text": "A synthetic source post.", "row_hash": "abc",
+            "source_row_index": 2, "assigned_category": "Anti-Israel",
+            "secondary_category": None, "confidence_score": 0.9,
+            "explanation": "Hostility carried by the Israel framing.",
+            "flags": ["TRINITY_DISAGREEMENT"], "review_state": "pending",
+            "review_decision": None, "reviewer_note": "", "judge_verdict": "REVIEW",
+        }]
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / "handover.xlsx"
+            manifest = module.build_workbook(rows, "run-x", out)
+            self.assertEqual(manifest["rows"], 1)
+            from openpyxl import load_workbook
+
+            wb = load_workbook(out)
+            self.assertIn("Summary", wb.sheetnames)
+            self.assertIn("Review", wb.sheetnames)
+            headers = [cell.value for cell in wb["Review"][1]]
+            for required in ("Source / Snapshot", "Proposed Category", "Short Rationale", "Open Question"):
+                self.assertIn(required, headers)
+            row_values = [cell.value for cell in wb["Review"][2]]
+            self.assertTrue(any("Evaluator lanes disagreed after the justification round" in str(v) for v in row_values))
+            digest = hashlib.sha256(out.read_bytes()).hexdigest()
+            self.assertEqual(json.loads(Path(str(out) + ".manifest.json").read_text())["sha256"], digest)
+
     def test_review_queue_priority_puts_likely_findings_first_and_audit_last(self):
         """Volume is half of a maintainable queue; order is the other half."""
         from backend.services.run_state_service import _review_priority

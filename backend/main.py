@@ -31,6 +31,9 @@ from backend.services.run_lifecycle_service import (
 )
 from backend.services.ops_db_service import (
     build_operations_overview,
+    fetch_run_rows,
+    list_case_escalations,
+    upsert_case_escalation,
     build_run_segment_summary,
     reconcile_run_segments,
     reset_run_segments,
@@ -38,8 +41,11 @@ from backend.services.ops_db_service import (
     start_run_attempt,
     summarize_run_rows,
 )
+from backend.services.learning_cycle_service import approve_cycle, list_approvals, verify_cycle
 from backend.services.run_state_service import (
     _run_recovery_candidate,
+    run_sla_status,
+    set_run_sla,
     append_action,
     build_artifact_center,
     build_run_detail,
@@ -595,6 +601,17 @@ def _signal_run_process(pid: int, sig: int) -> None:
         os.kill(pid, sig)
 
 
+def _signal_run_processes(run_id: str, sig: int) -> None:
+    """Signal every worker of a run; parallel workers are siblings, not children of one pid."""
+    control = _read_control(run_id) or {}
+    pids = {int(p) for p in ([control.get("pid")] + list(control.get("worker_pids") or [])) if p}
+    for pid in pids:
+        try:
+            _signal_run_process(pid, sig)
+        except Exception:
+            pass
+
+
 def _wait_for_pid_exit(pid: int | None, timeout_seconds: float = 5.0) -> bool:
     if pid is None:
         return True
@@ -707,7 +724,7 @@ def _request_run_suspend(*, run_id: str, actor: str) -> dict:
     control = _mark_run_shutdown_requested(run_id)
     pid = _resolve_run_process_pid(run_id, control.get("pid"))
     if pid is not None:
-        _signal_run_process(int(pid), signal.SIGTERM)
+        _signal_run_processes(run_id, signal.SIGTERM)
     append_action(
         runs_dir=RUNS_DIR,
         run_id=run_id,
@@ -802,7 +819,7 @@ def _start_classify_run(*, run_id: str, payload: dict, actor: str, resume_existi
     control = _read_control(run_id) or {}
     existing_pid = _resolve_run_process_pid(run_id, control.get("pid"))
     if existing_pid is not None:
-        _signal_run_process(existing_pid, signal.SIGTERM)
+        _signal_run_processes(run_id, signal.SIGTERM)
         time.sleep(0.2)
 
     run_dir = RUNS_DIR / run_id
@@ -939,19 +956,30 @@ def _start_classify_run(*, run_id: str, payload: dict, actor: str, resume_existi
     if limit is not None:
         cmd.extend(["--limit", str(limit)])
 
-    with log_path.open("w", encoding="utf-8") as log:
-        proc = subprocess.Popen(
-            cmd,
-            cwd=PROJECT_ROOT,
-            stdout=log,
-            stderr=log,
-            start_new_session=True,
-        )
+    import os as _os
+
+    worker_count = max(1, min(int(_os.getenv("SPOT_PARALLEL_WORKERS", "1") or "1"), 8))
+    procs: list[subprocess.Popen] = []
+    for worker_index in range(worker_count):
+        worker_cmd = list(cmd)
+        if worker_count > 1:
+            worker_cmd += ["--worker-id", f"{run_id}-w{worker_index}"]
+        worker_log_path = log_path if worker_count == 1 else RUNS_DIR / f"{run_id}-segment-worker-{worker_index}.log"
+        with worker_log_path.open("w", encoding="utf-8") as log:
+            procs.append(subprocess.Popen(
+                worker_cmd,
+                cwd=PROJECT_ROOT,
+                stdout=log,
+                stderr=log,
+                start_new_session=True,
+            ))
+    proc = procs[0]
     _write_control(
         run_id,
         {
             "run_id": run_id,
             "pid": proc.pid,
+            "worker_pids": [worker.pid for worker in procs],
             "paused": False,
             "started_at": int(time.time()),
             "attempt_id": attempt_id,
@@ -994,7 +1022,7 @@ def classify_pause(run_id: str, request: Request):
         control = {"run_id": run_id, "pid": pid, "paused": False}
     if pid is None:
         raise HTTPException(status_code=404, detail="run process not found")
-    _signal_run_process(pid, signal.SIGSTOP)
+    _signal_run_processes(run_id, signal.SIGSTOP)
     control["paused"] = True
     control["paused_at"] = int(time.time())
     _write_control(run_id, control)
@@ -1030,7 +1058,7 @@ def classify_stop(run_id: str, request: Request):
         control = {"run_id": run_id, "pid": pid, "paused": False}
     if pid is None:
         raise HTTPException(status_code=404, detail="run process not found")
-    _signal_run_process(pid, signal.SIGTERM)
+    _signal_run_processes(run_id, signal.SIGTERM)
     control["paused"] = False
     control["stopped_at"] = int(time.time())
     control["cancelled"] = True
@@ -1167,7 +1195,7 @@ def run_heal(run_id: str, request: Request):
         reconcile_run_segments(runs_dir=RUNS_DIR, run_id=run_id, target_state="QUEUED")
         _mark_run_shutdown_requested(run_id)
     if pid is not None:
-        _signal_run_process(int(pid), signal.SIGTERM)
+        _signal_run_processes(run_id, signal.SIGTERM)
         if not _wait_for_pid_exit(pid):
             _signal_run_process(int(pid), signal.SIGKILL)
             _wait_for_pid_exit(pid, timeout_seconds=1.5)
@@ -1294,3 +1322,153 @@ def classify_status(run_id: str, request: Request):
         "control": control,
         "output_exists": output_exists,
     }
+
+
+# ---------------- TEV workflow endpoints (plan T17/T20/T23) ----------------
+
+@app.post("/runs/{run_id}/sla")
+def update_run_sla(run_id: str, request: Request, payload: dict | None = Body(default=None)):
+    """Deck p.8: the daily rhythm - intake by 10:00, results by next business day 12:00."""
+    require_permission(request, "manage_run")
+    payload = payload or {}
+    return set_run_sla(
+        runs_dir=RUNS_DIR,
+        run_id=run_id,
+        intake_deadline_utc=str(payload.get("intake_deadline_utc") or "") or None,
+        delivery_deadline_utc=str(payload.get("delivery_deadline_utc") or "") or None,
+    )
+
+
+@app.get("/runs/{run_id}/sla")
+def get_run_sla(run_id: str, request: Request):
+    require_permission(request, "view")
+    status = run_sla_status(runs_dir=RUNS_DIR, run_id=run_id)
+    if status is None:
+        raise HTTPException(status_code=404, detail="run not found")
+    return status
+
+
+@app.post("/runs/{run_id}/review-rows/{row_index}/escalate")
+def escalate_review_row(run_id: str, row_index: int, request: Request, payload: dict | None = Body(default=None)):
+    """Deck p.12: prepare a suspected criminal case. The system prepares; the TEV legal owner decides."""
+    session = require_permission(request, "review")
+    payload = payload or {}
+    case_id = str(payload.get("case_id") or f"{run_id}:{row_index}")
+    return upsert_case_escalation(
+        runs_dir=RUNS_DIR,
+        run_id=run_id,
+        row_index=row_index,
+        fields={
+            "case_id": case_id,
+            "source_ref": payload.get("source_ref"),
+            "snapshot_text": payload.get("snapshot_text"),
+            "known_dates": payload.get("known_dates"),
+            "context": payload.get("context"),
+            "fact_summary": payload.get("fact_summary"),
+            "legal_decision": payload.get("legal_decision"),
+            "forward_channel": payload.get("forward_channel"),
+            "confirmation": payload.get("confirmation"),
+            "escalated_by": str(session.get("actor_name", "local-reviewer")),
+            "escalated_at": None,
+        },
+    )
+
+
+@app.get("/runs/{run_id}/escalations")
+def list_escalations(run_id: str, request: Request):
+    require_permission(request, "view")
+    return {"run_id": run_id, "escalations": list_case_escalations(runs_dir=RUNS_DIR, run_id=run_id)}
+
+
+@app.get("/runs/{run_id}/review-rows/{row_index}/trinity")
+def get_trinity_detail(run_id: str, row_index: int, request: Request):
+    """The three proposals, justifications round and re-vote for one row (deck p.4)."""
+    require_permission(request, "view")
+    import json as _json
+
+    rows = fetch_run_rows(runs_dir=RUNS_DIR, run_id=run_id)
+    for row in rows:
+        if int(row.get("row_index") or -1) == row_index:
+            trace = {}
+            try:
+                trace = _json.loads(row.get("analysis_trace_json") or "{}")
+            except _json.JSONDecodeError:
+                pass
+            return {
+                "run_id": run_id,
+                "row_index": row_index,
+                "assigned_category": row.get("assigned_category"),
+                "trinity": trace.get("trinity"),
+                "flags": row.get("flags_json"),
+            }
+    raise HTTPException(status_code=404, detail="review row not found")
+
+
+@app.post("/runs/{run_id}/handover")
+def export_handover(run_id: str, request: Request):
+    """Generate the closed-channel handover workbook (deck p.10) from canonical rows."""
+    require_permission(request, "signoff")
+    import importlib.util
+    import json as _json
+    from pathlib import Path as _Path
+
+    spec = importlib.util.spec_from_file_location(
+        "export_handover", str(PROJECT_ROOT / "script" / "export_handover.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    rows = []
+    for row in fetch_run_rows(runs_dir=RUNS_DIR, run_id=run_id, review_required_only=True):
+        try:
+            row["flags"] = _json.loads(row.get("flags_json") or "[]")
+        except _json.JSONDecodeError:
+            row["flags"] = []
+        rows.append(row)
+    if not rows:
+        raise HTTPException(status_code=404, detail="no review-required rows for this run")
+    out = _Path(RUNS_DIR) / run_id / "handover.xlsx"
+    manifest = module.build_workbook(rows, run_id, out)
+    append_action(
+        runs_dir=RUNS_DIR,
+        run_id=run_id,
+        actor=str(session_payload(request).get("actor_name", "operator")),
+        action="export_handover",
+        detail=manifest,
+    )
+    return manifest
+
+
+# ---------------- TEV pattern approval (plan T21) ----------------
+
+@app.post("/learning/cycles/{run_id}/{cycle_id}/approve")
+def approve_learning_cycle(run_id: str, cycle_id: str, request: Request, payload: dict | None = Body(default=None)):
+    """Deck p.9: every new pattern is decided by TEV; adoption requires before/after verification."""
+    session = require_permission(request, "signoff")
+    payload = payload or {}
+    return approve_cycle(
+        runs_dir=RUNS_DIR, run_id=run_id, cycle_id=cycle_id,
+        approver=str(session.get("actor_name", "tev-owner")),
+        decision=str(payload.get("decision") or "pending"),
+        notes=str(payload.get("notes") or ""),
+    )
+
+
+@app.post("/learning/cycles/{run_id}/{cycle_id}/verify")
+def verify_learning_cycle(run_id: str, cycle_id: str, request: Request, payload: dict | None = Body(default=None)):
+    """Record the before/after measurement on the approved sample. No metrics, no adoption."""
+    session = require_permission(request, "signoff")
+    payload = payload or {}
+    return verify_cycle(
+        runs_dir=RUNS_DIR, run_id=run_id, cycle_id=cycle_id,
+        before_metrics=payload.get("before_metrics") or {},
+        after_metrics=payload.get("after_metrics") or {},
+        sample_size=int(payload.get("sample_size") or 0),
+        verified_by=str(session.get("actor_name", "tev-owner")),
+    )
+
+
+@app.get("/learning/approvals/{run_id}")
+def list_learning_approvals(run_id: str, request: Request):
+    require_permission(request, "view")
+    return {"run_id": run_id, "approvals": list_approvals(runs_dir=RUNS_DIR, run_id=run_id)}
+

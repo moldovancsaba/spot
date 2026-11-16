@@ -123,7 +123,7 @@ def chat_record(text: str, label: str, pipeline_prompt: bool = False, secondary:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--reference", default="docs/evaluation/goldset_2026-11-11.jsonl")
+    ap.add_argument("--reference", default="docs/evaluation/goldset_2026-11-16.jsonl")
     ap.add_argument("--workbook", default="samples/sample_germany.xlsx")
     ap.add_argument("--out", required=True)
     ap.add_argument("--per-category", type=int, default=50)

@@ -16,6 +16,7 @@ from typing import Callable, List, Optional, Tuple
 from .failure_policy import MANDATORY_REVIEW_FLAGS, certificate_clearance_disabled, enforce_result_safety, validated_auto_consensus
 from .models import CANONICAL_CATEGORIES, ClassificationResult, InputRow, SSOT
 from .defaults import DEFAULT_ALLOW_REMOTE_OLLAMA, DEFAULT_OLLAMA_URL
+from .calibration import calibrated_confidence, load_calibration
 from .lanes import format_model_version, load_lane_config, parse_model_spec
 
 
@@ -553,6 +554,13 @@ def _parse_classification(obj, text: str, ssot: SSOT, backend: str, model_name: 
         confidence = 0.0
         flags.append("INVALID_MODEL_METADATA")
     confidence = 0.0 if "ANALYSIS_FAILED" in flags else min(max(confidence, 0.0), 1.0)
+
+    if "ANALYSIS_FAILED" not in flags:
+        lane_version = format_model_version(backend, model_name)
+        calibrated, was_calibrated = calibrated_confidence(lane_version, category, confidence, load_calibration())
+        if was_calibrated:
+            confidence = calibrated
+            flags.append("CALIBRATED_CONFIDENCE")
 
     explanation = str(obj.get("explanation", "")).strip()
     if not explanation:

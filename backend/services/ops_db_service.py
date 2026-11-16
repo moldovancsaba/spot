@@ -38,6 +38,26 @@ def _connect(runs_dir: Path) -> sqlite3.Connection:
     return conn
 
 
+_CASE_ESCALATIONS_DDL = """
+CREATE TABLE IF NOT EXISTS case_escalations (
+    case_id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL,
+    row_index INTEGER NOT NULL,
+    source_ref TEXT,
+    snapshot_text TEXT,
+    known_dates TEXT,
+    context TEXT,
+    fact_summary TEXT,
+    legal_decision TEXT,
+    forward_channel TEXT,
+    confirmation TEXT,
+    escalated_by TEXT,
+    escalated_at TEXT,
+    updated_at TEXT
+)
+"""
+
+
 def _init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(
         """
@@ -136,6 +156,7 @@ def _init_db(conn: sqlite3.Connection) -> None:
             post_text TEXT NOT NULL DEFAULT '',
             row_hash TEXT,
             assigned_category TEXT,
+            secondary_category TEXT,
             confidence_score REAL,
             explanation TEXT,
             flags_json TEXT NOT NULL DEFAULT '[]',
@@ -195,6 +216,9 @@ def _init_db(conn: sqlite3.Connection) -> None:
     _ensure_column(conn, "upload_rows", "source_sheet", "TEXT NOT NULL DEFAULT ''")
     _ensure_column(conn, "upload_rows", "source_row_index", "INTEGER")
     _drop_dead_feedback_items_table(conn)
+    _ensure_secondary_category_column(conn)
+    conn.executescript(_CASE_ESCALATIONS_DDL)
+    conn.commit()
     if _run_rows_lineage_rebuild_required(conn):
         _rebuild_run_rows_table(conn)
     _ensure_column(conn, "run_rows", "analysis_trace_json", "TEXT")
@@ -280,6 +304,14 @@ def _resolve_managed_upload(
 
 def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
     return {str(row["name"]) for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+
+
+def _ensure_secondary_category_column(conn: sqlite3.Connection) -> None:
+    """taxonomy-v0.2: add the optional secondary category column to pre-existing run_rows tables."""
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(run_rows)").fetchall()}
+    if "secondary_category" not in columns:
+        conn.execute("ALTER TABLE run_rows ADD COLUMN secondary_category TEXT")
+        conn.commit()
 
 
 def _drop_dead_feedback_items_table(conn: sqlite3.Connection) -> None:
@@ -376,7 +408,7 @@ def _rebuild_run_rows_table(conn: sqlite3.Connection) -> None:
         """
         INSERT INTO run_rows__new (
             run_id, row_index, upload_id, attempt_id, sequence_index, source_row_index, source_row_hash,
-            item_number, post_text, row_hash, assigned_category, confidence_score, explanation,
+            item_number, post_text, row_hash, assigned_category, secondary_category, confidence_score, explanation,
             flags_json, fallback_events_json, soft_signal_score, soft_signal_flags_json, soft_signal_evidence_json,
             review_required, review_state, review_decision, reviewer_note, judge_score, judge_verdict,
             consensus_tier, minority_label, model_votes_json, drafted_text, created_at, updated_at
@@ -393,6 +425,7 @@ def _rebuild_run_rows_table(conn: sqlite3.Connection) -> None:
             r.post_text,
             r.row_hash,
             r.assigned_category,
+            r.secondary_category,
             r.confidence_score,
             r.explanation,
             r.flags_json,
@@ -959,13 +992,13 @@ def upsert_run_rows(
                 INSERT INTO run_rows (
                     run_id, row_index, upload_id, attempt_id, sequence_index, source_row_index, source_row_hash,
                     item_number, post_text, row_hash,
-                    assigned_category, confidence_score, explanation, flags_json, fallback_events_json,
+                    assigned_category, secondary_category, confidence_score, explanation, flags_json, fallback_events_json,
                     soft_signal_score, soft_signal_flags_json, soft_signal_evidence_json,
                     review_required, review_state, review_decision, reviewer_note,
                     judge_score, judge_verdict, consensus_tier, minority_label, model_votes_json, drafted_text,
                     created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(run_id, row_index) DO UPDATE SET
                     upload_id=COALESCE(excluded.upload_id, run_rows.upload_id),
                     attempt_id=COALESCE(excluded.attempt_id, run_rows.attempt_id),
@@ -976,6 +1009,7 @@ def upsert_run_rows(
                     post_text=COALESCE(NULLIF(excluded.post_text, ''), run_rows.post_text),
                     row_hash=COALESCE(excluded.row_hash, run_rows.row_hash),
                     assigned_category=COALESCE(excluded.assigned_category, run_rows.assigned_category),
+                    secondary_category=COALESCE(excluded.secondary_category, run_rows.secondary_category),
                     confidence_score=COALESCE(excluded.confidence_score, run_rows.confidence_score),
                     explanation=COALESCE(excluded.explanation, run_rows.explanation),
                     flags_json=excluded.flags_json,
@@ -1007,6 +1041,7 @@ def upsert_run_rows(
                     post_text,
                     str(row.get("row_hash") or source_row.get("row_hash") or "") or None,
                     str(row.get("assigned_category") or "") or None,
+                    str(row.get("secondary_category") or "") or None,
                     float(row["confidence_score"]) if row.get("confidence_score") is not None else None,
                     str(row.get("explanation") or "") or None,
                     _json_dumps([str(item) for item in row.get("flags", []) if str(item)]),
@@ -1259,6 +1294,56 @@ def update_run_snapshot(
             ),
         )
         conn.commit()
+
+
+def upsert_case_escalation(*, runs_dir: Path, run_id: str, row_index: int, fields: dict) -> dict:
+    """Deck p.12: a suspected criminal case is prepared, never decided, by the system."""
+    now = _now_ts()
+    with _connect(runs_dir) as conn:
+        conn.execute(
+            """
+            INSERT INTO case_escalations (
+                case_id, run_id, row_index, source_ref, snapshot_text, known_dates, context,
+                fact_summary, legal_decision, forward_channel, confirmation, escalated_by, escalated_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(case_id) DO UPDATE SET
+                source_ref=COALESCE(excluded.source_ref, case_escalations.source_ref),
+                snapshot_text=COALESCE(excluded.snapshot_text, case_escalations.snapshot_text),
+                known_dates=COALESCE(excluded.known_dates, case_escalations.known_dates),
+                context=COALESCE(excluded.context, case_escalations.context),
+                fact_summary=COALESCE(excluded.fact_summary, case_escalations.fact_summary),
+                legal_decision=COALESCE(excluded.legal_decision, case_escalations.legal_decision),
+                forward_channel=COALESCE(excluded.forward_channel, case_escalations.forward_channel),
+                confirmation=COALESCE(excluded.confirmation, case_escalations.confirmation),
+                escalated_by=COALESCE(excluded.escalated_by, case_escalations.escalated_by),
+                updated_at=excluded.updated_at
+            """,
+            (
+                fields["case_id"], run_id, row_index,
+                str(fields.get("source_ref") or "") or None,
+                str(fields.get("snapshot_text") or "") or None,
+                str(fields.get("known_dates") or "") or None,
+                str(fields.get("context") or "") or None,
+                str(fields.get("fact_summary") or "") or None,
+                str(fields.get("legal_decision") or "") or None,
+                str(fields.get("forward_channel") or "") or None,
+                str(fields.get("confirmation") or "") or None,
+                str(fields.get("escalated_by") or "") or None,
+                str(fields.get("escalated_at") or now),
+                now,
+            ),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM case_escalations WHERE case_id = ?", (fields["case_id"],)).fetchone()
+    return dict(row) if row else {}
+
+
+def list_case_escalations(*, runs_dir: Path, run_id: str) -> list[dict]:
+    with _connect(runs_dir) as conn:
+        rows = conn.execute(
+            "SELECT * FROM case_escalations WHERE run_id = ? ORDER BY escalated_at ASC", (run_id,)
+        ).fetchall()
+    return [dict(row) for row in rows]
 
 
 def claim_next_segment(*, runs_dir: Path, run_id: str, worker_id: str) -> dict | None:

@@ -328,6 +328,7 @@ def _checkpoint_rows_to_canonical(*, checkpoint_path: Path) -> list[dict]:
                 "row_index": row_index,
                 "row_hash": str(payload.get("row_hash") or ""),
                 "assigned_category": str(result.get("category") or ""),
+            "secondary_category": str(result.get("secondary_category") or "") or None,
                 "confidence_score": result.get("confidence"),
                 "explanation": str(result.get("explanation") or ""),
                 "flags": flags,
@@ -1089,6 +1090,57 @@ def _review_priority(row: dict) -> tuple:
         score -= 50
     confidence = float(row.get("confidence_score") or 0)
     return (score, confidence, -int(row.get("row_index") or 0))
+
+
+def set_run_sla(*, runs_dir: Path, run_id: str,
+                intake_deadline_utc: str | None = None,
+                delivery_deadline_utc: str | None = None) -> dict:
+    """Record the daily-batch SLA on the run (deck p.8). Deadlines are ISO-8601 UTC strings."""
+    record_path = runs_dir / run_id / "run_record.json"
+    record = safe_read_json(record_path) or {}
+    if record.get("run_id") != run_id:
+        record["run_id"] = run_id
+    sla = dict(record.get("sla") or {})
+    if intake_deadline_utc:
+        sla["intake_deadline_utc"] = intake_deadline_utc
+    if delivery_deadline_utc:
+        sla["delivery_deadline_utc"] = delivery_deadline_utc
+    sla["set_by"] = "operator"
+    record["sla"] = sla
+    record_path.parent.mkdir(parents=True, exist_ok=True)
+    record_path.write_text(json.dumps(record, indent=2, ensure_ascii=False))
+    return {"run_id": run_id, "sla": sla}
+
+
+def run_sla_status(*, runs_dir: Path, run_id: str) -> dict | None:
+    """Compute SLA status: pending while within deadline, missed once the deadline passed incomplete."""
+    import datetime as _datetime
+
+    record = resolve_run_record(runs_dir=runs_dir, run_id=run_id)
+    if not record:
+        return None
+    sla = record.get("sla") or {}
+    delivery = sla.get("delivery_deadline_utc")
+    state = str(record.get("state") or "")
+    completed = state in {"COMPLETED", "CANCELLED", "FAILED"}
+    status = "pending"
+    if delivery:
+        try:
+            deadline = _datetime.datetime.fromisoformat(delivery.replace("Z", "+00:00"))
+            now = _datetime.datetime.now(_datetime.timezone.utc)
+            if completed:
+                status = "delivered" if now <= deadline else "missed"
+            elif now > deadline:
+                status = "missed"
+        except ValueError:
+            status = "pending"
+    return {
+        "run_id": run_id,
+        "state": state,
+        "intake_deadline_utc": sla.get("intake_deadline_utc"),
+        "delivery_deadline_utc": delivery,
+        "status": status,
+    }
 
 
 def build_review_queue(

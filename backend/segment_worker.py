@@ -41,6 +41,8 @@ CURRENT_CHILD: subprocess.Popen[str] | None = None
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="{spot} background segment worker")
     parser.add_argument("--run-id", required=True)
+    parser.add_argument("--worker-id", default=None,
+                        help="distinct identity for parallel workers claiming segments")
     parser.add_argument("--upload-id", required=True)
     parser.add_argument("--input", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
@@ -516,7 +518,8 @@ def main() -> int:
         while True:
             if STOP_REQUESTED:
                 raise KeyboardInterrupt("stop requested")
-            segment = claim_next_segment(runs_dir=args.runs_dir, run_id=args.run_id, worker_id=args.run_id)
+            segment = claim_next_segment(runs_dir=args.runs_dir, run_id=args.run_id,
+                                        worker_id=args.worker_id or args.run_id)
             if not segment:
                 break
 
@@ -802,6 +805,14 @@ def main() -> int:
                 )
             if segment_output_path.exists():
                 merge_segment_output(segment_output_path, args.output)
+
+        # With parallel workers only one process may finalize the run; the lock file is the arbiter.
+        finalize_lock = run_dir / ".finalize.lock"
+        try:
+            _fd = os.open(finalize_lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.close(_fd)
+        except FileExistsError:
+            return 0
 
         segment_reports, disagreement_rows, first_policy_path = _collect_segment_artifacts(segments_dir)
         if first_policy_path and first_policy_path.exists():

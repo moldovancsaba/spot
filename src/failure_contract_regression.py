@@ -223,6 +223,37 @@ class FailureContractRegressionTests(unittest.TestCase):
                        "soft_signal_score": 0.0, "soft_signal_flags": [], "soft_signal_evidence": []})
         self.assertIsNone(junk.secondary_category)
 
+    def test_calibrated_confidence_replaces_self_reported_prior(self):
+        """Thresholds need real confidence; the calibration table supplies measured per-lane precision."""
+        import json
+        import os
+        import tempfile
+        from unittest.mock import patch as _patch
+
+        from src.calibration import calibrated_confidence, load_calibration
+        from src.classifier import _parse_classification
+
+        table = {"schema": "spot.calibration.v1", "lanes": {"ollama:mock": {"Anti-Israel": 0.62, "Not Antisemitic": 0.88}}}
+        with tempfile.TemporaryDirectory() as td:
+            path = td + "/cal.json"
+            with open(path, "w") as fh:
+                json.dump(table, fh)
+            with _patch.dict(os.environ, {"SPOT_CALIBRATION_PATH": path}):
+                loaded = load_calibration()
+                value, applied = calibrated_confidence("ollama:mock", "Anti-Israel", 0.9, loaded)
+                self.assertEqual(value, 0.62)
+                self.assertTrue(applied)
+                value, applied = calibrated_confidence("ollama:mock", "Conspiracy Theories", 0.9, loaded)
+                self.assertEqual(value, 0.9)
+                self.assertFalse(applied)
+
+                result = _parse_classification(
+                    {"category": "Anti-Israel", "confidence": 0.9, "explanation": "x", "flags": [],
+                     "soft_signal_score": 0.0, "soft_signal_flags": [], "soft_signal_evidence": []},
+                    "Synthetic post.", SSOT, "ollama", "mock")
+                self.assertEqual(result.confidence, 0.62)
+                self.assertIn("CALIBRATED_CONFIDENCE", result.flags)
+
     def test_missing_invalid_and_null_categories_cannot_become_unreviewed_negatives(self):
         for category in ('missing', None, '', 'invalid-label', [], {}):
             for mode in ('full', 'partial', 'none'):

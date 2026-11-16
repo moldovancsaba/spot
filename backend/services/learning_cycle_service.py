@@ -191,6 +191,57 @@ def list_cycles(*, runs_dir: Path, run_id: str, limit: int = 50) -> list[dict]:
     return [json.loads(line) for line in lines[-max(1, min(limit, 500)):]]
 
 
+def approve_cycle(*, runs_dir: Path, run_id: str, cycle_id: str, approver: str, decision: str,
+                  notes: str = "") -> dict:
+    """TEV pattern approval (deck p.9): the professional owner decides; the system records and awaits
+    before/after verification before anything is adopted."""
+    if decision not in {"approved", "rejected", "pending"}:
+        raise ValueError("decision must be approved, rejected or pending")
+    directory = runs_dir / run_id / "learning"
+    directory.mkdir(parents=True, exist_ok=True)
+    approval = {
+        "cycle_id": cycle_id,
+        "approver": approver,
+        "decision": decision,
+        "notes": notes,
+        "approved_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "verification": None,
+    }
+    with (directory / "approvals.jsonl").open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(approval, ensure_ascii=False) + "\n")
+    return approval
+
+
+def verify_cycle(*, runs_dir: Path, run_id: str, cycle_id: str, before_metrics: dict,
+                 after_metrics: dict, sample_size: int, verified_by: str) -> dict:
+    """Record the before/after measurement on the approved sample (deck p.9). No metrics, no adoption."""
+    directory = runs_dir / run_id / "learning"
+    verification = {
+        "cycle_id": cycle_id,
+        "before_metrics": before_metrics,
+        "after_metrics": after_metrics,
+        "sample_size": int(sample_size),
+        "verified_by": verified_by,
+        "verified_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+    path = directory / "approvals.jsonl"
+    lines = [json.loads(line) for line in path.read_text().splitlines() if line.strip()] if path.is_file() else []
+    for approval in reversed(lines):
+        if approval.get("cycle_id") == cycle_id:
+            approval["verification"] = verification
+            break
+    path.write_text("\n".join(json.dumps(line, ensure_ascii=False) for line in lines) + ("\n" if lines else ""))
+    return verification
+
+
+def list_approvals(*, runs_dir: Path, run_id: str, limit: int = 50) -> list[dict]:
+    path = runs_dir / run_id / "learning" / "approvals.jsonl"
+    if not path.is_file():
+        return []
+    lines = [line for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    return [json.loads(line) for line in lines[-max(1, min(limit, 500)):]]
+
+
 def runs_with_rows(*, runs_dir: Path, limit: int = 5) -> list[str]:
     """Most recent runs that actually carry canonical rows, newest first."""
     from backend.services.ops_db_service import _connect
