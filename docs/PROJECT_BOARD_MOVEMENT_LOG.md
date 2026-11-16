@@ -126,3 +126,20 @@ A destination is a proposal, never an executed move. Historical closed cards sta
 Read the issue and actual board before each future proposal. Retain previous observations when a decision changes. Record execution only after the owner performs it and the result is read back. Documentation rollback requires no product or board rollback.
 
 Verification limitation: the environment emitted a Starlette httpx deprecation warning; target-machine native/inference/client acceptance was not run. No app source changed.
+
+## 2026-11-16 — Owner-authorized board update (TEV implementation plan)
+
+The standing rule above ("board is read-only, never add cards") is superseded for this one action by the
+owner's direct instruction of 2026-11-16: "all issues updated on the gh repository project board" as part of
+the TEV implementation planning.
+
+Automated, scripted addition (not manual movement of existing cards):
+
+- 23 new issues created in `moldovancsaba/spot`: #85–#107 (T01–T23), titles prefixed `[TEV]`.
+- Labels: `epic` for T01/T05/T10/T14/T16/T18/T21; `feature` for the rest.
+- All 23 added to board #5 and set to `Todo (NEXT)`. No existing card was moved, reordered, edited or closed.
+- Source of truth for the plan: `docs/IMPLEMENTATION_PLAN_TEV_2026-11-16.md` (committed same day; contains the
+  full measured current state, the decision log D1–D5, phases M0–M4, risks, non-goals and the issue map).
+
+Review of existing cards performed in this pass: none moved. This section is the audit record of the
+addition; the per-card register above is unchanged.
