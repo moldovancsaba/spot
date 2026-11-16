@@ -1,0 +1,46 @@
+{
+  "schema": "spot.calibration.v1",
+  "measured_rows": 102,
+  "measured_at": "2026-11-16T19:34:54Z",
+  "lanes": {
+    "mlx:mlx-community/Apertus-8B-Instruct-2509-4bit": {
+      "binary": {
+        "precision": 0.578,
+        "recall": 0.981
+      },
+      "Anti-Israel": 0.9,
+      "Anti-Judaism": 0.5,
+      "Holocaust Denial": 0.0,
+      "Classical Antisemitism": 0.5,
+      "Structural Antisemitism": 0.0,
+      "Conspiracy Theories": 0.273,
+      "Not Antisemitic": 0.224
+    },
+    "ollama:qwen2.5:7b": {
+      "binary": {
+        "precision": 0.653,
+        "recall": 0.925
+      },
+      "Anti-Israel": 0.733,
+      "Anti-Judaism": 0.625,
+      "Holocaust Denial": 1.0,
+      "Classical Antisemitism": 0.0,
+      "Structural Antisemitism": 0.0,
+      "Conspiracy Theories": 0.182,
+      "Not Antisemitic": 0.449
+    },
+    "ollama:gemma2:9b": {
+      "binary": {
+        "precision": 0.576,
+        "recall": 1.0
+      },
+      "Anti-Israel": 0.833,
+      "Anti-Judaism": 0.25,
+      "Holocaust Denial": 1.0,
+      "Classical Antisemitism": 0.5,
+      "Structural Antisemitism": 0.0,
+      "Conspiracy Theories": 0.636,
+      "Not Antisemitic": 0.204
+    }
+  }
+}
