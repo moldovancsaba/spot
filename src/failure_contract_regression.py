@@ -366,8 +366,10 @@ class FailureContractRegressionTests(unittest.TestCase):
         self.assertNotIn('private data', str(checks))
 
     def test_partial_mode_completes_confident_clean_analysis_without_drafter_calls(self):
+        import os
         response = {'category':'Not Antisemitic','confidence':.99,'explanation':'Synthetic clear analysis','flags':[], 'soft_signal_score':0,'soft_signal_flags':[],'soft_signal_evidence':[]}
-        with patch('src.classifier._generate_json',return_value=response) as generate:
+        with patch.dict(os.environ, {'SPOT_CALIBRATION_PATH': '/nonexistent/calibration.json'}), \
+                patch('src.classifier._generate_json',return_value=response) as generate:
             result = classify_row(InputRow(2,'synthetic','Das  Wetter ist sonnig.'),SSOT,'partial')
         self.assertEqual(generate.call_count,1)
         self.assertNotIn('REVIEW_REQUIRED',result.flags)
