@@ -16,6 +16,8 @@
 | D3 | Adopt the **TEV seven-category taxonomy**, starting with it; more categories can be added later. | Contract change: SSOT, prompts, training data, deterministic fallback, tests, DB columns, UI. |
 | D4 | "Even unanimous model proposals can be wrong" is accepted and managed as part of the system. | Keep and extend QA sampling of unanimous and "Not antisemitic" rows; never claim certainty from agreement alone. |
 | D5 | No code or process changes until the demo completes; this plan is the preparation artifact. | All work is documented planning + GitHub issues until implementation is started. |
+| D6 | **Parallel workers committed.** Go for parallel segment workers; capacity is grown, not argued about. | T16/T17 are the committed approach with an explicit memory budget and capacity model; the SLA volume target follows from the worker count. |
+| D7 | **The trinity lane models are never final.** Always search for the best possible, more trustworthy model for each lane and language; promote only on measured gate improvement. | A standing model-advancement program (T24/T25): per-language candidate bakeoffs, gate-gated promotion, recorded rollback to the previous model. |
 
 ---
 
@@ -144,9 +146,9 @@ Design consequences:
 |---|---|---|
 | R1 | Taxonomy migration invalidates the existing German reference, adapter and the in-flight 62k run. | Contract-first migration (§8 M1): migrate SSOT + prompts + tests before touching labels; re-label only the Holocaust-denial split (11 Classical rows in the held-out set, plus a review of all 300); keep the 6-category run as historical evidence until its purpose is served. |
 | R2 | Unanimity routing can increase misses (rows both models get wrong silently). | D4 stands: sampled verification of unanimous + "Not antisemitic" rows is mandatory, deterministic, and measured; the miss rate is reported per cycle, never assumed zero. |
-| R3 | SLA cannot be met on one worker. | Capacity model first (§8 M3): agreed daily volume vs measured per-row cost; parallel segment workers with a memory budget, or an explicit GPU/hardware decision with TEV. |
+| R3 | SLA cannot be met on one worker. | Parallel workers are committed (D6): N workers over disjoint segments with a memory budget; the capacity model translates worker count into agreed daily volume. |
 | R4 | Hungarian quality unproven. | Hungarian double-annotated gold set + the same 102-row-style acceptance gate before any production claim; language separation enforced by intake (D1). |
-| R5 | Model candidates in the deck are placeholders ("models are not final"). | The trinity architecture is model-agnostic; lanes are configured per language and swapped only through the recorded candidate-promotion process (existing governance + learning registry). |
+| R5 | Model candidates in the deck are placeholders ("models are not final"). | D7 makes this a feature, not a risk: lanes are model-agnostic, and a standing bakeoff program per language promotes candidates only on measured gate improvement, with the previous model kept for rollback. |
 | R6 | Demo continuity. | Nothing in this plan touches code or runtime; the current supervised run and app remain exactly as they are until implementation starts. |
 
 ---
@@ -199,8 +201,10 @@ Issues live on the `{spot}` board (#5) with labels `epic` / `feature`. Native Gi
 |---|---|---|
 | T14 | [TEV] Language foundation: per-language gold standards, Hungarian acceptance gate (epic) | T03 |
 | T15 | [TEV] Hungarian: double-annotated gold set with kappa and adjudication records | T14 |
-| T16 | [TEV] Throughput: parallel segment workers with memory budget and SLA capacity model (epic) | — |
+| T16 | [TEV] Throughput: parallel segment workers with memory budget and SLA capacity model (epic, **committed per D6**) | — |
 | T17 | [TEV] SLA: 10:00 intake → next-business-day 12:00 batch runner | T16 |
+| T24 | [TEV] Model advancement: continuous candidate bakeoff and promotion per lane and language (epic, **per D7**) | T13 |
+| T25 | [TEV] Bakeoff harness: per-language candidate evaluation with promotion and rollback | T24 |
 
 ### M4 — TEV operations and handover
 
@@ -221,6 +225,14 @@ Issues live on the `{spot}` board (#5) with labels `epic` / `feature`. Native Gi
 4. **Hungarian gate:** Hungarian gold set passes the same acceptance standard as the German set (double annotation, kappa, adjudication) before any Hungarian production claim.
 5. **SLA gate:** a full dry-run daily batch (intake → delivery package) completes inside the 26-hour window at agreed volume.
 6. **Operations gate:** backup + restore drill passes; access log demonstrable; escalation record end-to-end without any legal decision made by the system.
+
+---
+
+### Acceptance gates (recall note for D-decision "a")
+
+The disagreement-driven review policy (T10) is accepted **because** it ships only behind the miss-rate gate
+(T09/T13): cleared rows are sampled deterministically, the miss rate is measured and reported every cycle,
+and adoption is reversible through `SPOT_REVIEW_POLICY`. The system fails measurably, never silently.
 
 ---
 
@@ -269,5 +281,7 @@ All issues are on the `{spot} - From IDEA to LIVE` board (#5) with status `Todo 
 | T21 | Learning: TEV-approved pattern updates with before/after verification (epic) | [#105](https://github.com/moldovancsaba/spot/issues/105) |
 | T22 | Operations: access logging, backup/restore drill, closed-channel operation | [#106](https://github.com/moldovancsaba/spot/issues/106) |
 | T23 | App: trinity vote display and handover export controls | [#107](https://github.com/moldovancsaba/spot/issues/107) |
+| T24 | Model advancement: continuous candidate bakeoff and promotion per lane and language (epic, D7) | [#108](https://github.com/moldovancsaba/spot/issues/108) |
+| T25 | Bakeoff harness: per-language candidate evaluation with promotion and rollback | [#109](https://github.com/moldovancsaba/spot/issues/109) |
 
 Board URL: https://github.com/users/moldovancsaba/projects/5
