@@ -7,6 +7,8 @@ from .defaults import (
     DEFAULT_CLASSIFIER_FALLBACK_BACKEND,
     DEFAULT_CLASSIFIER_FALLBACK_MODEL,
     DEFAULT_CLASSIFIER_MODEL,
+    DEFAULT_CLASSIFIER_TERTIARY_BACKEND,
+    DEFAULT_CLASSIFIER_TERTIARY_MODEL,
     DEFAULT_DRAFTER_BACKEND,
     DEFAULT_DRAFTER_FALLBACK_BACKEND,
     DEFAULT_DRAFTER_FALLBACK_MODEL,
@@ -24,6 +26,8 @@ class LaneConfig:
     classifier_model: str
     classifier_fallback_backend: str
     classifier_fallback_model: str
+    classifier_tertiary_backend: str
+    classifier_tertiary_model: str
     drafter_backend: str
     drafter_model: str
     drafter_fallback_backend: str
@@ -91,6 +95,8 @@ def load_lane_config() -> LaneConfig:
         classifier_model=DEFAULT_CLASSIFIER_MODEL,
         classifier_fallback_backend=DEFAULT_CLASSIFIER_FALLBACK_BACKEND,
         classifier_fallback_model=DEFAULT_CLASSIFIER_FALLBACK_MODEL,
+        classifier_tertiary_backend=DEFAULT_CLASSIFIER_TERTIARY_BACKEND,
+        classifier_tertiary_model=DEFAULT_CLASSIFIER_TERTIARY_MODEL,
         drafter_backend=DEFAULT_DRAFTER_BACKEND,
         drafter_model=DEFAULT_DRAFTER_MODEL,
         drafter_fallback_backend=DEFAULT_DRAFTER_FALLBACK_BACKEND,

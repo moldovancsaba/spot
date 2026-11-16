@@ -36,6 +36,16 @@ DEFAULT_CLASSIFIER_FALLBACK_MODEL = _env(
     "SPOT_ROUTE_CLASSIFIER_FALLBACK_MODEL",
     _DEFAULT_SSOT.runtime.classifier.fallback_model if _DEFAULT_SSOT else "qwen2.5:7b",
 ) or (_DEFAULT_SSOT.runtime.classifier.fallback_model if _DEFAULT_SSOT else "qwen2.5:7b")
+DEFAULT_CLASSIFIER_TERTIARY_BACKEND = _env(
+    "SPOT_ROUTE_CLASSIFIER_TERTIARY_BACKEND",
+    None,
+    "ollama",
+)
+DEFAULT_CLASSIFIER_TERTIARY_MODEL = _env(
+    "SPOT_ROUTE_CLASSIFIER_TERTIARY_MODEL",
+    None,
+    "gemma2:9b",
+)
 DEFAULT_DRAFTER_BACKEND = _env(
     "SPOT_ROUTE_DRAFTER_BACKEND",
     _DEFAULT_SSOT.runtime.drafter.backend if _DEFAULT_SSOT else "ollama",

@@ -651,6 +651,15 @@ def _alternate_classifier_route(model_name: str = ""):
     return fallback_route, True
 
 
+def _tertiary_classifier_route(model_name: str = ""):
+    primary_route = parse_model_spec(model_name, LANES.classifier_backend, LANES.classifier_model)
+    secondary_route = parse_model_spec("", LANES.classifier_fallback_backend, LANES.classifier_fallback_model)
+    tertiary_route = parse_model_spec("", LANES.classifier_tertiary_backend, LANES.classifier_tertiary_model)
+    if tertiary_route.version in {primary_route.version, secondary_route.version}:
+        return tertiary_route, False
+    return tertiary_route, True
+
+
 def _judge_rank(verdict: str | None) -> int:
     if verdict == "PASS":
         return 2
@@ -826,6 +835,132 @@ def _can_resolve_consensus(initial, alternate, judge_score, verdict, judge_flags
     return verdict == 'PASS' and judge_score is not None and math.isfinite(judge_score) and judge_score >= .85 and not judge_flags
 
 
+def _build_deliberation_prompt(text: str, proposals: List[tuple[str, str, str]], ssot: SSOT) -> str:
+    """The deck justification round: each lane re-reads the source plus the other lanes proposals."""
+    lines = ["DELIBERATION_CONTEXT: three independent evaluators assessed the same source post."]
+    for index, (category, explanation, model_version) in enumerate(proposals, 1):
+        lines.append(
+            f"Evaluator {index} ({model_version}) proposed {category!r} because: "
+            + (explanation[:400] if explanation else "no explanation recorded.")
+        )
+    lines.append(
+        "Re-assess the source post on its own merits. Consider each evaluator argument, then return YOUR OWN "
+        "final category for the author expressed position. You are not bound by the proposals."
+    )
+    base = _build_prompt(text, ssot.taxonomy.categories, ssot.taxonomy.fallback_category, ssot.policy.soft_signal_flags)
+    return base + "\n" + "\n".join(lines)
+
+
+def _classify_deliberation(text: str, ssot: SSOT, lane_version: str, proposals: List[tuple[str, str, str]]) -> ClassificationResult:
+    backend, model_name = lane_version.split(":", 1)
+    prompt = _build_deliberation_prompt(text, proposals, ssot)
+    obj = _generate_json(backend, model_name, prompt)
+    return _parse_classification(obj, text, ssot, backend, model_name)
+
+
+def _adjudicate_trinity(
+    row: InputRow,
+    primary: ClassificationResult,
+    ssot: SSOT,
+    review_mode: str,
+    model_name: str = "",
+) -> ClassificationResult:
+    """Three independent evaluators, justification round, re-vote; unanimity closes, disagreement reviews."""
+    text = row.post_text.strip()
+    if not text:
+        return primary
+    drafted_text = primary.drafted_text or text
+
+    lanes: List[ClassificationResult] = [primary]
+    for route, used in (_alternate_classifier_route(model_name), _tertiary_classifier_route(model_name)):
+        if not used:
+            continue
+        try:
+            lane = _classify_with_backend(drafted_text, ssot, backend=route.backend, model_name=route.model_name)
+            lanes.append(_normalize_backend_result(row=row, drafted_text=drafted_text, result=lane, text=text))
+        except Exception:
+            pass
+
+    flags: List[str] = list(primary.flags or []) + ["TRINITY_EVALUATED"]
+    votes = dict(primary.model_votes or {})
+    for lane in lanes[1:]:
+        if lane.resolved_model_version:
+            votes[lane.resolved_model_version] = lane.category
+    categories = [lane.category for lane in lanes]
+    proposals = [(lane.category, lane.explanation or "", lane.resolved_model_version or "") for lane in lanes]
+
+    unanimous = len(lanes) >= 3 and len(set(categories)) == 1
+    re_votes: List[dict | None] = []
+    if unanimous:
+        flags.append("TRINITY_UNANIMOUS")
+        final_category = categories[0]
+    else:
+        for lane in lanes:
+            if not lane.resolved_model_version:
+                re_votes.append(None)
+                continue
+            try:
+                re_vote = _classify_deliberation(drafted_text, ssot, lane.resolved_model_version, proposals)
+                re_votes.append({"model": lane.resolved_model_version, "category": re_vote.category,
+                                 "explanation": re_vote.explanation or ""})
+            except Exception:
+                re_votes.append(None)
+        revote_categories = [vote["category"] for vote in re_votes if vote]
+        if len(revote_categories) >= 3 and len(set(revote_categories)) == 1:
+            flags.append("TRINITY_REVOTE_UNANIMOUS")
+            final_category = revote_categories[0]
+        else:
+            flags.append("TRINITY_DISAGREEMENT")
+            flags.append("REVIEW_REQUIRED")
+            final_category = _majority_category(categories)
+
+    judge_score, judge_verdict, judge_flags = run_judge(text=text, category=final_category, flags=sorted(set(flags)))
+    if judge_verdict in {"REVIEW", "FAIL"}:
+        flags.append("REVIEW_REQUIRED")
+
+    agreeing = [lane.confidence for lane in lanes if lane.category == final_category]
+    trace = dict(primary.audit_trace or {})
+    trace["trinity"] = {
+        "policy": "trinity-v1",
+        "lanes": len(lanes),
+        "initial_proposals": [{"model": prop[2], "category": prop[0]} for prop in proposals],
+        "re_votes": re_votes,
+        "unanimous": bool(unanimous),
+        "final_category": final_category,
+    }
+
+    result = ClassificationResult(
+        row_index=primary.row_index,
+        raw_category=final_category,
+        category=final_category,
+        confidence=min(agreeing) if agreeing else primary.confidence,
+        explanation=next((lane.explanation for lane in lanes if lane.category == final_category), primary.explanation),
+        flags=sorted(set(flags)),
+        soft_signal_score=max((lane.soft_signal_score or 0.0) for lane in lanes),
+        soft_signal_flags=sorted(set(f for lane in lanes for f in (lane.soft_signal_flags or []))),
+        soft_signal_evidence=list(dict.fromkeys(e for lane in lanes for e in (lane.soft_signal_evidence or [])))[:MAX_SOFT_SIGNAL_EVIDENCE],
+        resolved_model_version=primary.resolved_model_version,
+        model_votes=votes,
+        consensus_tier="TRINITY_UNANIMOUS" if unanimous else ("TRINITY_REVOTE_UNANIMOUS" if "TRINITY_REVOTE_UNANIMOUS" in flags else "TRINITY_DISAGREEMENT"),
+        minority_label=next((lane.category for lane in lanes if lane.category != final_category), None),
+        drafted_text=drafted_text,
+        judge_score=judge_score,
+        judge_verdict=judge_verdict,
+        fallback_events=sorted(set((primary.fallback_events or []) + [e for lane in lanes[1:] for e in (lane.fallback_events or [])])),
+        audit_trace=trace,
+        secondary_category=next((lane.secondary_category for lane in lanes if lane.category == final_category), primary.secondary_category),
+    )
+    return _apply_review_mode(result, ssot, review_mode)
+
+
+def _majority_category(categories: List[str]) -> str:
+    if not categories:
+        return "Not Antisemitic"
+    from collections import Counter
+
+    return Counter(categories).most_common(1)[0][0]
+
+
 def _apply_review_mode(result: ClassificationResult, ssot: SSOT, review_mode: str) -> ClassificationResult:
     result = enforce_result_safety(result)
     flags = list(result.flags)
@@ -964,6 +1099,8 @@ def classify_batch(
 
     def classify_one(row: InputRow) -> ClassificationResult:
         initial_result = classify_row(row, ssot, review_mode, model_name)
+        if review_mode == "trinity":
+            return _adjudicate_trinity(row, initial_result, ssot, review_mode, model_name)
         return _adjudicate_targeted_row(row, initial_result, ssot, review_mode, model_name)
 
     with ThreadPoolExecutor(max_workers=max_workers) as pool:

@@ -28,7 +28,8 @@
     "review_modes": [
       "full",
       "partial",
-      "none"
+      "none",
+      "trinity"
     ],
     "low_confidence_threshold": 0.65,
     "soft_signal_review_threshold": 0.35,
@@ -45,7 +46,9 @@
       "backend": "mlx",
       "model": "mlx-community/Apertus-8B-Instruct-2509-4bit",
       "fallback_backend": "ollama",
-      "fallback_model": "qwen2.5:7b"
+      "fallback_model": "qwen2.5:7b",
+      "third_backend": "ollama",
+      "third_model": "gemma2:9b"
     },
     "drafter": {
       "backend": "ollama",

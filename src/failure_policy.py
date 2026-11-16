@@ -7,7 +7,7 @@ ANALYSIS_FAILURE_FLAGS = frozenset({
 MANDATORY_REVIEW_FLAGS = ANALYSIS_FAILURE_FLAGS | frozenset({
     "AMBIGUOUS", "MISSING_CONTEXT", "UNCLEAR_CONTEXT", "CLASSIFIER_FALLBACK", "UNSTRUCTURED_MODEL_OUTPUT", "DRAFTER_UNAVAILABLE",
     "UNGROUNDED_MODEL_SIGNAL", "DRAFTER_FALLBACK", "SECOND_PASS_UNAVAILABLE", "JUDGE_UNAVAILABLE",
-    "SECOND_PASS_CATEGORY_OVERRIDDEN", "DRAFTER_CONTENT_CHANGED", "INVALID_MODEL_METADATA",
+    "SECOND_PASS_CATEGORY_OVERRIDDEN", "DRAFTER_CONTENT_CHANGED", "INVALID_MODEL_METADATA", "TRINITY_DISAGREEMENT",
 })
 
 
@@ -103,9 +103,24 @@ def audit_sample_percent() -> int:
     return max(0, min(value, 100))
 
 
-def audit_sampled(*, source_sha256: str | None, row_index: int) -> bool:
+def audit_unanimous_percent() -> int:
+    """Audit rate for rows closed by trinity unanimity.
+
+    A unanimous model verdict is exactly the case the TEV deck warns about ("even unanimous proposals can
+    be wrong"), so its stratum can be sampled independently of the generic cleared-row sample.
+    """
+    import os
+
+    try:
+        value = int(os.getenv("SPOT_AUDIT_UNANIMOUS_PCT", "10") or "0")
+    except ValueError:
+        return 0
+    return max(0, min(value, 100))
+
+
+def audit_sampled(*, source_sha256: str | None, row_index: int, rate: int | None = None) -> bool:
     """Deterministic audit selection, stable across reruns of the same row."""
-    pct = audit_sample_percent()
+    pct = audit_sample_percent() if rate is None else rate
     if pct <= 0 or not source_sha256:
         return False
     import hashlib
@@ -128,6 +143,28 @@ def enforce_result_safety(result):
     suspicious = requires_safety_review(flags, result.fallback_events) or any_positive_analysis(result)
     certificate = mode != "all" and validated_auto_consensus(result)
 
+    if "TRINITY_EVALUATED" in flags and mode != "all":
+        # Trinity routing: unanimity (possibly after the justification round) closes; disagreement reaches
+        # a human. Unanimous positives close too - the deck reviews disagreements, not findings.
+        if "TRINITY_DISAGREEMENT" in flags or (flags & MANDATORY_REVIEW_FLAGS) or result.fallback_events:
+            flags.add("REVIEW_REQUIRED")
+        else:
+            flags.discard("REVIEW_REQUIRED")
+            trace = getattr(result, "audit_trace", None) or {}
+            source_key = trace.get("source_sha256")
+            if source_key is None:
+                import hashlib as _hashlib
+
+                drafted = getattr(result, "drafted_text", None) or ""
+                source_key = _hashlib.sha256(drafted.encode()).hexdigest() if drafted else None
+            unanimous = {"TRINITY_UNANIMOUS", "TRINITY_REVOTE_UNANIMOUS"} & flags
+            rate = audit_unanimous_percent() if unanimous else audit_sample_percent()
+            if audit_sampled(source_sha256=source_key, row_index=getattr(result, "row_index", 0), rate=rate):
+                flags.add("REVIEW_REQUIRED")
+                flags.add("AUDIT_SAMPLE")
+                flags.add("AUDIT_STRATUM_UNANIMOUS" if unanimous else "AUDIT_STRATUM_CLEARED")
+        result.flags = sorted(flags)
+        return result
     if mode == "all":
         flags.add("REVIEW_REQUIRED")
     elif suspicious:

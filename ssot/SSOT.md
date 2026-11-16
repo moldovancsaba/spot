@@ -76,6 +76,21 @@ always follow the primary category.
 Historical rows keep their recorded v0.1 values and are not rewritten. The accepted reference was re-labelled
 (2026-11-16) so that denial rows carry `Holocaust Denial`; see `docs/evaluation/goldset_2026-11-16.jsonl`.
 
+## 5a. Trinity review mode (trinity-v1)
+
+`review_mode: trinity` runs three independent evaluator lanes (primary, fallback and tertiary from
+`runtime.classifier.*`), compares their proposals and, on any disagreement, runs one justification round in
+which every lane re-reads the source plus the other lanes' proposals and re-votes.
+
+- Unanimity, either immediate (`TRINITY_UNANIMOUS`) or after the round (`TRINITY_REVOTE_UNANIMOUS`), closes
+  the row — including unanimous positive findings.
+- A split that survives the round (`TRINITY_DISAGREEMENT`) routes to human review; it is a mandatory review
+  flag in every policy mode.
+- The judge still validates the final category; a judge `REVIEW`/`FAIL` sends the row to review.
+- Closed unanimous rows are subject to their own deterministic audit stratum
+  (`SPOT_AUDIT_UNANIMOUS_PCT`, default 10): even unanimous proposals can be wrong.
+- `SPOT_DISABLE_AUTO_CLEAR=1` still forces every row to review, overriding trinity closing.
+
 ## 6. Runtime Policy
 
 Primary classifier route:
