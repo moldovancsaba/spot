@@ -6,9 +6,12 @@ from typing import Literal, List
 
 CANONICAL_INPUT_SCHEMA_VERSION = "spot.input-row.v1alpha1"
 
+# Closed seven-category set per the TEV consultation (2026-11-16). Order preserved from the TEV guide.
+# "Holocaust Denial" is a first-class category; denial/relativization takes priority over Classical.
 CANONICAL_CATEGORIES = {
     "Anti-Israel",
     "Anti-Judaism",
+    "Holocaust Denial",
     "Classical Antisemitism",
     "Structural Antisemitism",
     "Conspiracy Theories",
@@ -66,6 +69,7 @@ class ClassificationResult:
     judge_verdict: str | None = None
     fallback_events: List[str] | None = None
     audit_trace: dict | None = None
+    secondary_category: str | None = None
 
 
 @dataclass(frozen=True)

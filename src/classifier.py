@@ -115,7 +115,8 @@ def _build_prompt(text: str, categories: List[str], fallback: str, soft_signal_f
         "Distinguish endorsement from news reporting, quotation, condemnation, counterspeech and ordinary political criticism. "
         "Anti-Israel: antisemitic hostility expressed through Israel or Zionism, not ordinary criticism of a government or military policy. "
         "Anti-Judaism: hostility towards Jewish religion or religious identity. "
-        "Classical Antisemitism: anti-Jewish slurs, racial hatred, Nazi praise, Holocaust denial or minimization. "
+        "Holocaust Denial: denial, minimization or relativization of the Holocaust. When denial or relativization is present it takes priority over every other category. "
+        "Classical Antisemitism: anti-Jewish slurs, racial hatred or Nazi praise without a Holocaust-denial claim. "
         "Structural Antisemitism: discriminatory exclusion or systematic unequal treatment of Jews. "
         "Conspiracy Theories: claims of secret Jewish or coded Jewish control, manipulation or collective plots. "
         "Not Antisemitic: no supported antisemitic position expressed by the author. If context is missing, lower confidence instead of inventing it. "
@@ -173,8 +174,9 @@ def _response_schema(prompt: str) -> dict:
     if '"judge_flags"' in prompt.split('SOURCE_POST_JSON:',1)[0]:
         properties = {"score": number, "verdict": {"type":"string","enum":["PASS","REVIEW","FAIL"]}, "judge_flags": {"type":"array","items":{"type":"string","enum":["MISSING_CONTEXT","CATEGORY_UNSUPPORTED","CONTRADICTORY_EVIDENCE","SOURCE_UNCLEAR"]}}}
     else:
-        properties = {"category":{"type":"string","enum":sorted(CANONICAL_CATEGORIES)}, "confidence":number, "explanation":{"type":"string"}, "flags":{"type":"array","items":{"type":"string","enum":["AMBIGUOUS","MISSING_CONTEXT","NONSENSICAL_OR_SHORT","EMPTY_TEXT","SKIPPED"]}}, "soft_signal_score":number, "soft_signal_flags":{"type":"array","items":{"type":"string","enum":sorted(SOFT_SIGNAL_PATTERNS)}}, "soft_signal_evidence":strings}
-    return {"type":"object","properties":properties,"required":list(properties),"additionalProperties":False}
+        properties = {"category":{"type":"string","enum":sorted(CANONICAL_CATEGORIES)}, "secondary_category":{"type":"string","enum":sorted(CANONICAL_CATEGORIES)}, "confidence":number, "explanation":{"type":"string"}, "flags":{"type":"array","items":{"type":"string","enum":["AMBIGUOUS","MISSING_CONTEXT","NONSENSICAL_OR_SHORT","EMPTY_TEXT","SKIPPED"]}}, "soft_signal_score":number, "soft_signal_flags":{"type":"array","items":{"type":"string","enum":sorted(SOFT_SIGNAL_PATTERNS)}}, "soft_signal_evidence":strings}
+    required = ["category", "confidence", "explanation", "flags", "soft_signal_score", "soft_signal_flags", "soft_signal_evidence"]
+    return {"type":"object","properties":properties,"required":required,"additionalProperties":False}
 
 
 def _ollama_generate_json(model_name: str, prompt: str, timeout: int = OLLAMA_TIMEOUT_SEC) -> dict:
@@ -476,7 +478,11 @@ def normalize_label(raw_label: str) -> Optional[str]:
         "conspiracy theory": "Conspiracy Theories",
         "not antisemitic": "Not Antisemitic",
         "not antisemetic": "Not Antisemitic",
-        "holocaust denial": "Classical Antisemitism",
+        "holocaust denial": "Holocaust Denial",
+        "holocaust minimisation": "Holocaust Denial",
+        "holocaust minimization": "Holocaust Denial",
+        "holocaust relativization": "Holocaust Denial",
+        "holocaustdenial": "Holocaust Denial",
     }
 
     return mapping.get(label)
@@ -530,6 +536,14 @@ def _parse_classification(obj, text: str, ssot: SSOT, backend: str, model_name: 
         flags.append("CATEGORY_MISSING")
     category, flags = _enforce_taxonomy(raw_category, flags)
 
+    secondary_category = None
+    raw_secondary = obj.get("secondary_category")
+    if isinstance(raw_secondary, str) and raw_secondary.strip():
+        normalized_secondary, _ = _enforce_taxonomy(raw_secondary.strip(), [])
+        if (normalized_secondary in CANONICAL_CATEGORIES and normalized_secondary != category
+                and normalized_secondary != ssot.taxonomy.fallback_category):
+            secondary_category = normalized_secondary
+
     try:
         confidence = float(obj.get("confidence", _extract_confidence_from_text(raw_text, 0.5)))
     except (TypeError, ValueError):
@@ -573,6 +587,7 @@ def _parse_classification(obj, text: str, ssot: SSOT, backend: str, model_name: 
         soft_signal_flags=soft_signal_flags,
         soft_signal_evidence=soft_signal_evidence,
         resolved_model_version=format_model_version(backend, model_name),
+        secondary_category=secondary_category,
     )
 
 
@@ -792,7 +807,7 @@ def _adjudicate_targeted_row(
 
 
 def _audit_result(result: ClassificationResult) -> dict:
-    return {"category":result.category,"confidence":result.confidence,"flags":list(result.flags),"soft_signal_flags":result.soft_signal_flags or [],"soft_signal_evidence":result.soft_signal_evidence or [],"model":result.resolved_model_version,"fallback_events":result.fallback_events or [],"attempts":result.audit_trace}
+    return {"category":result.category,"secondary_category":result.secondary_category,"confidence":result.confidence,"flags":list(result.flags),"soft_signal_flags":result.soft_signal_flags or [],"soft_signal_evidence":result.soft_signal_evidence or [],"model":result.resolved_model_version,"fallback_events":result.fallback_events or [],"attempts":result.audit_trace}
 
 
 def _can_resolve_consensus(initial, alternate, judge_score, verdict, judge_flags, text):
@@ -858,6 +873,7 @@ def _apply_review_mode(result: ClassificationResult, ssot: SSOT, review_mode: st
         judge_verdict=result.judge_verdict,
         fallback_events=result.fallback_events,
         audit_trace=result.audit_trace,
+        secondary_category=result.secondary_category,
     )
 
 

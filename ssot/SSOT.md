@@ -40,18 +40,41 @@ It classifies rows into a closed antisemitism taxonomy with deterministic and au
 
 Language is externally guaranteed. {spot} does not perform automatic language detection.
 
-## 5. Closed Taxonomy
+## 5. Closed Taxonomy (taxonomy-v0.2)
 
-Exactly one category per row:
-- `Anti-Israel`
-- `Anti-Judaism`
-- `Classical Antisemitism`
-- `Structural Antisemitism`
-- `Conspiracy Theories`
-- `Not Antisemitic`
+Exactly one category per row, in the TEV guide order:
 
-`Not Antisemitic` is the fallback category.
-No row may remain uncategorized.
+1. `Anti-Israel`
+2. `Anti-Judaism`
+3. `Holocaust Denial`
+4. `Classical Antisemitism`
+5. `Structural Antisemitism`
+6. `Conspiracy Theories`
+7. `Not Antisemitic`
+
+**Holocaust Denial takes priority:** denial, minimization or relativization of the Holocaust is classified as
+`Holocaust Denial` even when another category would also fit. Denial claims were previously folded into
+`Classical Antisemitism`; the migration mapping below records that change.
+
+An optional `secondary_category` may name a second clearly justified antisemitic reading; it must be a
+canonical category, must differ from the primary category, and is dropped otherwise. Routing and scoring
+always follow the primary category.
+
+`Not Antisemitic` is the fallback category. No row may remain uncategorized.
+
+### Migration from the six-category scheme (taxonomy-v0.1)
+
+| v0.1 label | v0.2 label | Rule |
+|---|---|---|
+| `Anti-Israel` | `Anti-Israel` | identity |
+| `Anti-Judaism` | `Anti-Judaism` | identity |
+| `Classical Antisemitism` | `Classical Antisemitism` | identity; only **new** classifications may use `Holocaust Denial` |
+| `Structural Antisemitism` | `Structural Antisemitism` | identity |
+| `Conspiracy Theories` | `Conspiracy Theories` | identity |
+| `Not Antisemitic` | `Not Antisemitic` | identity |
+
+Historical rows keep their recorded v0.1 values and are not rewritten. The accepted reference was re-labelled
+(2026-11-16) so that denial rows carry `Holocaust Denial`; see `docs/evaluation/goldset_2026-11-16.jsonl`.
 
 ## 6. Runtime Policy
 

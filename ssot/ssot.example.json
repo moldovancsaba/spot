@@ -1,16 +1,18 @@
 {
   "ssot_version": "0.4",
   "taxonomy": {
-    "version": "taxonomy-v0.1",
+    "version": "taxonomy-v0.2",
     "categories": [
       "Anti-Israel",
       "Anti-Judaism",
+      "Holocaust Denial",
       "Classical Antisemitism",
       "Structural Antisemitism",
       "Conspiracy Theories",
       "Not Antisemitic"
     ],
-    "fallback_category": "Not Antisemitic"
+    "fallback_category": "Not Antisemitic",
+    "secondary_category_allowed": true
   },
   "policy": {
     "prompt_version": "prompt-v0.3-independent-checks",

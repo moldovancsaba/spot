@@ -26,6 +26,7 @@ from pathlib import Path
 CATEGORIES = [
     "Anti-Israel",
     "Anti-Judaism",
+    "Holocaust Denial",
     "Classical Antisemitism",
     "Structural Antisemitism",
     "Conspiracy Theories",
@@ -42,10 +43,10 @@ counterspeech, or a post without enough context is `Not Antisemitic`.
 Step 2. If antisemitic, apply the FIRST rule that matches:
 1. Holocaust denial or minimization, Nazi praise, an anti-Jewish slur, or a racial/genetic claim -> Classical Antisemitism
 2. A claim of secret or coded Jewish control, manipulation, or collective plotting -> Conspiracy Theories
-3. Antisemitic hostility carried BY an Israel/Zionism framing itself -> Anti-Israel
-4. A claim that Jews systematically control, exclude others from, or receive unequal treatment within institutions
+4. Antisemitic hostility carried BY an Israel/Zionism framing itself -> Anti-Israel
+5. A claim that Jews systematically control, exclude others from, or receive unequal treatment within institutions
    or society, with no Israel/Zionism framing and no secret-plot claim -> Structural Antisemitism
-5. Hostility directed at the Jewish religion or Jewish religious identity itself -> Anti-Judaism
+6. Hostility directed at the Jewish religion or Jewish religious identity itself -> Anti-Judaism
 
 Boundaries: mentioning Israel or Zionism does not make a post Anti-Israel; hostility must be carried by that framing.
 "Jews run the banks/media/economy" with no Israel reference and no plot claim is Structural."""
@@ -81,7 +82,7 @@ def read_workbook_rows(path: Path) -> dict[str, dict]:
     return rows
 
 
-def chat_record(text: str, label: str, pipeline_prompt: bool = False) -> dict:
+def chat_record(text: str, label: str, pipeline_prompt: bool = False, secondary: str | None = None) -> dict:
     messages = []
     if pipeline_prompt:
         # Mirror exactly what src.classifier sends to the MLX backend: a single prompt string, no system
@@ -106,6 +107,7 @@ def chat_record(text: str, label: str, pipeline_prompt: bool = False) -> dict:
     # The confidence is a fixed prior here, not a calibrated probability; calibrating it is separate work.
     assistant = {
         "category": label,
+        "secondary_category": secondary or None,
         "confidence": 0.9,
         "explanation": "Assigned by the projected taxonomy decision procedure.",
         "flags": [],
@@ -113,6 +115,8 @@ def chat_record(text: str, label: str, pipeline_prompt: bool = False) -> dict:
         "soft_signal_flags": [],
         "soft_signal_evidence": [],
     }
+    if assistant["secondary_category"] is None:
+        assistant.pop("secondary_category")
     messages.append({"role": "assistant", "content": json.dumps(assistant, ensure_ascii=False)})
     return {"messages": messages}
 
@@ -155,7 +159,7 @@ def main() -> int:
     for h, meta in texts.items():
         label = reference.get(h)
         if label:
-            joined.append({"hash": h, "text": meta["post_text"], "label": label})
+            joined.append({"hash": h, "text": meta["post_text"], "label": label, "secondary": None})
     if not joined:
         print("no rows joined the reference; check the seed and workbook", file=sys.stderr)
         return 2
@@ -189,7 +193,7 @@ def main() -> int:
     def write(name: str, rows: list[dict]) -> None:
         with (out / name).open("w", encoding="utf-8") as fh:
             for row in rows:
-                fh.write(json.dumps(chat_record(row["text"], row["label"], args.pipeline_prompt), ensure_ascii=False) + "\n")
+                fh.write(json.dumps(chat_record(row["text"], row["label"], args.pipeline_prompt, row.get("secondary")), ensure_ascii=False) + "\n")
 
     write("train.jsonl", train)
     write("valid.jsonl", valid)

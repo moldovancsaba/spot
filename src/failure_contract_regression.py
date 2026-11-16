@@ -171,6 +171,58 @@ class FailureContractRegressionTests(unittest.TestCase):
         with _patch.dict(os.environ, {'SPOT_REVIEW_POLICY': 'suspicious', 'SPOT_AUDIT_SAMPLE_PCT': '0'}):
             self.assertNotIn('AUDIT_SAMPLE', enforce_result_safety(clean_result()).flags)
 
+    def test_seven_category_taxonomy_and_six_to_seven_migration(self):
+        """TEV taxonomy v0.2: Holocaust Denial is first-class and the six-category mapping is lossless."""
+        from pathlib import Path as _Path
+
+        from src.models import CANONICAL_CATEGORIES
+        from src.ssot_loader import load_ssot
+
+        ssot = load_ssot(_Path(__file__).resolve().parents[1] / "ssot" / "ssot.json")
+        self.assertEqual(sorted(CANONICAL_CATEGORIES), sorted([
+            "Anti-Israel", "Anti-Judaism", "Holocaust Denial",
+            "Classical Antisemitism", "Structural Antisemitism",
+            "Conspiracy Theories", "Not Antisemitic",
+        ]))
+        self.assertEqual(ssot.taxonomy.version, "taxonomy-v0.2")
+        self.assertIn("Holocaust Denial", ssot.taxonomy.categories)
+        self.assertEqual(ssot.taxonomy.fallback_category, "Not Antisemitic")
+
+        # Identity mapping for all shared six-category labels; only new classifications may use the new one.
+        shared = ["Anti-Israel", "Anti-Judaism", "Classical Antisemitism",
+                  "Structural Antisemitism", "Conspiracy Theories", "Not Antisemitic"]
+        for label in shared:
+            self.assertIn(label, ssot.taxonomy.categories)
+
+    def test_secondary_category_normalization_keeps_only_distinct_canonical_values(self):
+        """secondary_category must be canonical, differ from primary, and otherwise be dropped."""
+        import json
+
+        from src.classifier import _parse_classification
+        from src.models import InputRow
+
+        ssot = load_ssot(Path(__file__).resolve().parents[1] / "ssot" / "ssot.json")
+        text = "Synthetic source post."
+
+        def parsed(obj):
+            return _parse_classification(obj, text, ssot, "ollama", "mock")
+
+        good = parsed({"category": "Conspiracy Theories", "secondary_category": "Anti-Israel",
+                       "confidence": 0.9, "explanation": "x", "flags": [],
+                       "soft_signal_score": 0.0, "soft_signal_flags": [], "soft_signal_evidence": []})
+        self.assertEqual(good.category, "Conspiracy Theories")
+        self.assertEqual(good.secondary_category, "Anti-Israel")
+
+        same = parsed({"category": "Conspiracy Theories", "secondary_category": "Conspiracy Theories",
+                       "confidence": 0.9, "explanation": "x", "flags": [],
+                       "soft_signal_score": 0.0, "soft_signal_flags": [], "soft_signal_evidence": []})
+        self.assertIsNone(same.secondary_category)
+
+        junk = parsed({"category": "Conspiracy Theories", "secondary_category": "not a category",
+                       "confidence": 0.9, "explanation": "x", "flags": [],
+                       "soft_signal_score": 0.0, "soft_signal_flags": [], "soft_signal_evidence": []})
+        self.assertIsNone(junk.secondary_category)
+
     def test_missing_invalid_and_null_categories_cannot_become_unreviewed_negatives(self):
         for category in ('missing', None, '', 'invalid-label', [], {}):
             for mode in ('full', 'partial', 'none'):
