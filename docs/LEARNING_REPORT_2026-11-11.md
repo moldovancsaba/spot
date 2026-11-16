@@ -318,3 +318,23 @@ positive first, then verifier disagreement, soft signals, pass disagreement, mis
 Run `full-62024-final-20261114`: 4,402 / 62,024 rows (7.1%), 48.4% review-required, 10 s/row, ~6.7 days
 remaining, ~30,000 review items projected. Real further reduction requires a better verifier model - a
 labelled-data problem, not a routing-rule problem.
+
+
+---
+
+# Iteration 3 (seven-category retrain) — 2026-11-16 — REJECTED by the gate
+
+Retrained on the seven-category v2 reference under GPU contention with a reduced footprint (LoRA 8 layers,
+400 iters, 78.8%% positive weighting). Gate on the 45 held-out rows:
+
+| Metric | v1 adapter (six-category) | v2 attempt (constrained) |
+|---|---:|---:|
+| Six-way agreement | 64.44% | **37.78%** |
+| Macro-F1 | 0.445 | 0.294 |
+| Binary P / R / F1 | 0.741 / 0.833 / 0.784 | 0.533 / 1.0 / 0.696 |
+| Not Antisemitic F1 | 0.718 | **0.000** |
+
+The v2 attempt stopped predicting negatives entirely (recall 1.0 at precision 0.533) - the recall weighting
+overshot under the halved adapter capacity. **Decision: rejected; the v1 adapter remains the staged model.**
+A full retrain (16 layers, more iterations) is queued for when GPU headroom exists after the demo run.
+The gate behaved exactly as designed: a worse candidate was measured and not adopted.
