@@ -14,6 +14,44 @@ SSOT = load_ssot(Path(__file__).resolve().parent.parent / 'ssot/ssot.json')
 
 
 class FailureContractRegressionTests(unittest.TestCase):
+    def test_ollama_payload_releases_models_after_use(self):
+        """Metal OOM in segment children was caused by two resident Ollama lanes plus the MLX model."""
+        import json
+        import os
+        from unittest.mock import patch as _patch
+
+        captured = {}
+
+        class FakeResponse:
+            def __init__(self, body):
+                self._body = body
+
+            def read(self):
+                return self._body
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+        def fake_urlopen(req, timeout=None):
+            captured["payload"] = json.loads(req.data.decode("utf-8"))
+            return FakeResponse(json.dumps({"response": '{"category":"Not Antisemitic"}'}).encode())
+
+        from src.classifier import _ollama_generate_json
+
+        with _patch.dict(os.environ, {"SPOT_OLLAMA_KEEP_ALIVE": "120"}), \
+                _patch("src.classifier.urllib.request.urlopen", fake_urlopen):
+            result = _ollama_generate_json("qwen2.5:7b", "synthetic prompt")
+        self.assertEqual(result["category"], "Not Antisemitic")
+        self.assertEqual(captured["payload"]["keep_alive"], "120")
+
+        with _patch.dict(os.environ, {"SPOT_OLLAMA_KEEP_ALIVE": "0"}), \
+                _patch("src.classifier.urllib.request.urlopen", fake_urlopen):
+            _ollama_generate_json("qwen2.5:7b", "synthetic prompt")
+        self.assertEqual(captured["payload"]["keep_alive"], "0")
+
     def test_any_positive_analysis_forces_review_over_a_negative_aggregate(self):
         """A negative aggregate must not clear a row that some analysis called antisemitic."""
         def result(**overrides):

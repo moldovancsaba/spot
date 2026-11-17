@@ -192,6 +192,11 @@ def _ollama_generate_json(model_name: str, prompt: str, timeout: int = OLLAMA_TI
         "prompt": prompt,
         "stream": False,
         "format": _response_schema(prompt),
+        # Release the model from GPU memory right after the call. The MLX primary lane holds its model in
+        # process; keeping two Ollama lanes resident as well exhausts the unified GPU budget and produces
+        # Metal OOM failures inside segment children (observed on the live run). Reload per call costs a few
+        # seconds and prevents the whole-run failures it caused.
+        "keep_alive": os.getenv("SPOT_OLLAMA_KEEP_ALIVE", "0"),
         "options": {"temperature": OLLAMA_TEMPERATURE, "top_p": OLLAMA_TOP_P, "seed": OLLAMA_SEED, "num_ctx": context_size, "num_predict": 768},
     }
     req = urllib.request.Request(
