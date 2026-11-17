@@ -59,6 +59,8 @@ def build_workbook(rows: list[dict], run_id: str, out: Path, run_summary: dict |
     summary.append(["Run ID", run_id])
     summary.append(["Generated", time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())])
     summary.append(["Review rows", len(rows)])
+    if not rows:
+        summary.append(["Notice", "Zero findings: no rows required human review for this batch."])
     run_summary = run_summary or {}
     summary.append(["Processed rows", run_summary.get("processed_rows", "")])
     summary.append(["Error rows", run_summary.get("error_rows", "")])
@@ -140,8 +142,11 @@ def main() -> int:
         rows.append(row)
     conn.close()
     if not rows:
-        print(f"No review-required rows for run {args.run_id}; nothing to export.", file=sys.stderr)
-        return 2
+        # A zero-findings day is a result, not a failure (deck p.4 task 04: record the zero-findings signal).
+        out = Path(args.out) if args.out else Path("runs") / args.run_id / "handover.xlsx"
+        manifest = build_workbook([], args.run_id, out)
+        print(json.dumps({**manifest, "zero_findings": True}, indent=2))
+        return 0
 
     rows.sort(key=_review_priority, reverse=True)
     out = Path(args.out) if args.out else Path("runs") / args.run_id / "handover.xlsx"
