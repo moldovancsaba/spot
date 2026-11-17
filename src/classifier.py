@@ -985,6 +985,9 @@ def _adjudicate_trinity(
 
     agreeing = [lane.confidence for lane in lanes if lane.category == final_category]
     trace = dict(primary.audit_trace or {})
+    trace["judge_score"] = judge_score
+    trace["judge_verdict"] = judge_verdict
+    trace["judge_flags"] = judge_flags
     trace["trinity"] = {
         "policy": "trinity-v1",
         "lanes": len(lanes),
