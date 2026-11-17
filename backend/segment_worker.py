@@ -515,6 +515,7 @@ def main() -> int:
             _append_log(run_dir, f"[AUTOMATIC_RECHECK] {plan['processed']}/{plan['total']} checked; {plan['resolved']} resolved automatically")
         run_planned_rechecks(runs_dir=args.runs_dir, run_id=args.run_id, ssot_path=args.ssot,
                              should_stop=lambda: STOP_REQUESTED, on_progress=recheck_progress)
+        failed_segments: list[str] = []
         while True:
             if STOP_REQUESTED:
                 raise KeyboardInterrupt("stop requested")
@@ -730,7 +731,13 @@ def main() -> int:
                 else:
                     error_message = segment_log_path.read_text(encoding="utf-8")[-4000:] if segment_log_path.exists() else "Segment classify subprocess failed."
                     fail_segment(runs_dir=args.runs_dir, segment_id=segment_id, error_message=error_message, state="FAILED")
-                    raise RuntimeError(f"Segment {segment_id} failed.")
+                    failed_segments.append(segment_id)
+                    _append_log(
+                        run_dir,
+                        f"[SEGMENT_FAILED] {segment_id} failed; remaining segments continue. "
+                        f"Failure: {error_message[-240:]}",
+                    )
+                    continue
             if return_code == 0:
                 complete_segment(runs_dir=args.runs_dir, segment_id=segment_id)
 
@@ -813,6 +820,23 @@ def main() -> int:
             os.close(_fd)
         except FileExistsError:
             return 0
+
+        if failed_segments:
+            runtime_stats = _current_runtime_stats(runs_dir=args.runs_dir, run_id=args.run_id, effective_run_state="FAILED")
+            completed_rows = int(runtime_stats["processed_rows"] or completed_rows)
+            listed = ", ".join(failed_segments[:5]) + ("…" if len(failed_segments) > 5 else "")
+            _write_progress(
+                run_dir=run_dir,
+                run_id=args.run_id,
+                state="FAILED",
+                started_at=started_at,
+                total_rows=total_rows,
+                processed_rows=completed_rows,
+                message=f"Run finished with {len(failed_segments)} failed segments ({listed}); completed rows are preserved in canonical state.",
+            )
+            _append_log(run_dir, f"[FAILED] {len(failed_segments)} segments failed: {listed}")
+            _write_artifact_manifest(run_dir)
+            return 1
 
         segment_reports, disagreement_rows, first_policy_path = _collect_segment_artifacts(segments_dir)
         if first_policy_path and first_policy_path.exists():
