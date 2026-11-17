@@ -139,6 +139,19 @@ and the current llama3.1 judge is the weakest calibrated component.
 - Known v0.1 limits: PASS bias persists (FAIL recall 0.548), thin category classes are 0, REVIEW class
   untrained (pilot had none) - all need the TEV borderline samples.
 
+## 5d. Enabled in production + aggressive retraining loop (2026-11-17, evening)
+
+- Deployed with the disagreement guard: JEV decides, llama3.1 corroborates; an opposite PASS/FAIL split
+  routes to REVIEW (JEV_JUDGE_DISAGREEMENT). Verified live: new rows carry JEV_JUDGE / JEV_CALIBRATED /
+  JEV_LLAMA_CORROBORATED provenance in their traces, and the guard has already fired.
+- Aggressive training loop (JEV repo): cursor-bounded trinity-confirmed feedback -> judge-only retraining
+  -> gate on the fixed human test -> promote with atomic jev-active swap + service restart (SPOT falls back
+  during the seconds). First promotion: jev-v1, judge 0.774 -> 0.881 on the held-out human split; category
+  drift recorded and tolerated (not consumed in production). Cadence: scripts/train_and_swap.sh, every 500
+  new confirmed rows or every 6h.
+- Known bias: JEV still PASS-biases wrong proposals alone (control 0.637); production safety therefore
+  depends on the corroboration guard, not on JEV alone.
+
 ## 6. Open questions for the owner
 
 1. **Repo boundary (recommended A):** implement the scorer in the JEV repo and have {spot} consume it as a
