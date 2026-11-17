@@ -123,6 +123,22 @@ and the current llama3.1 judge is the weakest calibrated component.
   everything. That is the measured starting point the rubric pilot and LoRA (upstream issues #3/#4) must
   beat; the scorecard is recorded in the JEV reports.
 
+## 5c. Second session progress (2026-11-17, evening)
+
+- Scorecard harness (upstream #10) live: judge 0.774 / category 0.571 on the held-out split; Brier 0.187;
+  ECE 0.106. **Found a real defect: option-order reversal flips 10 of 20 decisions** - spot pins a fixed
+  option order, and the fix track is permutation-averaging or order-augmented training.
+- Calibration (upstream #5): fit attempted, and the honest decision is T=1.0 with no abstention - the
+  fitted T=2.1 flattened the distribution (median max-prob 0.14) and hurt discrimination. Per-rubric
+  calibration waits for the TEV samples.
+- Service (upstream #6): local /v1/decide on 127.0.0.1:8770, single-threaded by MLX stream affinity,
+  bounded body, no raw context logging, health endpoint, 3 contract tests.
+- spot lane: SPOT_JEV_URL routes the judge task to JEV (PASS/REVIEW/FAIL + max_probability score);
+  abstention maps to REVIEW with JUDGE_ABSTAINED; JEV_JUDGE/JEV_CALIBRATED provenance flags; any failure
+  falls back to the Ollama judge. 150 tests. Verified end-to-end against the live service.
+- Known v0.1 limits: PASS bias persists (FAIL recall 0.548), thin category classes are 0, REVIEW class
+  untrained (pilot had none) - all need the TEV borderline samples.
+
 ## 6. Open questions for the owner
 
 1. **Repo boundary (recommended A):** implement the scorer in the JEV repo and have {spot} consume it as a
