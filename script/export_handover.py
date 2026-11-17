@@ -49,7 +49,7 @@ def open_question(flags: list[str], category: str, judge_verdict: str | None) ->
     return ""
 
 
-def build_workbook(rows: list[dict], run_id: str, out: Path) -> dict:
+def build_workbook(rows: list[dict], run_id: str, out: Path, run_summary: dict | None = None) -> dict:
     from openpyxl import Workbook
     from openpyxl.styles import Font
 
@@ -59,6 +59,12 @@ def build_workbook(rows: list[dict], run_id: str, out: Path) -> dict:
     summary.append(["Run ID", run_id])
     summary.append(["Generated", time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())])
     summary.append(["Review rows", len(rows)])
+    run_summary = run_summary or {}
+    summary.append(["Processed rows", run_summary.get("processed_rows", "")])
+    summary.append(["Error rows", run_summary.get("error_rows", "")])
+    summary.append(["Review required", run_summary.get("review_required", len(rows))])
+    summary.append(["Language", run_summary.get("language", "")])
+    summary.append(["Country", run_summary.get("country", "")])
     import collections
 
     category_mix = collections.Counter(str(row.get("assigned_category") or "") for row in rows)

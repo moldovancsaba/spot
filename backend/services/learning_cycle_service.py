@@ -242,6 +242,36 @@ def list_approvals(*, runs_dir: Path, run_id: str, limit: int = 50) -> list[dict
     return [json.loads(line) for line in lines[-max(1, min(limit, 500)):]]
 
 
+def propose_pattern(*, runs_dir: Path, run_id: str, pattern: str, language: str, platform: str,
+                    examples: list, counter_examples: list, proposed_handling: str, proposed_by: str) -> dict:
+    """Task 11: either team may flag a new pattern; the TEV owner decides at the weekly review."""
+    directory = runs_dir / run_id / "learning"
+    directory.mkdir(parents=True, exist_ok=True)
+    record = {
+        "schema": "spot.pattern-proposal.v1",
+        "pattern": pattern,
+        "language": language,
+        "platform": platform,
+        "examples": [str(e) for e in (examples or [])],
+        "counter_examples": [str(e) for e in (counter_examples or [])],
+        "proposed_handling": proposed_handling,
+        "proposed_by": proposed_by,
+        "proposed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "decision": None,
+    }
+    with (directory / "pattern_proposals.jsonl").open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+    return record
+
+
+def list_pattern_proposals(*, runs_dir: Path, run_id: str, limit: int = 50) -> list[dict]:
+    path = runs_dir / run_id / "learning" / "pattern_proposals.jsonl"
+    if not path.is_file():
+        return []
+    lines = [line for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    return [json.loads(line) for line in lines[-max(1, min(limit, 500)):]]
+
+
 def runs_with_rows(*, runs_dir: Path, limit: int = 5) -> list[str]:
     """Most recent runs that actually carry canonical rows, newest first."""
     from backend.services.ops_db_service import _connect

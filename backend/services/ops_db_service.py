@@ -51,6 +51,9 @@ CREATE TABLE IF NOT EXISTS case_escalations (
     legal_decision TEXT,
     forward_channel TEXT,
     confirmation TEXT,
+    urgency TEXT,
+    expected_response_by TEXT,
+    notification_order TEXT,
     escalated_by TEXT,
     escalated_at TEXT,
     updated_at TEXT
@@ -219,6 +222,7 @@ def _init_db(conn: sqlite3.Connection) -> None:
     _ensure_secondary_category_column(conn)
     conn.executescript(_CASE_ESCALATIONS_DDL)
     conn.commit()
+    _ensure_escalation_fields(conn)
     if _run_rows_lineage_rebuild_required(conn):
         _rebuild_run_rows_table(conn)
     _ensure_column(conn, "run_rows", "analysis_trace_json", "TEXT")
@@ -304,6 +308,15 @@ def _resolve_managed_upload(
 
 def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
     return {str(row["name"]) for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+
+
+def _ensure_escalation_fields(conn: sqlite3.Connection) -> None:
+    """Tasks 09/15: add urgency, expected response and notification order to pre-existing escalation tables."""
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(case_escalations)").fetchall()}
+    for name in ("urgency", "expected_response_by", "notification_order"):
+        if name not in columns:
+            conn.execute(f"ALTER TABLE case_escalations ADD COLUMN {name} TEXT")
+            conn.commit()
 
 
 def _ensure_secondary_category_column(conn: sqlite3.Connection) -> None:
@@ -1304,8 +1317,9 @@ def upsert_case_escalation(*, runs_dir: Path, run_id: str, row_index: int, field
             """
             INSERT INTO case_escalations (
                 case_id, run_id, row_index, source_ref, snapshot_text, known_dates, context,
-                fact_summary, legal_decision, forward_channel, confirmation, escalated_by, escalated_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                fact_summary, legal_decision, forward_channel, confirmation, urgency, expected_response_by,
+                notification_order, escalated_by, escalated_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(case_id) DO UPDATE SET
                 source_ref=COALESCE(excluded.source_ref, case_escalations.source_ref),
                 snapshot_text=COALESCE(excluded.snapshot_text, case_escalations.snapshot_text),
@@ -1315,6 +1329,9 @@ def upsert_case_escalation(*, runs_dir: Path, run_id: str, row_index: int, field
                 legal_decision=COALESCE(excluded.legal_decision, case_escalations.legal_decision),
                 forward_channel=COALESCE(excluded.forward_channel, case_escalations.forward_channel),
                 confirmation=COALESCE(excluded.confirmation, case_escalations.confirmation),
+                urgency=COALESCE(excluded.urgency, case_escalations.urgency),
+                expected_response_by=COALESCE(excluded.expected_response_by, case_escalations.expected_response_by),
+                notification_order=COALESCE(excluded.notification_order, case_escalations.notification_order),
                 escalated_by=COALESCE(excluded.escalated_by, case_escalations.escalated_by),
                 updated_at=excluded.updated_at
             """,
@@ -1328,6 +1345,9 @@ def upsert_case_escalation(*, runs_dir: Path, run_id: str, row_index: int, field
                 str(fields.get("legal_decision") or "") or None,
                 str(fields.get("forward_channel") or "") or None,
                 str(fields.get("confirmation") or "") or None,
+                str(fields.get("urgency") or "") or None,
+                str(fields.get("expected_response_by") or "") or None,
+                str(fields.get("notification_order") or "") or None,
                 str(fields.get("escalated_by") or "") or None,
                 str(fields.get("escalated_at") or now),
                 now,

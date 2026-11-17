@@ -23,6 +23,7 @@ from pathlib import Path
 
 
 def write_promotion(*, registry: Path, language: str, lane: str, candidate: str, incumbent: str | None,
+                    country: str = "",
                     candidate_metrics: dict, incumbent_metrics: dict, promote: bool = False,
                     baseline: bool = False) -> dict:
     delta = {
@@ -34,6 +35,7 @@ def write_promotion(*, registry: Path, language: str, lane: str, candidate: str,
         "schema": "spot.promotion.v1",
         "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "language": language,
+        "country": country,
         "lane": lane,
         "candidate": candidate,
         "incumbent": incumbent,
@@ -52,6 +54,7 @@ def write_promotion(*, registry: Path, language: str, lane: str, candidate: str,
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--language", required=True)
+    ap.add_argument("--country", default="")
     ap.add_argument("--lane", required=True)
     ap.add_argument("--candidate", required=True)
     ap.add_argument("--incumbent", required=True)
@@ -84,6 +87,7 @@ def main() -> int:
     record = write_promotion(
         registry=Path(args.registry), language=args.language, lane=args.lane,
         candidate=args.candidate, incumbent=args.incumbent or None,
+        country=args.country,
         candidate_metrics=candidate_metrics, incumbent_metrics=incumbent_metrics,
         promote=args.promote, baseline=args.baseline,
     )

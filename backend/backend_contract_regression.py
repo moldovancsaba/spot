@@ -162,6 +162,29 @@ class BackendContractRegressionTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200, response.text)
 
+    def test_pattern_proposal_and_escalation_urgency(self):
+        """Tasks 09/11/15: pattern proposals wait for the TEV decision; priority cases carry urgency."""
+        from backend.services.learning_cycle_service import list_pattern_proposals, propose_pattern
+        from backend.services.ops_db_service import list_case_escalations, upsert_case_escalation
+
+        run_id = "task-run"
+        run_path = self.runs_dir / run_id
+        run_path.mkdir(parents=True, exist_ok=True)
+        propose_pattern(runs_dir=self.runs_dir, run_id=run_id, pattern="coded reference",
+                        language="hu", platform="X", examples=["ex1"], counter_examples=["cx1"],
+                        proposed_handling="review", proposed_by="analyst")
+        proposals = list_pattern_proposals(runs_dir=self.runs_dir, run_id=run_id)
+        self.assertEqual(len(proposals), 1)
+        self.assertIsNone(proposals[0]["decision"], "the TEV owner decides; the system only proposes")
+
+        upsert_case_escalation(runs_dir=self.runs_dir, run_id=run_id, row_index=3, fields={
+            "case_id": "C-urgent", "urgency": "high", "expected_response_by": "2026-11-18T12:00:00Z",
+            "notification_order": "legal-owner then deputy", "escalated_by": "analyst",
+        })
+        cases = list_case_escalations(runs_dir=self.runs_dir, run_id=run_id)
+        self.assertEqual(cases[0]["urgency"], "high")
+        self.assertEqual(cases[0]["notification_order"], "legal-owner then deputy")
+
     def test_backup_and_bakeoff_tools(self):
         """Deck p.11 backup/restore drill and D7 promotion records."""
         import importlib.util
