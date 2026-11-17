@@ -338,3 +338,24 @@ The v2 attempt stopped predicting negatives entirely (recall 1.0 at precision 0.
 overshot under the halved adapter capacity. **Decision: rejected; the v1 adapter remains the staged model.**
 A full retrain (16 layers, more iterations) is queued for when GPU headroom exists after the demo run.
 The gate behaved exactly as designed: a worse candidate was measured and not adopted.
+
+
+---
+
+# Iteration 4 (full-capacity seven-category retrain) — 2026-11-17 — REJECTED by the gate
+
+Full 16-layer LoRA, 600 iterations, GPU headroom cleared for training (production run paused; Ollama lanes
+stopped). Gate on the 45 held-out rows:
+
+| Metric | Incumbent v1 (six-category) | v2 full (seven-category) |
+|---|---:|---:|
+| Six-way agreement | **64.44%** | 62.22% |
+| Macro-F1 | **0.445** | 0.320 |
+| Binary F1 | **0.784** | 0.764 |
+| Not Antisemitic F1 | 0.718 | 0.629 |
+
+The v2 adapter is the first trained on the true seven-category taxonomy (it can emit Holocaust Denial; the
+incumbent cannot), but it measures worse on every quality metric. **Decision: rejected; the incumbent stays.**
+Conclusion now firm: the 285-row German reference cannot train a seven-category model that beats the
+incumbent - the binding constraint is labels, which is exactly what the TEV real data and per-locale check
+samples will supply. Further retraining attempts on this reference are not worth the GPU.
