@@ -22,8 +22,9 @@ import time
 from pathlib import Path
 
 
-def write_promotion(*, registry: Path, language: str, lane: str, candidate: str, incumbent: str,
-                    candidate_metrics: dict, incumbent_metrics: dict, promote: bool) -> dict:
+def write_promotion(*, registry: Path, language: str, lane: str, candidate: str, incumbent: str | None,
+                    candidate_metrics: dict, incumbent_metrics: dict, promote: bool = False,
+                    baseline: bool = False) -> dict:
     delta = {
         key: round(candidate_metrics.get(key, 0) - incumbent_metrics.get(key, 0), 4)
         for key in ("six_way_agreement_pct", "six_way_macro_f1", "binary_f1", "binary_recall")
@@ -39,7 +40,7 @@ def write_promotion(*, registry: Path, language: str, lane: str, candidate: str,
         "candidate_metrics": candidate_metrics,
         "incumbent_metrics": incumbent_metrics,
         "delta": delta,
-        "decision": "promote" if promote else "rejected",
+        "decision": "baseline" if baseline else ("promote" if promote else "rejected"),
         "rollback": incumbent,
     }
     registry.parent.mkdir(parents=True, exist_ok=True)
@@ -58,6 +59,7 @@ def main() -> int:
     ap.add_argument("--incumbent-eval")
     ap.add_argument("--registry", default="models/registry/promotions.jsonl")
     ap.add_argument("--promote", action="store_true", help="record decision=promote; default rejects")
+    ap.add_argument("--baseline", action="store_true", help="record the measured starting point of a lane (D7)")
     ap.add_argument("--skip-scoring", action="store_true", help="only write the record from --incumbent-eval and a provided --candidate-eval")
     ap.add_argument("--candidate-eval")
     args = ap.parse_args()
@@ -81,9 +83,9 @@ def main() -> int:
 
     record = write_promotion(
         registry=Path(args.registry), language=args.language, lane=args.lane,
-        candidate=args.candidate, incumbent=args.incumbent,
+        candidate=args.candidate, incumbent=args.incumbent or None,
         candidate_metrics=candidate_metrics, incumbent_metrics=incumbent_metrics,
-        promote=args.promote,
+        promote=args.promote, baseline=args.baseline,
     )
     print(json.dumps(record, indent=2))
     return 0
