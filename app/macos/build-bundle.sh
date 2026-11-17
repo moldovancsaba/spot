@@ -41,6 +41,9 @@ rsync -a --delete \
   --exclude ".DS_Store" \
   "$REPO_ROOT/ssot/" "$APP_BUNDLE/Contents/Resources/$CORE_DIR_NAME/ssot/"
 cp "$REPO_ROOT/requirements.txt" "$APP_BUNDLE/Contents/Resources/$CORE_DIR_NAME/requirements.txt"
+if [[ -d "$REPO_ROOT/models" ]]; then
+  rsync -a --delete "$REPO_ROOT/models/" "$APP_BUNDLE/Contents/Resources/$CORE_DIR_NAME/models/"
+fi
 
 cat > "$LAUNCHER_PATH" <<'EOF'
 #!/bin/bash
@@ -82,9 +85,12 @@ PRODUCTION_MODE="${SPOT_PRODUCTION_MODE:-1}"
 # Review routing. {spot} exists to put suspected antisemitic rows in front of a human, but a queue equal to
 # the whole corpus is unusable, so the default clears rows with nothing suspicious about them and routes a
 # deterministic audit sample of cleared rows to review, keeping the miss rate measurable.
-#   SPOT_REVIEW_POLICY: all | certificate | suspicious   (SPOT_DISABLE_AUTO_CLEAR=1 forces "all")
-SPOT_REVIEW_POLICY="${SPOT_REVIEW_POLICY:-suspicious}"
+#   SPOT_REVIEW_POLICY: all | certificate | suspicious | trinity   (SPOT_DISABLE_AUTO_CLEAR=1 forces "all")
+SPOT_REVIEW_POLICY="${SPOT_REVIEW_POLICY:-trinity}"
 SPOT_AUDIT_SAMPLE_PCT="${SPOT_AUDIT_SAMPLE_PCT:-10}"
+SPOT_PARALLEL_WORKERS="${SPOT_PARALLEL_WORKERS:-2}"
+DEFAULT_CALIBRATION="$CORE_ROOT/models/calibration/calibration-v1.json"
+CALIBRATION_PATH="${SPOT_CALIBRATION_PATH:-$DEFAULT_CALIBRATION}"
 # Tuned adapter produced by the learning pipeline; empty disables it.
 DEFAULT_ADAPTER="/Users/Shared/Models/spot-adapters/schema-20261112"
 MLX_ADAPTER_PATH="${SPOT_MLX_ADAPTER_PATH:-$DEFAULT_ADAPTER}"
@@ -114,6 +120,10 @@ export SPOT_PRODUCTION_MODE="$PRODUCTION_MODE"
 export SPOT_LOCKED_SSOT_PATH="$LOCKED_SSOT_PATH"
 export SPOT_REVIEW_POLICY="$SPOT_REVIEW_POLICY"
 export SPOT_AUDIT_SAMPLE_PCT="$SPOT_AUDIT_SAMPLE_PCT"
+export SPOT_PARALLEL_WORKERS="$SPOT_PARALLEL_WORKERS"
+if [[ -f "$CALIBRATION_PATH" ]]; then
+  export SPOT_CALIBRATION_PATH="$CALIBRATION_PATH"
+fi
 if [[ -d "$MLX_ADAPTER_PATH" ]]; then
   export SPOT_MLX_ADAPTER_PATH="$MLX_ADAPTER_PATH"
 fi
