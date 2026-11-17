@@ -162,6 +162,33 @@ class BackendContractRegressionTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200, response.text)
 
+    def test_sla_defaults_and_acceptance_criteria(self):
+        """Tasks 04/08: workday-aware default deadlines; pre-launch thresholds recorded before go-live."""
+        import datetime
+        from backend.services.run_state_service import (default_sla_deadlines, read_acceptance_criteria,
+                                                         record_acceptance_criteria, set_run_sla)
+
+        friday_pm = datetime.datetime(2026, 11, 13, 15, 0, tzinfo=datetime.timezone.utc)
+        defaults = default_sla_deadlines(friday_pm)
+        self.assertTrue(defaults["intake_deadline_utc"].startswith("2026-11-16T10"))
+        self.assertTrue(defaults["delivery_deadline_utc"].startswith("2026-11-17T12"))
+
+        run_id = "sla-defaults-run"
+        run_path = self.runs_dir / run_id
+        run_path.mkdir(parents=True, exist_ok=True)
+        create_run_record(runs_dir=self.runs_dir, run_id=run_id, upload_id=None, language="de",
+                          review_mode="trinity", input_path=str(run_path / "in.xlsx"),
+                          output_path=str(run_path / "out.xlsx"))
+        sla = set_run_sla(runs_dir=self.runs_dir, run_id=run_id)
+        self.assertEqual(sla["sla"]["set_by"], "default")
+        self.assertIn("delivery_deadline_utc", sla["sla"])
+
+        record_acceptance_criteria(runs_dir=self.runs_dir, run_id=run_id, locale="hu/HU",
+                                   criteria={"max_false_flag_rate": 0.15, "max_miss_rate": 0.05})
+        stored = read_acceptance_criteria(runs_dir=self.runs_dir, run_id=run_id)
+        self.assertEqual(stored["criteria"]["max_miss_rate"], 0.05)
+        self.assertEqual(stored["locale"], "hu/HU")
+
     def test_pattern_proposal_and_escalation_urgency(self):
         """Tasks 09/11/15: pattern proposals wait for the TEV decision; priority cases carry urgency."""
         from backend.services.learning_cycle_service import list_pattern_proposals, propose_pattern

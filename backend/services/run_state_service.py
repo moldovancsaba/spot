@@ -1092,20 +1092,76 @@ def _review_priority(row: dict) -> tuple:
     return (score, confidence, -int(row.get("row_index") or 0))
 
 
+def default_sla_deadlines(now=None) -> dict:
+    """Deck p.8 defaults: intake by 10:00 on workdays, results by 12:00 the next business day."""
+    import datetime as _datetime
+
+    now = now or _datetime.datetime.now().astimezone()
+    zone = now.tzinfo or _datetime.timezone.utc
+
+    def at(day: _datetime.date, hour: int) -> str:
+        return _datetime.datetime(day.year, day.month, day.day, hour, 0, 0, tzinfo=zone).isoformat()
+
+    def next_workday(day: _datetime.date) -> _datetime.date:
+        candidate = day + _datetime.timedelta(days=1)
+        while candidate.weekday() >= 5:  # Saturday, Sunday
+            candidate += _datetime.timedelta(days=1)
+        return candidate
+
+    if now.weekday() < 5 and now.hour < 10:
+        intake_day = now.date()
+    else:
+        intake_day = next_workday(now.date())
+    delivery_day = next_workday(intake_day)
+    return {
+        "intake_deadline_utc": at(intake_day, 10),
+        "delivery_deadline_utc": at(delivery_day, 12),
+    }
+
+
+def record_acceptance_criteria(*, runs_dir: Path, run_id: str, locale: str, criteria: dict) -> dict:
+    """Task 08: false-flag and miss-rate acceptance thresholds must be recorded BEFORE go-live."""
+    directory = runs_dir / run_id / "go_live"
+    directory.mkdir(parents=True, exist_ok=True)
+    record = {
+        "schema": "spot.acceptance-criteria.v1",
+        "locale": locale,
+        "recorded_at": json.dumps({"__imported__": True}) and __import__("time").strftime("%Y-%m-%dT%H:%M:%SZ", __import__("time").gmtime()),
+        "criteria": criteria,
+    }
+    path = directory / "acceptance_criteria.json"
+    existing = safe_read_json(path) or {}
+    existing.update(record)
+    path.write_text(json.dumps(existing, indent=2, ensure_ascii=False))
+    return existing
+
+
+def read_acceptance_criteria(*, runs_dir: Path, run_id: str) -> dict:
+    return safe_read_json(runs_dir / run_id / "go_live" / "acceptance_criteria.json") or {}
+
+
 def set_run_sla(*, runs_dir: Path, run_id: str,
                 intake_deadline_utc: str | None = None,
                 delivery_deadline_utc: str | None = None) -> dict:
-    """Record the daily-batch SLA on the run (deck p.8). Deadlines are ISO-8601 UTC strings."""
+    """Record the daily-batch SLA on the run (deck p.8). Deadlines are ISO-8601 UTC strings.
+
+    With no explicit deadlines the deck's defaults apply: intake by 10:00 on workdays, results by 12:00 the
+    next business day.
+    """
     record_path = runs_dir / run_id / "run_record.json"
     record = safe_read_json(record_path) or {}
     if record.get("run_id") != run_id:
         record["run_id"] = run_id
     sla = dict(record.get("sla") or {})
-    if intake_deadline_utc:
-        sla["intake_deadline_utc"] = intake_deadline_utc
-    if delivery_deadline_utc:
-        sla["delivery_deadline_utc"] = delivery_deadline_utc
-    sla["set_by"] = "operator"
+    if not intake_deadline_utc and not delivery_deadline_utc and not sla:
+        sla.update(default_sla_deadlines())
+        sla["set_by"] = "default"
+    else:
+        if intake_deadline_utc:
+            sla["intake_deadline_utc"] = intake_deadline_utc
+        if delivery_deadline_utc:
+            sla["delivery_deadline_utc"] = delivery_deadline_utc
+        sla["set_by"] = "operator"
     record["sla"] = sla
     record_path.parent.mkdir(parents=True, exist_ok=True)
     record_path.write_text(json.dumps(record, indent=2, ensure_ascii=False))

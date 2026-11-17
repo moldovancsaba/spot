@@ -44,6 +44,8 @@ from backend.services.ops_db_service import (
 from backend.services.learning_cycle_service import approve_cycle, list_approvals, verify_cycle
 from backend.services.run_state_service import (
     _run_recovery_candidate,
+    read_acceptance_criteria,
+    record_acceptance_criteria,
     run_sla_status,
     set_run_sla,
     append_action,
@@ -1471,4 +1473,22 @@ def verify_learning_cycle(run_id: str, cycle_id: str, request: Request, payload:
 def list_learning_approvals(run_id: str, request: Request):
     require_permission(request, "view")
     return {"run_id": run_id, "approvals": list_approvals(runs_dir=RUNS_DIR, run_id=run_id)}
+
+
+@app.post("/runs/{run_id}/acceptance-criteria")
+def update_acceptance_criteria(run_id: str, request: Request, payload: dict | None = Body(default=None)):
+    """Task 08: record the pre-launch false-flag and miss-rate thresholds for a locale."""
+    require_permission(request, "signoff")
+    payload = payload or {}
+    return record_acceptance_criteria(
+        runs_dir=RUNS_DIR, run_id=run_id,
+        locale=str(payload.get("locale") or "unknown"),
+        criteria=payload.get("criteria") or {},
+    )
+
+
+@app.get("/runs/{run_id}/acceptance-criteria")
+def get_acceptance_criteria(run_id: str, request: Request):
+    require_permission(request, "view")
+    return read_acceptance_criteria(runs_dir=RUNS_DIR, run_id=run_id)
 
