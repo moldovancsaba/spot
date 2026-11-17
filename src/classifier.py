@@ -438,7 +438,47 @@ def run_drafter(text: str) -> tuple[str, List[str]]:
     return " ".join(text.split()), []
 
 
+JEV_JUDGE_QUESTION = "Is the proposed category supported by the author's expressed position?"
+JEV_JUDGE_OPTIONS = [
+    {"id": "PASS", "description": "The proposal matches the author's expressed position."},
+    {"id": "REVIEW", "description": "The context is insufficient to confirm or contradict."},
+    {"id": "FAIL", "description": "The proposal contradicts the author's expressed position."},
+]
+
+
+def _jev_judge(text: str, category: str, flags: List[str]):
+    """Calibrated judge from the local JEV decision service; None when absent so the Ollama judge stays."""
+    url = os.getenv("SPOT_JEV_URL", "").strip().rstrip("/")
+    if not url:
+        return None
+    payload = {
+        "context": f"SOURCE_POST: {text}\nPROPOSED_CATEGORY: {category}",
+        "question": JEV_JUDGE_QUESTION,
+        "options": JEV_JUDGE_OPTIONS,
+    }
+    try:
+        request = urllib.request.Request(
+            url + "/v1/decide", data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"}, method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=15) as response:
+            obj = json.loads(response.read().decode("utf-8"))
+    except Exception:
+        return None
+    selected = obj.get("selected_id")
+    judge_flags = ["JEV_JUDGE"]
+    if not obj.get("uncalibrated", True):
+        judge_flags.append("JEV_CALIBRATED")
+    if obj.get("abstained") or selected not in {"PASS", "REVIEW", "FAIL"}:
+        judge_flags.append("JUDGE_ABSTAINED")
+        return float(obj.get("max_probability") or 0.0), "REVIEW", judge_flags
+    return float(obj.get("max_probability") or 0.0), selected, judge_flags
+
+
 def run_judge(text: str, category: str, flags: List[str]) -> tuple[float | None, str | None, List[str]]:
+    jev = _jev_judge(text, category, flags)
+    if jev is not None:
+        return jev
     out_flags: List[str] = []
     route_chain = [
         (LANES.judge_backend, LANES.judge_model),

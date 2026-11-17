@@ -14,6 +14,66 @@ SSOT = load_ssot(Path(__file__).resolve().parent.parent / 'ssot/ssot.json')
 
 
 class FailureContractRegressionTests(unittest.TestCase):
+    def test_jev_judge_lane_maps_verdicts_and_abstention(self):
+        """The local JEV service answers the judge task; the Ollama judge remains the fallback."""
+        import json
+        import os
+        from unittest.mock import patch as _patch
+
+        from src.classifier import _jev_judge
+
+        captured = {}
+
+        class FakeResponse:
+            def __init__(self, body):
+                self._body = body
+
+            def read(self):
+                return self._body
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+        def fake_urlopen(req, timeout=None):
+            captured["payload"] = json.loads(req.data.decode("utf-8"))
+            return FakeResponse(json.dumps({
+                "selected_id": "PASS", "max_probability": 0.87, "abstained": False,
+                "uncalibrated": False, "latency_ms": 120,
+            }).encode())
+
+        with _patch.dict(os.environ, {"SPOT_JEV_URL": "http://127.0.0.1:8770"}), \
+                _patch("src.classifier.urllib.request.urlopen", fake_urlopen):
+            score, verdict, judge_flags = _jev_judge("text", "Conspiracy Theories", [])
+        self.assertEqual((score, verdict), (0.87, "PASS"))
+        self.assertIn("JEV_JUDGE", judge_flags)
+        self.assertIn("JEV_CALIBRATED", judge_flags)
+        self.assertIn("PROPOSED_CATEGORY: Conspiracy Theories", captured["payload"]["context"])
+
+        def abstaining_urlopen(req, timeout=None):
+            return FakeResponse(json.dumps({
+                "selected_id": None, "max_probability": 0.42, "abstained": True,
+                "uncalibrated": True, "latency_ms": 120,
+            }).encode())
+
+        with _patch.dict(os.environ, {"SPOT_JEV_URL": "http://127.0.0.1:8770"}), \
+                _patch("src.classifier.urllib.request.urlopen", abstaining_urlopen):
+            score, verdict, judge_flags = _jev_judge("text", "Conspiracy Theories", [])
+        self.assertEqual(verdict, "REVIEW")
+        self.assertIn("JUDGE_ABSTAINED", judge_flags)
+
+        def failing_urlopen(req, timeout=None):
+            raise OSError("connection refused")
+
+        with _patch.dict(os.environ, {"SPOT_JEV_URL": "http://127.0.0.1:8770"}), \
+                _patch("src.classifier.urllib.request.urlopen", failing_urlopen):
+            self.assertIsNone(_jev_judge("text", "Conspiracy Theories", []))
+
+        with _patch.dict(os.environ, {"SPOT_JEV_URL": ""}):
+            self.assertIsNone(_jev_judge("text", "Conspiracy Theories", []))
+
     def test_ollama_payload_releases_models_after_use(self):
         """Metal OOM in segment children was caused by two resident Ollama lanes plus the MLX model."""
         import json
