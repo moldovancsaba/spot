@@ -285,3 +285,25 @@ All issues are on the `{spot} - From IDEA to LIVE` board (#5) with status `Todo 
 | T25 | Bakeoff harness: per-language candidate evaluation with promotion and rollback | [#109](https://github.com/moldovancsaba/spot/issues/109) |
 
 Board URL: https://github.com/users/moldovancsaba/projects/5
+
+
+---
+
+## 12. Delivery status (2026-11-17)
+
+Implementation has run while the demo stayed on its deployed bundle; nothing below was installed.
+
+| Phase | Delivered | Commit(s) | Remaining |
+|---|---|---|---|
+| M0 taxonomy (T01-T04) | seven categories in SSOT/prompts/parse/builder; reference v2 re-labelled; migration regressions | `d1876bb` | T03 storage half done (`69e640e`-era ops column); full row-by-row TEV-boundary review of the non-Classical categories |
+| M1 trinity (T05-T09) | three lanes, justification round, re-vote, unanimity routing, QA strata | `dbbf496` | — |
+| M2 (T10-T13) | trinity policy mode; calibrated confidence table v1; v2 retrain attempted and **rejected by the gate**; incumbent kept | `4dd6259`, `51f1db7`, `9adc565` | full 16-layer v2 retrain (needs GPU headroom); gate pass after it |
+| M3 (T14-T17) | parallel workers (claim-atomic, group signalling, single finalizer, failure isolation); SLA status; Hungarian protocol documented | `4dd6259`, `571575b`, `eaef6e5` | Hungarian data (external); capacity measurement on N workers at deploy time |
+| M4 (T18-T23) | handover workbook + endpoints; escalation; approvals + verification; backup/restore; bakeoff harness + measured baselines; trinity API + native panel (compile-verified) | `4dd6259`, `40111d6`, `8e2fe03` | deploy; native bundle install; formal restore drill |
+| D7 bakeoff | per-lane baseline records (primary 0.727 / verifier 0.766 / tertiary 0.731 binary F1 on the 102-row gate) | `40111d6` | first candidate comparison |
+
+**Incident log (honesty record):** during delivery, concurrent measurement/retrain jobs contended with the demo
+run and one segment child failed; the run's 82 unprocessed segments were marked FAILED by the then-current
+failure path. Recovered via heal (no rows lost). Two fixes shipped from the incident: `571575b` isolates a
+failed segment instead of failing the queue, and `ee61d5d` pins a calibration-sensitive regression. No heavy
+model jobs will run alongside the demo again without asking first.
