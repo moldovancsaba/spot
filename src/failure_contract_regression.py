@@ -14,6 +14,32 @@ SSOT = load_ssot(Path(__file__).resolve().parent.parent / 'ssot/ssot.json')
 
 
 class FailureContractRegressionTests(unittest.TestCase):
+    def test_jev_judge_disagreement_guard_routes_opposite_splits_to_review(self):
+        """JEV decides, llama3.1 corroborates; an opposite PASS/FAIL split goes to a human."""
+        import os
+        from unittest.mock import patch as _patch
+
+        from src.classifier import run_judge
+
+        with _patch.dict(os.environ, {"SPOT_JEV_URL": "http://127.0.0.1:8770"}), \
+                _patch("src.classifier._jev_judge", return_value=(0.87, "PASS", ["JEV_JUDGE"])), \
+                _patch("src.classifier._ollama_judge", return_value=(0.31, "FAIL", [])):
+            score, verdict, judge_flags = run_judge("text", "Conspiracy Theories", [])
+        self.assertEqual(verdict, "REVIEW")
+        self.assertIn("JEV_JUDGE_DISAGREEMENT", judge_flags)
+
+        with _patch.dict(os.environ, {"SPOT_JEV_URL": "http://127.0.0.1:8770"}), \
+                _patch("src.classifier._jev_judge", return_value=(0.87, "PASS", ["JEV_JUDGE"])), \
+                _patch("src.classifier._ollama_judge", return_value=(0.82, "PASS", [])):
+            score, verdict, judge_flags = run_judge("text", "Conspiracy Theories", [])
+        self.assertEqual(verdict, "PASS")
+        self.assertIn("JEV_LLAMA_CORROBORATED", judge_flags)
+
+        with _patch.dict(os.environ, {"SPOT_JEV_URL": ""}), \
+                _patch("src.classifier._ollama_judge", return_value=(0.82, "PASS", ["X"])):
+            score, verdict, judge_flags = run_judge("text", "Conspiracy Theories", [])
+        self.assertEqual((score, verdict), (0.82, "PASS"))
+
     def test_jev_judge_lane_maps_verdicts_and_abstention(self):
         """The local JEV service answers the judge task; the Ollama judge remains the fallback."""
         import json

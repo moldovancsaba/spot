@@ -475,10 +475,8 @@ def _jev_judge(text: str, category: str, flags: List[str]):
     return float(obj.get("max_probability") or 0.0), selected, judge_flags
 
 
-def run_judge(text: str, category: str, flags: List[str]) -> tuple[float | None, str | None, List[str]]:
-    jev = _jev_judge(text, category, flags)
-    if jev is not None:
-        return jev
+def _ollama_judge(text: str, category: str, flags: List[str]) -> tuple[float | None, str | None, List[str]]:
+    """The llama3.1 judge chain, kept as the reference judge the JEV lane is measured against."""
     out_flags: List[str] = []
     route_chain = [
         (LANES.judge_backend, LANES.judge_model),
@@ -504,6 +502,20 @@ def run_judge(text: str, category: str, flags: List[str]) -> tuple[float | None,
             out_flags.append("JUDGE_FALLBACK")
             continue
     return None, None, out_flags + ["JUDGE_UNAVAILABLE"]
+
+
+def run_judge(text: str, category: str, flags: List[str]) -> tuple[float | None, str | None, List[str]]:
+    """JEV decides; llama3.1 corroborates. An opposite PASS/FAIL split routes to review (the guard)."""
+    jev = _jev_judge(text, category, flags)
+    if jev is None:
+        return _ollama_judge(text, category, flags)
+    jev_score, jev_verdict, jev_flags = jev
+    llama_score, llama_verdict, llama_flags = _ollama_judge(text, category, flags)
+    if jev_verdict in {"PASS", "FAIL"} and llama_verdict in {"PASS", "FAIL"} and jev_verdict != llama_verdict:
+        # The two judges contradict each other on the outcome that matters: a human decides.
+        return min([s for s in (jev_score, llama_score) if s is not None] or [0.0]), "REVIEW", \
+            sorted(set(jev_flags + llama_flags + ["JEV_JUDGE_DISAGREEMENT"]))
+    return jev_score, jev_verdict, sorted(set(jev_flags + ["JEV_LLAMA_CORROBORATED"]))
 
 
 def normalize_label(raw_label: str) -> Optional[str]:
