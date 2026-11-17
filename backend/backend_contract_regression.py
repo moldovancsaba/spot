@@ -196,7 +196,14 @@ class BackendContractRegressionTests(unittest.TestCase):
             )
             self.assertEqual(record["decision"], "promote")
             self.assertEqual(record["rollback"], "ollama://gemma2:9b")
-            self.assertEqual(json.loads(registry.read_text())["candidate"], "ollama://qwen2.5:7b")
+            baseline = bakeoff_module.write_promotion(
+                registry=registry, language="de", lane="verifier",
+                candidate="ollama://qwen2.5:7b", incumbent=None,
+                candidate_metrics={"binary_f1": 0.766}, incumbent_metrics={}, baseline=True,
+            )
+            self.assertEqual(baseline["decision"], "baseline")
+            self.assertIsNone(baseline["rollback"])
+            self.assertEqual(json.loads(registry.read_text().splitlines()[-1])["candidate"], "ollama://qwen2.5:7b")
 
     def test_learning_approval_and_verification_records(self):
         """Deck p.9: TEV decides; the system records the decision and the before/after measurement."""
