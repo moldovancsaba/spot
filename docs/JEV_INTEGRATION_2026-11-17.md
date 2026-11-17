@@ -98,6 +98,31 @@ and the current llama3.1 judge is the weakest calibrated component.
 | "No Jev API dependency" | Respected: the dependency is our own local service, not an external Jev API. |
 | Governance | JEV's board is the execution authority for Phase 1; {spot}'s board for Phase 2/3. No cross-repo claims without both boards' evidence. |
 
+## 5a. Owner decisions (2026-11-17)
+
+1. **Local JEV on this machine** — the working copy lives at `/Users/Shared/Projects/jev`, branch
+   `spot-judge`, tracking upstream `moldovancsaba/jev` main. Upstream is checked periodically: general
+   improvements come in, spot-specific knowledge stays local, and worthwhile general work goes back later
+   as PRs.
+2. **First application: the judge lane** (PASS/REVIEW/FAIL).
+3. **Hardware: this machine** — measured as Apple M6 / 32 GB (stronger than JEV's 16 GB target, so the
+   small-model budget keeps JEV portable).
+
+## 5b. Progress so far (first implementation session, local JEV)
+
+- Environment recorded; venv with mlx-lm 0.31.3 pinned (requirements-lock.txt).
+- Qwen3-0.6B downloaded, revision pinned, loads directly from HF safetensors (no conversion).
+- `src/local_decision`: strict schemas (2–8 unique options; oversized context rejected, never truncated),
+  direct likelihood scoring with **sequence log-likelihood for multi-token labels** (REVIEW is 2 tokens),
+  CLI. 7 tests.
+- Measured: load 1.07 s, warm decide ~140–260 ms, peak RSS ~1.5 GB.
+- Judge pilot: 100 adjudicated PASS/FAIL records (50/50) compiled from the accepted spot reference;
+  raw records git-ignored, manifest committed with sha256. REVIEW-class records deferred to the TEV
+  borderline samples.
+- **Zero-shot baseline: 0.50 accuracy, PASS 30/30, FAIL 0/30** — the base model answers PASS to
+  everything. That is the measured starting point the rubric pilot and LoRA (upstream issues #3/#4) must
+  beat; the scorecard is recorded in the JEV reports.
+
 ## 6. Open questions for the owner
 
 1. **Repo boundary (recommended A):** implement the scorer in the JEV repo and have {spot} consume it as a
