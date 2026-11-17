@@ -55,6 +55,7 @@ final class SpotCoreService: ObservableObject {
     @Published var reviewQueueRows: [SpotReviewRowPreview] = []
     @Published var selectedReviewRowIndex: Int?
     @Published var activeReviewInspector: SpotReviewRowInspector?
+    @Published var activeTrinity: SpotTrinityDetail?
     @Published var reviewDraft: SpotReviewDraft = .empty
     @Published var reviewSaveMessage: String = ""
     @Published var availableUploads: [SpotUploadRecord] = []
@@ -580,7 +581,7 @@ final class SpotCoreService: ObservableObject {
         if selectedRunID != runID {
             reviewNoteIsDirty = false
             casePageOffset = 0; runReports = nil; reviewBucket = "waiting"
-            selectedReviewRowIndex = nil; activeReviewInspector = nil; reviewSaveMessage = ""
+            selectedReviewRowIndex = nil; activeReviewInspector = nil; activeTrinity = nil; reviewSaveMessage = ""
             reviewQueueGeneration += 1
         }
         selectedRunID = runID
@@ -2359,6 +2360,7 @@ final class SpotCoreService: ObservableObject {
         } else {
             selectedReviewRowIndex = nil
             activeReviewInspector = nil
+            activeTrinity = nil
             reviewDraft = .empty
         }
     }
@@ -2377,6 +2379,17 @@ final class SpotCoreService: ObservableObject {
             reviewDecision: inspector.reviewControls.reviewDecision ?? "",
             reviewerNote: inspector.reviewControls.reviewerNote
         )
+        activeTrinity = nil
+        do {
+            let response: SpotTrinityResponse = try await requestJSON(
+                url: baseURL.appending(path: "runs/\(runID)/review-rows/\(rowIndex)/trinity")
+            )
+            if selectedRunID == runID, selectedReviewRowIndex == rowIndex {
+                activeTrinity = response.trinity
+            }
+        } catch {
+            activeTrinity = nil
+        }
     }
 
     private func mergeUpdatedReviewRow(_ row: SpotReviewRowPreview) {

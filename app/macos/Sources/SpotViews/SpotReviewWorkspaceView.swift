@@ -121,6 +121,35 @@ struct SpotReviewWorkspaceView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
 
+                        if let trinity = service.activeTrinity {
+                            GroupBox("Trinity - three evaluators") {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    if let proposals = trinity.initialProposals, !proposals.isEmpty {
+                                        ForEach(Array(proposals.enumerated()), id: \.offset) { index, proposal in
+                                            Text("E\(index + 1): \(proposal.model ?? "-") -> \(proposal.category ?? "-")")
+                                                .font(.callout)
+                                        }
+                                    }
+                                    if let reVotes = trinity.reVotes, !reVotes.isEmpty {
+                                        Text("Justification round re-votes:")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                        ForEach(Array(reVotes.enumerated()), id: \.offset) { index, vote in
+                                            if let vote {
+                                                Text("\(vote.model ?? "-") re-voted \(vote.category ?? "-")")
+                                                    .font(.callout)
+                                            }
+                                        }
+                                    }
+                                    if let finalCategory = trinity.finalCategory {
+                                        Text("Final: \(finalCategory) - \(trinity.unanimous == true ? "unanimous" : "split")")
+                                            .fontWeight(.semibold)
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+
                         GroupBox("Evidence") {
                             VStack(alignment: .leading, spacing: 10) {
                                 if let explanation = inspector.evidence.explanation, !explanation.isEmpty {

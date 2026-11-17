@@ -383,6 +383,46 @@ struct SpotReviewControls: Decodable {
     }
 }
 
+struct SpotTrinityDetail: Decodable {
+    let policy: String?
+    let lanes: Int?
+    let initialProposals: [SpotTrinityProposal]?
+    let reVotes: [SpotTrinityRevote?]?
+    let unanimous: Bool?
+    let finalCategory: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case policy, lanes
+        case initialProposals = "initial_proposals"
+        case reVotes = "re_votes"
+        case unanimous
+        case finalCategory = "final_category"
+    }
+}
+
+struct SpotTrinityProposal: Decodable {
+    let model: String?
+    let category: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case model, category
+    }
+}
+
+struct SpotTrinityRevote: Decodable {
+    let model: String?
+    let category: String?
+    let explanation: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case model, category, explanation
+    }
+}
+
+struct SpotTrinityResponse: Decodable {
+    let trinity: SpotTrinityDetail?
+}
+
 struct SpotReviewRowInspector: Decodable {
     let runID: String
     let rowIndex: Int
