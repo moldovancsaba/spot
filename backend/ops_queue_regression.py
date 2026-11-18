@@ -61,6 +61,29 @@ class OpsQueueRegressionTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200, response.text)
 
+    def test_processing_stats_average_is_attempt_scoped(self) -> None:
+        """A heal must not show 0.07 s/row by dividing cumulative rows by the new attempt clock."""
+        import json
+        from backend.segment_worker import _write_processing_stats
+
+        _write_processing_stats(
+            run_dir=self.runs_dir / "stats-run",
+            run_id="stats-run",
+            started_at="2026-11-18T23:00:00+00:00",
+            total_rows=62024,
+            processed_rows=4560,
+            threat_rows=100,
+            review_required_rows=200,
+            judged_rows=4550,
+            processed_rows_at_start=4555,
+        )
+        payload = json.loads((self.runs_dir / "stats-run" / "processing_stats.json").read_text())
+        self.assertIsNotNone(payload["avg_seconds_per_row"])
+        # elapsed is the attempt clock; rows processed by THIS attempt = 5; the average must reflect that,
+        # not 4560 cumulative rows.
+        self.assertAlmostEqual(payload["avg_seconds_per_row"],
+                               payload["elapsed_seconds"] / 5, places=2)
+
     def test_parallel_workers_claim_distinct_segments_atomically(self) -> None:
         """T16: N workers must each claim a different segment; the queue claim is the concurrency primitive."""
         import threading

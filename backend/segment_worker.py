@@ -135,11 +135,15 @@ def _write_processing_stats(
     second_pass_candidates: int | None = None,
     second_pass_completed: int | None = None,
     second_pass_overrides: int | None = None,
+    processed_rows_at_start: int = 0,
 ) -> None:
     started_dt = datetime.fromisoformat(started_at)
     now_dt = datetime.now(UTC)
     elapsed_seconds = max((now_dt - started_dt).total_seconds(), 0.0)
-    avg_seconds_per_row = round(elapsed_seconds / processed_rows, 4) if processed_rows > 0 else None
+    # The clock is attempt-scoped but processed_rows is run-cumulative (rows survive heals). The average
+    # must divide only the rows processed by THIS attempt, otherwise a heal shows an absurd s/row.
+    attempt_rows = max(processed_rows - processed_rows_at_start, 0)
+    avg_seconds_per_row = round(elapsed_seconds / attempt_rows, 4) if attempt_rows > 0 else None
     threat_rate = round(threat_rows / processed_rows, 4) if processed_rows > 0 and threat_rows is not None else None
     projected_threat_rows = (
         int(round(threat_rate * total_rows))
@@ -495,6 +499,7 @@ def main() -> int:
         processed_rows=completed_rows,
         message=reconcile_message,
     )
+    attempt_start_rows = completed_rows
     _write_processing_stats(
         run_dir=run_dir,
         run_id=args.run_id,
@@ -507,6 +512,7 @@ def main() -> int:
         second_pass_candidates=completed_second_pass_candidates,
         second_pass_completed=completed_second_pass_completed,
         second_pass_overrides=completed_second_pass_overrides,
+        processed_rows_at_start=attempt_start_rows,
     )
 
     try:
@@ -684,6 +690,7 @@ def main() -> int:
                         second_pass_candidates=aggregate_second_pass_candidates,
                         second_pass_completed=aggregate_second_pass_completed,
                         second_pass_overrides=aggregate_second_pass_overrides,
+                        processed_rows_at_start=attempt_start_rows,
                     )
                     time.sleep(0.5)
                 return_code = CURRENT_CHILD.wait()
@@ -770,6 +777,7 @@ def main() -> int:
                 second_pass_candidates=completed_second_pass_candidates,
                 second_pass_completed=completed_second_pass_completed,
                 second_pass_overrides=completed_second_pass_overrides,
+        processed_rows_at_start=attempt_start_rows,
             )
 
         if args.output.exists():
