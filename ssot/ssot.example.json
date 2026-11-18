@@ -48,7 +48,7 @@
       "fallback_backend": "ollama",
       "fallback_model": "qwen2.5:7b",
       "third_backend": "ollama",
-      "third_model": "gemma2:9b"
+      "third_model": "gemma2:2b"
     },
     "drafter": {
       "backend": "ollama",

@@ -22,9 +22,9 @@ class FailureContractRegressionTests(unittest.TestCase):
         from src.classifier import _ollama_keep_alive
 
         with _patch.dict(os.environ, {"SPOT_OLLAMA_KEEP_ALIVE": "0",
-                                      "SPOT_OLLAMA_KEEP_ALIVE_MODELS": "llama3.2:3b=-1,gemma2:2b=-1"}):
-            self.assertEqual(_ollama_keep_alive("llama3.2:3b"), "-1")
-            self.assertEqual(_ollama_keep_alive("gemma2:2b"), "-1")
+                                      "SPOT_OLLAMA_KEEP_ALIVE_MODELS": "llama3.2:3b=8760h,gemma2:2b=8760h"}):
+            self.assertEqual(_ollama_keep_alive("llama3.2:3b"), "8760h")
+            self.assertEqual(_ollama_keep_alive("gemma2:2b"), "8760h")
             self.assertEqual(_ollama_keep_alive("llama3.1:8b"), "0")
             self.assertEqual(_ollama_keep_alive("qwen2.5:7b"), "0")
 
