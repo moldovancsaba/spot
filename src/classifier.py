@@ -180,6 +180,23 @@ def _response_schema(prompt: str) -> dict:
     return {"type":"object","properties":properties,"required":required,"additionalProperties":False}
 
 
+def _ollama_keep_alive(model_name: str) -> str:
+    """Per-model keep-alive policy.
+
+    Small resident lanes stay loaded (no reload latency, no reload memory churn) while larger
+    corroboration models still release after each call. SPOT_OLLAMA_KEEP_ALIVE is the default;
+    SPOT_OLLAMA_KEEP_ALIVE_MODELS="model=value,..." overrides per model (value -1 = resident).
+    """
+    default = os.getenv("SPOT_OLLAMA_KEEP_ALIVE", "0")
+    overrides = {}
+    for entry in os.getenv("SPOT_OLLAMA_KEEP_ALIVE_MODELS", "").split(","):
+        entry = entry.strip()
+        if "=" in entry:
+            model, value = entry.split("=", 1)
+            overrides[model.strip()] = value.strip()
+    return overrides.get(model_name, default)
+
+
 def _ollama_generate_json(model_name: str, prompt: str, timeout: int = OLLAMA_TIMEOUT_SEC) -> dict:
     _assert_local_ollama_url()
     # UTF-8 byte count is a conservative token upper bound; reserve space for the template and response.
@@ -196,7 +213,7 @@ def _ollama_generate_json(model_name: str, prompt: str, timeout: int = OLLAMA_TI
         # process; keeping two Ollama lanes resident as well exhausts the unified GPU budget and produces
         # Metal OOM failures inside segment children (observed on the live run). Reload per call costs a few
         # seconds and prevents the whole-run failures it caused.
-        "keep_alive": os.getenv("SPOT_OLLAMA_KEEP_ALIVE", "0"),
+        "keep_alive": _ollama_keep_alive(model_name),
         "options": {"temperature": OLLAMA_TEMPERATURE, "top_p": OLLAMA_TOP_P, "seed": OLLAMA_SEED, "num_ctx": context_size, "num_predict": 768},
     }
     req = urllib.request.Request(

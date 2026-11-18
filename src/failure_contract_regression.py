@@ -14,6 +14,20 @@ SSOT = load_ssot(Path(__file__).resolve().parent.parent / 'ssot/ssot.json')
 
 
 class FailureContractRegressionTests(unittest.TestCase):
+    def test_per_model_keep_alive_policy(self):
+        """Small resident lanes stay loaded; large corroboration models keep releasing."""
+        import os
+        from unittest.mock import patch as _patch
+
+        from src.classifier import _ollama_keep_alive
+
+        with _patch.dict(os.environ, {"SPOT_OLLAMA_KEEP_ALIVE": "0",
+                                      "SPOT_OLLAMA_KEEP_ALIVE_MODELS": "llama3.2:3b=-1,gemma2:2b=-1"}):
+            self.assertEqual(_ollama_keep_alive("llama3.2:3b"), "-1")
+            self.assertEqual(_ollama_keep_alive("gemma2:2b"), "-1")
+            self.assertEqual(_ollama_keep_alive("llama3.1:8b"), "0")
+            self.assertEqual(_ollama_keep_alive("qwen2.5:7b"), "0")
+
     def test_jev_judge_disagreement_guard_routes_opposite_splits_to_review(self):
         """JEV decides, llama3.1 corroborates; an opposite PASS/FAIL split goes to a human."""
         import os
