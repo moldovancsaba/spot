@@ -43,3 +43,18 @@ curl http://127.0.0.1:8770/health && curl http://127.0.0.1:8765/api/health
 - Purging a run: `purge_run_state` — destroys segments; re-intake afterwards.
 - Killing orphan workers: `pkill -f "segment_worker.py --run-id <id>"` after `kill -CONT` (a SIGSTOPped
   worker ignores TERM; CONT first, then KILL, then heal).
+
+
+## Memory ceiling (learned 2026-11-19)
+
+The primary lane holds an 8B 4-bit model per segment child (~8 GB GPU). **Two workers is the ceiling** on
+this 32 GB machine: a 3-worker experiment drove ~20 GB into swap, collapsed throughput from ~7 s/row to
+>100 s/row, and left the machine degraded until reboot (macOS does not drain stale swap while the system
+runs). More workers require a smaller resident primary (the trained small-model direction), not a config
+change. `SPOT_PARALLEL_WORKERS` stays at 2 by default.
+
+## Reboot recovery
+
+- JEV service + retrainer: restart automatically (launchd `RunAtLoad`).
+- spot.app: `open -a /Applications/spot.app`; the app auto-resumes an interrupted run, else
+  `POST /runs/{run_id}/heal`.
