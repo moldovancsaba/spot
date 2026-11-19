@@ -53,8 +53,18 @@ this 32 GB machine: a 3-worker experiment drove ~20 GB into swap, collapsed thro
 runs). More workers require a smaller resident primary (the trained small-model direction), not a config
 change. `SPOT_PARALLEL_WORKERS` stays at 2 by default.
 
-## Reboot recovery
+## Reboot recovery (fully automatic)
 
-- JEV service + retrainer: restart automatically (launchd `RunAtLoad`).
-- spot.app: `open -a /Applications/spot.app`; the app auto-resumes an interrupted run, else
-  `POST /runs/{run_id}/heal`.
+1. **launchd `RunAtLoad`** restarts the JEV service, the retrainer cadence, the swap watchdog, and
+   `com.spot.app` opens the app shell at login - no manual step.
+2. The app auto-resumes the interrupted run; if it does not, `POST /runs/{run_id}/heal`.
+3. Verify: `/api/health`, `/runs/{id}/sla`, `curl 127.0.0.1:8770/health`, `launchctl list | grep -E "jev|spot"`.
+
+## Swap can never silently return
+
+- **Hard ceiling:** `SPOT_MAX_PARALLEL_WORKERS=2` (enforced in code, action-logged) - the 8B-primary
+  configuration that thrashed cannot be recreated by any env change.
+- **Watchdog:** `com.spot.swapwatch` logs swap every 15 minutes; above 12 GB WARNING, above 20 GB
+  CRITICAL with the memory leaders captured. It never kills anything.
+- **Permanent fix path:** a smaller resident primary (the trained 1.5-2B adapter experiment) is the only
+  change that raises the worker ceiling - recorded here so the trade stays explicit.
