@@ -13,7 +13,7 @@ CANONICAL_CATEGORIES = {
     "Anti-Judaism",
     "Holocaust Denial",
     "Classical Antisemitism",
-    "Structural Antisemitism",
+    "Latent Antisemitism",
     "Conspiracy Theories",
     "Not Antisemitic",
 }
@@ -24,6 +24,8 @@ class InputRow:
     row_index: int
     item_number: str
     post_text: str
+    keywords: str = ""
+    source_link: str = ""
 
 
 @dataclass(frozen=True)

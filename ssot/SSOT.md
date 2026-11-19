@@ -40,7 +40,7 @@ It classifies rows into a closed antisemitism taxonomy with deterministic and au
 
 Language is externally guaranteed. {spot} does not perform automatic language detection.
 
-## 5. Closed Taxonomy (taxonomy-v0.2)
+## 5. Closed Taxonomy (taxonomy-v0.3)
 
 Exactly one category per row, in the TEV guide order:
 
@@ -48,7 +48,7 @@ Exactly one category per row, in the TEV guide order:
 2. `Anti-Judaism`
 3. `Holocaust Denial`
 4. `Classical Antisemitism`
-5. `Structural Antisemitism`
+5. `Latent Antisemitism`
 6. `Conspiracy Theories`
 7. `Not Antisemitic`
 
@@ -69,7 +69,7 @@ always follow the primary category.
 | `Anti-Israel` | `Anti-Israel` | identity |
 | `Anti-Judaism` | `Anti-Judaism` | identity |
 | `Classical Antisemitism` | `Classical Antisemitism` | identity; only **new** classifications may use `Holocaust Denial` |
-| `Structural Antisemitism` | `Structural Antisemitism` | identity |
+| `Structural Antisemitism` | `Latent Antisemitism` | renamed per APL guide 2026-11-19 |
 | `Conspiracy Theories` | `Conspiracy Theories` | identity |
 | `Not Antisemitic` | `Not Antisemitic` | identity |
 

@@ -28,7 +28,7 @@ CATEGORIES = [
     "Anti-Judaism",
     "Holocaust Denial",
     "Classical Antisemitism",
-    "Structural Antisemitism",
+    "Latent Antisemitism",
     "Conspiracy Theories",
     "Not Antisemitic",
 ]
@@ -44,8 +44,8 @@ Step 2. If antisemitic, apply the FIRST rule that matches:
 1. Holocaust denial or minimization, Nazi praise, an anti-Jewish slur, or a racial/genetic claim -> Classical Antisemitism
 2. A claim of secret or coded Jewish control, manipulation, or collective plotting -> Conspiracy Theories
 4. Antisemitic hostility carried BY an Israel/Zionism framing itself -> Anti-Israel
-5. A claim that Jews systematically control, exclude others from, or receive unequal treatment within institutions
-   or society, with no Israel/Zionism framing and no secret-plot claim -> Structural Antisemitism
+5. Coded or indirect antisemitism that does not name Jews openly (dogwhistle substitutes, echo-coded names,
+   emojis standing in for Jews) and provably targets Jews -> Latent Antisemitism
 6. Hostility directed at the Jewish religion or Jewish religious identity itself -> Anti-Judaism
 
 Boundaries: mentioning Israel or Zionism does not make a post Anti-Israel; hostility must be carried by that framing.

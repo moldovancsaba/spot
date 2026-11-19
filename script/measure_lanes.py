@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 
 POSITIVE = {"Anti-Israel", "Anti-Judaism", "Holocaust Denial", "Classical Antisemitism",
-            "Structural Antisemitism", "Conspiracy Theories"}
+            "Latent Antisemitism", "Conspiracy Theories"}
 
 
 def main() -> int:

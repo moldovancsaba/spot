@@ -118,7 +118,7 @@ def _build_prompt(text: str, categories: List[str], fallback: str, soft_signal_f
         "Anti-Judaism: hostility towards Jewish religion or religious identity. "
         "Holocaust Denial: denial, minimization or relativization of the Holocaust. When denial or relativization is present it takes priority over every other category. "
         "Classical Antisemitism: anti-Jewish slurs, racial hatred or Nazi praise without a Holocaust-denial claim. "
-        "Structural Antisemitism: discriminatory exclusion or systematic unequal treatment of Jews. "
+        "Latent Antisemitism: indirect, coded antisemitism that does not name Jews openly - dogwhistle substitutes (globalists, international bankers, background power), echo-coded names (((...))), juice/watermelon emojis standing in for Jews, or claims that hidden Jewish interests control institutions. Classify as Latent only when context proves the coded meaning targets Jews; the keywords alone never decide. "
         "Conspiracy Theories: claims of secret Jewish or coded Jewish control, manipulation or collective plots. "
         "Not Antisemitic: no supported antisemitic position expressed by the author. If context is missing, lower confidence instead of inventing it. "
         f"Choose exactly one category from {json.dumps(categories)}. "
@@ -327,8 +327,8 @@ def _extract_category_from_text(text: str) -> str:
         return "Anti-Judaism"
     if "classical antisemitism" in t or "holocaust denial" in t:
         return "Classical Antisemitism"
-    if "structural antisemitism" in t:
-        return "Structural Antisemitism"
+    if "structural antisemitism" in t or "latent antisemitism" in t or "latens antiszemitizmus" in t:
+        return "Latent Antisemitism"
     if "conspiracy theor" in t:
         return "Conspiracy Theories"
     return ""
@@ -548,7 +548,9 @@ def normalize_label(raw_label: str) -> Optional[str]:
         "anti judaism": "Anti-Judaism",
         "classical antisemitism": "Classical Antisemitism",
         "classical antisemitic": "Classical Antisemitism",
-        "structural antisemitism": "Structural Antisemitism",
+        "structural antisemitism": "Latent Antisemitism",
+        "latent antisemitism": "Latent Antisemitism",
+        "latens antiszemitizmus": "Latent Antisemitism",
         "conspiracy theories": "Conspiracy Theories",
         "conspiracy theory": "Conspiracy Theories",
         "not antisemitic": "Not Antisemitic",

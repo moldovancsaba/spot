@@ -319,16 +319,16 @@ class FailureContractRegressionTests(unittest.TestCase):
         ssot = load_ssot(_Path(__file__).resolve().parents[1] / "ssot" / "ssot.json")
         self.assertEqual(sorted(CANONICAL_CATEGORIES), sorted([
             "Anti-Israel", "Anti-Judaism", "Holocaust Denial",
-            "Classical Antisemitism", "Structural Antisemitism",
+            "Classical Antisemitism", "Latent Antisemitism",
             "Conspiracy Theories", "Not Antisemitic",
         ]))
-        self.assertEqual(ssot.taxonomy.version, "taxonomy-v0.2")
+        self.assertEqual(ssot.taxonomy.version, "taxonomy-v0.3")
         self.assertIn("Holocaust Denial", ssot.taxonomy.categories)
         self.assertEqual(ssot.taxonomy.fallback_category, "Not Antisemitic")
 
         # Identity mapping for all shared six-category labels; only new classifications may use the new one.
         shared = ["Anti-Israel", "Anti-Judaism", "Classical Antisemitism",
-                  "Structural Antisemitism", "Conspiracy Theories", "Not Antisemitic"]
+                  "Latent Antisemitism", "Conspiracy Theories", "Not Antisemitic"]
         for label in shared:
             self.assertIn(label, ssot.taxonomy.categories)
 

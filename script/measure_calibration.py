@@ -21,7 +21,7 @@ import time
 from pathlib import Path
 
 CATEGORIES = ["Anti-Israel", "Anti-Judaism", "Holocaust Denial", "Classical Antisemitism",
-              "Structural Antisemitism", "Conspiracy Theories", "Not Antisemitic"]
+              "Latent Antisemitism", "Conspiracy Theories", "Not Antisemitic"]
 
 
 def gate_text(record: dict) -> str:

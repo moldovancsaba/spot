@@ -13,6 +13,30 @@ spec.loader.exec_module(acceptance)
 
 
 class AcceptanceScoringRegressionTests(unittest.TestCase):
+    def test_apl_four_field_intake_maps_by_header_alias(self):
+        """The APL structure (ID, text, keywords, link) imports as a good format - adapt, never refuse."""
+        import tempfile
+        from openpyxl import Workbook
+
+        from src.excel_io import read_input_rows
+        from src.ssot_loader import load_ssot
+
+        ssot = load_ssot(Path(__file__).resolve().parents[1] / "ssot" / "ssot.json")
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "apl.xlsx"
+            wb = Workbook()
+            ws = wb.active
+            ws.append(["ID", "A poszt szovege", "Oda tartozo kulcsszavak", "A poszt linkje"])
+            ws.append(["apl-1", "A globalistak iranyitjak a valsagokat.", "globalistak, hatterhatalom",
+                       "https://platform.example/apl-1"])
+            wb.save(path)
+            rows = read_input_rows(path, ssot)
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0].item_number, "apl-1")
+            self.assertEqual(rows[0].post_text, "A globalistak iranyitjak a valsagokat.")
+            self.assertEqual(rows[0].keywords, "globalistak, hatterhatalom")
+            self.assertEqual(rows[0].source_link, "https://platform.example/apl-1")
+
     def test_failed_negative_placeholder_is_not_a_correct_prediction(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

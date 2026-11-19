@@ -29,7 +29,7 @@ HEADERS = ["Case ID", "Run ID", "Row Index", "Item Number", "Source / Snapshot",
            "Review State", "Expert Decision", "Reviewer Note", "Machine Flags", "Row Hash"]
 
 POSITIVE = {"Anti-Israel", "Anti-Judaism", "Holocaust Denial", "Classical Antisemitism",
-            "Structural Antisemitism", "Conspiracy Theories"}
+            "Latent Antisemitism", "Conspiracy Theories"}
 
 
 def open_question(flags: list[str], category: str, judge_verdict: str | None) -> str:

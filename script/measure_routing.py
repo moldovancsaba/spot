@@ -25,7 +25,7 @@ import os
 import sys
 from pathlib import Path
 
-POSITIVE = {"Anti-Israel", "Anti-Judaism", "Classical Antisemitism", "Structural Antisemitism", "Conspiracy Theories"}
+POSITIVE = {"Anti-Israel", "Anti-Judaism", "Classical Antisemitism", "Latent Antisemitism", "Conspiracy Theories"}
 
 
 def _verifier_only(rows, positive):

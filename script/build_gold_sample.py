@@ -18,12 +18,12 @@ import re
 from pathlib import Path
 
 CATEGORIES = ["Anti-Israel", "Anti-Judaism", "Classical Antisemitism",
-              "Structural Antisemitism", "Conspiracy Theories", "Not Antisemitic"]
+              "Latent Antisemitism", "Conspiracy Theories", "Not Antisemitic"]
 ALIAS = {
     "anti israel": "Anti-Israel", "anti israeli": "Anti-Israel",
     "anti judaism": "Anti-Judaism",
     "classical antisemitism": "Classical Antisemitism", "holocaust denial": "Classical Antisemitism",
-    "structural antisemitism": "Structural Antisemitism",
+    "structural antisemitism": "Latent Antisemitism",
     "conspiracy theories": "Conspiracy Theories", "conspiracy theory": "Conspiracy Theories",
     "not antisemitic": "Not Antisemitic", "not antisemetic": "Not Antisemitic",
 }

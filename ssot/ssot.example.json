@@ -1,13 +1,13 @@
 {
   "ssot_version": "0.4",
   "taxonomy": {
-    "version": "taxonomy-v0.2",
+    "version": "taxonomy-v0.3",
     "categories": [
       "Anti-Israel",
       "Anti-Judaism",
       "Holocaust Denial",
       "Classical Antisemitism",
-      "Structural Antisemitism",
+      "Latent Antisemitism",
       "Conspiracy Theories",
       "Not Antisemitic"
     ],

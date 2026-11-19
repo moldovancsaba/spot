@@ -22,7 +22,7 @@ CATEGORIES = [
     "Anti-Israel",
     "Anti-Judaism",
     "Classical Antisemitism",
-    "Structural Antisemitism",
+    "Latent Antisemitism",
     "Conspiracy Theories",
     "Not Antisemitic",
 ]

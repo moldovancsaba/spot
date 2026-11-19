@@ -12,9 +12,9 @@
       "Anti-Judaism": 0.5,
       "Holocaust Denial": 0.0,
       "Classical Antisemitism": 0.5,
-      "Structural Antisemitism": 0.0,
       "Conspiracy Theories": 0.273,
-      "Not Antisemitic": 0.224
+      "Not Antisemitic": 0.224,
+      "Latent Antisemitism": 0.0
     },
     "ollama:qwen2.5:7b": {
       "binary": {
@@ -25,9 +25,9 @@
       "Anti-Judaism": 0.625,
       "Holocaust Denial": 1.0,
       "Classical Antisemitism": 0.0,
-      "Structural Antisemitism": 0.0,
       "Conspiracy Theories": 0.182,
-      "Not Antisemitic": 0.449
+      "Not Antisemitic": 0.449,
+      "Latent Antisemitism": 0.0
     },
     "ollama:gemma2:9b": {
       "binary": {
@@ -38,9 +38,9 @@
       "Anti-Judaism": 0.25,
       "Holocaust Denial": 1.0,
       "Classical Antisemitism": 0.5,
-      "Structural Antisemitism": 0.0,
       "Conspiracy Theories": 0.636,
-      "Not Antisemitic": 0.204
+      "Not Antisemitic": 0.204,
+      "Latent Antisemitism": 0.0
     }
   }
 }

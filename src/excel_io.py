@@ -81,9 +81,27 @@ def read_input_rows(path: Path, ssot: SSOT) -> List[InputRow]:
 
     header_values = [str(v).strip() if v is not None else "" for v in header]
     expected = ssot.policy.expected_columns
-    if header_values[: len(expected)] != expected:
+    strict_schema = header_values[: len(expected)] == expected
+
+    # Flexible mapping for partner formats (APL 4-field: ID, text, keywords, link). Every format is a good
+    # format: headers are matched by alias, and any unmapped columns are ignored, never fatal.
+    ALIASES = {
+        "item_number": ["item number", "id", "azonosito", "azonosító", "sorszam", "sorszám"],
+        "post_text": ["post text", "text", "szoveg", "szöveg", "a poszt szovege", "a poszt szövege"],
+        "keywords": ["keywords", "kulcsszavak", "oda tartozo kulcsszavak", "oda tartozó kulcsszavak"],
+        "source_link": ["link", "url", "a poszt linkje", "hivatkozas", "hivatkozás"],
+    }
+    lowered = [value.lower() for value in header_values]
+    column_idx = {}
+    for field, aliases in ALIASES.items():
+        for alias in aliases:
+            if alias in lowered:
+                column_idx[field] = lowered.index(alias)
+                break
+    if not strict_schema and ("post_text" not in column_idx or "item_number" not in column_idx):
         raise InputFileError(
-            f"Invalid schema. Expected first columns {expected}; got {header_values[:len(expected)]}. Fix input schema to match the sample format."
+            f"Unrecognized schema. Expected columns {expected}, or at least a text and an id column "
+            f"(aliases: {ALIASES}). Got {header_values}."
         )
 
     try:
@@ -95,9 +113,22 @@ def read_input_rows(path: Path, ssot: SSOT) -> List[InputRow]:
 
     rows: List[InputRow] = []
     for idx, row in enumerate(ws.iter_rows(min_row=2, max_row=max_row, values_only=True), start=2):
-        item_number = "" if row[0] is None else str(row[0]).strip()
-        post_text = "" if row[1] is None else str(row[1]).strip()
-        category = "" if len(row) < 3 or row[2] is None else str(row[2]).strip()
+        if strict_schema:
+            item_number = "" if row[0] is None else str(row[0]).strip()
+            post_text = "" if row[1] is None else str(row[1]).strip()
+            category = "" if len(row) < 3 or row[2] is None else str(row[2]).strip()
+            keywords = ""
+            source_link = ""
+        else:
+            def cell(field):
+                pos = column_idx.get(field)
+                return "" if pos is None or pos >= len(row) or row[pos] is None else str(row[pos]).strip()
+
+            item_number = cell("item_number")
+            post_text = cell("post_text")
+            category = ""
+            keywords = cell("keywords")
+            source_link = cell("source_link")
         if item_number == "" and post_text == "" and category == "":
             continue
         if len(post_text) > MAX_POST_TEXT_LENGTH:
@@ -114,7 +145,8 @@ def read_input_rows(path: Path, ssot: SSOT) -> List[InputRow]:
                     original_row_index = int(raw_original_row_index)
                 except Exception as exc:  # noqa: BLE001
                     raise InputFileError(f"Input row {idx} contains an invalid Original Row Index value.") from exc
-        rows.append(InputRow(row_index=original_row_index, item_number=item_number, post_text=post_text))
+        rows.append(InputRow(row_index=original_row_index, item_number=item_number, post_text=post_text,
+                             keywords=keywords, source_link=source_link))
         if len(rows) > MAX_INPUT_ROWS:
             raise InputFileError(f"Input workbook exceeds the maximum supported row count of {MAX_INPUT_ROWS}.")
 
@@ -136,7 +168,7 @@ def build_row_manifest_entries(
     source_sheet: str = "__first_worksheet__",
 ) -> List[dict]:
     entries: List[dict] = []
-    for row in canonicalize_xlsx_input_rows(rows, source_name=source_name, source_sheet=source_sheet):
+    for source_row, row in zip(rows, canonicalize_xlsx_input_rows(rows, source_name=source_name, source_sheet=source_sheet)):
         entries.append(
             {
                 "schema_version": row.schema_version,
@@ -144,6 +176,8 @@ def build_row_manifest_entries(
                 "row_index": row.row_index,
                 "item_number": row.item_number,
                 "row_hash": row.row_hash,
+                "keywords": getattr(source_row, "keywords", "") or "",
+                "source_link": getattr(source_row, "source_link", "") or "",
                 "post_text_sha256": row.post_text_sha256,
                 "post_text_length": row.post_text_length,
                 "normalization_status": row.normalization_status,
