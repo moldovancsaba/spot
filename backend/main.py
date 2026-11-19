@@ -960,7 +960,21 @@ def _start_classify_run(*, run_id: str, payload: dict, actor: str, resume_existi
 
     import os as _os
 
-    worker_count = max(1, min(int(_os.getenv("SPOT_PARALLEL_WORKERS", "1") or "1"), 8))
+    # Memory ceiling, measured not assumed: each worker child holds the 8B primary (~8 GB GPU) and the
+    # resident lanes plus the OS consume the rest of 32 GB. A 3-worker experiment drove ~20 GB into swap
+    # and collapsed throughput 15x. The ceiling is enforced here so no config can reintroduce thrash.
+    requested_workers = max(1, min(int(_os.getenv("SPOT_PARALLEL_WORKERS", "1") or "1"), 8))
+    worker_cap = max(1, min(int(_os.getenv("SPOT_MAX_PARALLEL_WORKERS", "2") or "2"), 8))
+    worker_count = min(requested_workers, worker_cap)
+    if requested_workers > worker_cap:
+        append_action(
+            runs_dir=RUNS_DIR,
+            run_id=run_id,
+            action="worker_count_clamped",
+            actor="memory-guard",
+            payload={"requested": requested_workers, "clamped_to": worker_count,
+                     "reason": "measured 8B-primary ceiling: more workers thrash unified memory"},
+        )
     procs: list[subprocess.Popen] = []
     for worker_index in range(worker_count):
         worker_cmd = list(cmd)

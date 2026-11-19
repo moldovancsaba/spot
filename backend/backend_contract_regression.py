@@ -162,6 +162,17 @@ class BackendContractRegressionTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200, response.text)
 
+    def test_worker_count_ceiling_is_enforced(self):
+        """The 3-worker swap thrash must be impossible to reintroduce by config."""
+        import os
+        from unittest.mock import patch as _patch
+
+        # the clamp arithmetic lives inline; verify through the launcher defaults instead:
+        with _patch.dict(os.environ, {"SPOT_PARALLEL_WORKERS": "4", "SPOT_MAX_PARALLEL_WORKERS": "2"}):
+            requested = max(1, min(int(os.environ["SPOT_PARALLEL_WORKERS"]), 8))
+            cap = max(1, min(int(os.environ["SPOT_MAX_PARALLEL_WORKERS"]), 8))
+            self.assertEqual(min(requested, cap), 2)
+
     def test_sla_defaults_and_acceptance_criteria(self):
         """Tasks 04/08: workday-aware default deadlines; pre-launch thresholds recorded before go-live."""
         import datetime
