@@ -68,3 +68,13 @@ change. `SPOT_PARALLEL_WORKERS` stays at 2 by default.
   CRITICAL with the memory leaders captured. It never kills anything.
 - **Permanent fix path:** a smaller resident primary (the trained 1.5-2B adapter experiment) is the only
   change that raises the worker ceiling - recorded here so the trade stays explicit.
+
+
+## Nightly reboot (01:00 GMT window)
+
+- LaunchDaemon `com.spot.nightly-reboot` runs `script/nightly_reboot.sh` hourly; the script reboots only
+  when the UTC hour is 01 (timezone/DST safe) and logs to `/Library/Logs/spot-nightly-reboot.log`.
+- `--force` is the operator test path; it requires the one-time sudoers grant installed by
+  `script/install_reboot_job.sh` (grants ONLY that script, nothing else).
+- After every reboot: launchd restarts the JEV service, retrainer and swap watchdog; `com.spot.app` opens
+  the app; the app auto-resumes the interrupted run (else `POST /runs/{run_id}/heal`).
