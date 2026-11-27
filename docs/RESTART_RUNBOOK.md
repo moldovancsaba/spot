@@ -78,3 +78,20 @@ change. `SPOT_PARALLEL_WORKERS` stays at 2 by default.
   `script/install_reboot_job.sh` (grants ONLY that script, nothing else).
 - After every reboot: launchd restarts the JEV service, retrainer and swap watchdog; `com.spot.app` opens
   the app; the app auto-resumes the interrupted run (else `POST /runs/{run_id}/heal`).
+
+
+## Post-reboot gaps fixed 2026-11-27 (the first real reboot)
+
+The first reboot exposed the two remaining gaps:
+
+1. **Auto-login was off** - the Mac sat at the login screen, so NO user LaunchAgent ran (JEV, retrainer,
+   watchdog, spot.app, the harness). Enable it once in System Settings > Users & Groups > Login Options >
+   "Automatically log in as: chappie" (password required once; with FileVault the option may be hidden -
+   disable FileVault first if auto-login must work). Nothing user-level can run before login; this is the
+   one setting the whole automatic recovery depends on.
+2. **DeepSeek Harness had no supervisor.** `com.dsh.web` (KeepAlive, RunAtLoad) now starts
+   `dsh web --patch .../ollama.cordis.yml`. It is staged but intentionally NOT loaded while a live
+   instance owns port 3080 - it takes over from the next login/reboot.
+
+Verified after the reboot: swap 25 GB -> 301 MB, throughput restored, JEV/backend/workers/app all
+self-recovered, the run auto-resumed (31,826 rows), and the nightly-reboot daemon remained armed.
