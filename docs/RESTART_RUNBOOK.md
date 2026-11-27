@@ -95,3 +95,14 @@ The first reboot exposed the two remaining gaps:
 
 Verified after the reboot: swap 25 GB -> 301 MB, throughput restored, JEV/backend/workers/app all
 self-recovered, the run auto-resumed (31,826 rows), and the nightly-reboot daemon remained armed.
+
+
+## Harness supervisor loaded (2026-11-27)
+
+com.dsh.web is now LOADED (not just staged) with an idempotent port guard: while a live instance owns
+port 3080 the guard exits 1 and launchd retries; after a reboot the port is free and the guard execs the
+real harness. The guard script lives at /Users/Shared/Projects/settings/bin/dsh-web-guard.sh.
+
+**The single remaining human dependency is auto-login** (System Settings > Users & Groups > Login
+Options > Automatically log in as chappie). Without it every reboot stops at the login screen and no user
+agent runs until a manual login - verified as NOT set on 2026-11-27.

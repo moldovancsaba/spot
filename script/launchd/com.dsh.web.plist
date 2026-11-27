@@ -5,11 +5,8 @@
     <key>Label</key><string>com.dsh.web</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/Shared/Projects/settings/bin/node</string>
-        <string>/Users/Shared/Projects/settings/npm/bin/dsh</string>
-        <string>web</string>
-        <string>--patch</string>
-        <string>/Users/chappie/.ollama/launch/dsh/ollama.cordis.yml</string>
+        <string>/bin/bash</string>
+        <string>/Users/Shared/Projects/settings/bin/dsh-web-guard.sh</string>
     </array>
     <key>WorkingDirectory</key><string>/Users/Shared/Projects/settings/npm/lib/node_modules/@deepseek-ai/dsh</string>
     <key>RunAtLoad</key><true/>
