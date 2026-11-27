@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from pathlib import Path
 
@@ -655,13 +656,26 @@ def resolve_run_record(*, runs_dir: Path, run_id: str) -> dict | None:
     return record
 
 
+_REFRESH_CACHE: dict[tuple[str, bool], tuple[float, dict]] = {}
+_REFRESH_CACHE_TTL_SEC = float(os.environ.get("SPOT_REFRESH_CACHE_TTL_SEC", "5") or "5")
+
+
 def refresh_run_record(*, runs_dir: Path, run_id: str, sync_review_rows: bool = True) -> dict | None:
+    # The app shell polls the backend continuously and every poll used to rebuild the whole record from
+    # disk + SQLite, burning a full core once the run grew large. A short TTL cache absorbs the polling
+    # while staying fresh enough for the UI (workers write their own artifacts; the record is a view).
+    cache_key = (str(runs_dir), run_id, bool(sync_review_rows))
+    cached = _REFRESH_CACHE.get(cache_key)
+    now = time.monotonic()
+    if cached is not None and now - cached[0] < _REFRESH_CACHE_TTL_SEC:
+        return cached[1]
     record, review_state = _build_resolved_run_record(runs_dir=runs_dir, run_id=run_id)
     if not record:
         return None
     progress = record.get("progress") if isinstance(record.get("progress"), dict) else {}
     if sync_review_rows and review_state is not None:
         write_review_state(runs_dir=runs_dir, run_id=run_id, state=review_state)
+    _REFRESH_CACHE[cache_key] = (now, record)
     persisted = write_run_record(runs_dir=runs_dir, run_id=run_id, record=record)
     update_run_snapshot(
         runs_dir=runs_dir,
