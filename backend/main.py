@@ -99,6 +99,7 @@ _LEARNING_SCHEDULER_STARTED = False
 
 
 def _learning_cycle_scheduler() -> None:
+    time.sleep(300)  # first cycle waits out the post-boot warm-up so it never slows recovery
     while True:
         try:
             from backend.services.learning_cycle_service import run_learning_cycle, runs_with_rows
@@ -762,6 +763,11 @@ def _native_supervisor_watchdog() -> None:
 
 
 @app.on_event("startup")
+def startup_auto_resume() -> None:
+    startup_auto_resume_interrupted_runs()
+
+
+@app.on_event("startup")
 def startup_native_supervisor_watchdog() -> None:
     global _SUPERVISOR_WATCHDOG_STARTED
     if SUPERVISOR_PID <= 0 or _SUPERVISOR_WATCHDOG_STARTED:
@@ -771,7 +777,34 @@ def startup_native_supervisor_watchdog() -> None:
     _SUPERVISOR_WATCHDOG_STARTED = True
 
 
+_AUTO_RESUME_STARTED = False
+
+
 @app.on_event("startup")
+def startup_auto_resume_interrupted_runs() -> None:
+    """A reboot leaves the run INTERRUPTED; the machine must heal itself without a human.
+
+    Only runs that were processing when the machine went down are resumed (INTERRUPTED); deliberately
+    stopped/paused runs keep their state. Disable with SPOT_AUTO_RESUME_INTERRUPTED=0.
+    """
+    global _AUTO_RESUME_STARTED
+    if _AUTO_RESUME_STARTED:
+        return
+    _AUTO_RESUME_STARTED = True
+    if os.getenv("SPOT_AUTO_RESUME_INTERRUPTED", "1") != "1":
+        return
+    for record in _active_run_records():
+        if str(record.get("state") or "") != "INTERRUPTED":
+            continue
+        run_id = str(record.get("run_id") or "")
+        if not run_id:
+            continue
+        try:
+            _heal_run_internal(run_id=run_id, actor="spot-auto-resume")
+        except Exception:  # noqa: BLE001 - one broken run must not block the others or the service
+            continue
+
+
 def startup_learning_cycle_scheduler() -> None:
     global _LEARNING_SCHEDULER_STARTED
     if LEARNING_CYCLE_INTERVAL_SEC <= 0 or _LEARNING_SCHEDULER_STARTED:
@@ -1192,10 +1225,19 @@ def run_recover(run_id: str, request: Request):
     return recovered_status
 
 
-@app.post("/runs/{run_id}/heal")
-def run_heal(run_id: str, request: Request):
-    session = require_permission(request, "manage_run")
-    actor = str(session.get("actor_name", "local-operator"))
+def _run_classify_child_pids(run_id: str) -> list[int]:
+    """PIDs of stale 'src.cli classify' children belonging to this run (orphaned by a dead worker)."""
+    try:
+        out = subprocess.run(
+            ["pgrep", "-f", f"src.cli classify.*{run_id}"],
+            capture_output=True, text=True, timeout=10,
+        )
+        return [int(pid) for pid in out.stdout.split() if pid.strip().isdigit()]
+    except Exception:  # noqa: BLE001 - pid discovery must never block the heal
+        return []
+
+
+def _heal_run_internal(*, run_id: str, actor: str) -> dict:
     record = refresh_run_record(runs_dir=RUNS_DIR, run_id=run_id)
     if not record:
         raise HTTPException(status_code=404, detail="run not found")
@@ -1215,6 +1257,17 @@ def run_heal(run_id: str, request: Request):
         if not _wait_for_pid_exit(pid):
             _signal_run_process(int(pid), signal.SIGKILL)
             _wait_for_pid_exit(pid, timeout_seconds=1.5)
+    # Segment children survive a dead worker parent (they are grandchildren of the run process) and keep
+    # committing rows, which masks INTERRUPTED state. Purge any stale classify child for this run.
+    for child_pid in _run_classify_child_pids(run_id):
+        try:
+            os.kill(child_pid, signal.SIGCONT)
+        except OSError:
+            pass
+        try:
+            os.kill(child_pid, signal.SIGKILL)
+        except OSError:
+            pass
 
     payload.setdefault("upload_id", record.get("upload_id"))
     payload.setdefault("language", record.get("language"))
@@ -1232,6 +1285,13 @@ def run_heal(run_id: str, request: Request):
         actor=actor,
         resume_existing=True,
     )
+
+
+@app.post("/runs/{run_id}/heal")
+def run_heal(run_id: str, request: Request):
+    session = require_permission(request, "manage_run")
+    actor = str(session.get("actor_name", "local-operator"))
+    return _heal_run_internal(run_id=run_id, actor=actor)
 
 
 @app.post("/runs/{run_id}/migrate-row-state")

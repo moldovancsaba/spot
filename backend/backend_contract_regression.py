@@ -162,6 +162,47 @@ class BackendContractRegressionTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200, response.text)
 
+    def test_startup_auto_resume_heals_interrupted_runs_only(self):
+        """After a reboot the backend heals INTERRUPTED runs by itself; deliberate stops stay untouched."""
+        import os
+        from unittest.mock import patch as _patch
+
+        import backend.main as main_mod
+
+        def fake_records():
+            return [
+                {"run_id": "run-interrupted", "state": "INTERRUPTED"},
+                {"run_id": "run-paused", "state": "PAUSED"},
+                {"run_id": "run-processing", "state": "PROCESSING"},
+            ]
+
+        healed = []
+
+        with _patch.dict(os.environ, {"SPOT_AUTO_RESUME_INTERRUPTED": "1"}), \
+             _patch.object(main_mod, "_active_run_records", side_effect=fake_records), \
+             _patch.object(main_mod, "_heal_run_internal",
+                           side_effect=lambda *, run_id, actor: healed.append(run_id)):
+            main_mod._AUTO_RESUME_STARTED = False
+            main_mod.startup_auto_resume_interrupted_runs()
+
+        self.assertEqual(healed, ["run-interrupted"])
+
+    def test_startup_auto_resume_can_be_disabled(self):
+        import os
+        from unittest.mock import patch as _patch
+
+        import backend.main as main_mod
+
+        called = []
+        with _patch.dict(os.environ, {"SPOT_AUTO_RESUME_INTERRUPTED": "0"}), \
+             _patch.object(main_mod, "_active_run_records",
+                           side_effect=lambda: [{"run_id": "r", "state": "INTERRUPTED"}]), \
+             _patch.object(main_mod, "_heal_run_internal",
+                           side_effect=lambda *, run_id, actor: called.append(run_id)):
+            main_mod._AUTO_RESUME_STARTED = False
+            main_mod.startup_auto_resume_interrupted_runs()
+        self.assertEqual(called, [])
+
     def test_worker_count_ceiling_is_enforced(self):
         """The 3-worker swap thrash must be impossible to reintroduce by config."""
         import os
