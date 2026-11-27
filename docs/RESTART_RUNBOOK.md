@@ -106,3 +106,14 @@ real harness. The guard script lives at /Users/Shared/Projects/settings/bin/dsh-
 **The single remaining human dependency is auto-login** (System Settings > Users & Groups > Login
 Options > Automatically log in as chappie). Without it every reboot stops at the login screen and no user
 agent runs until a manual login - verified as NOT set on 2026-11-27.
+
+
+## Second reboot lesson (2026-11-27): Ollama was the hidden dependency
+
+The second reboot exposed that the app's preflight hard-fails when Ollama is absent
+(ollama_listener check) - the backend refuses to start, so the run stays INTERRUPTED until Ollama returns.
+Ollama was not supervised; it is now: com.ollama.serve (KeepAlive + port guard, same pattern as the
+harness) execs `ollama serve` at boot when port 11434 is free. Auto-login remains the human gate;
+script/enable_autologin.sh sets it from the CLI (FileVault must be off), the System Settings GUI path is
+authoritative. Recovery order after a boot: login -> ollama serve (launchd) -> com.dsh.web harness ->
+JEV/retrainer/watchdog -> com.spot.app -> backend preflight passes -> run auto-resumes (else heal).
